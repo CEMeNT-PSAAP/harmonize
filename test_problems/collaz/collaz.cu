@@ -185,8 +185,8 @@ __device__ void make_work(ctx_shared& shr,ctx_local& loc){
 	if( current_leader() ){
 
 		
-		unsigned long long int work_space = WARP_SIZE*2;
-		const unsigned long long int work_width = span / TEAM_COUNT;
+		unsigned long long int work_space = WG_SIZE*2;
+		const unsigned long long int work_width = span / WG_COUNT;
 		unsigned long long int base = work_width * blockIdx.x;
 		end  = base + work_width;
 
@@ -214,7 +214,7 @@ __device__ void make_work(ctx_shared& shr,ctx_local& loc){
 	ctx_thunk thunk;
 	thunk.data[1] = 0;
 	thunk.data[3] = 0;
-	for(unsigned long long int offset = work_start; offset < work_limit; offset += WARP_SIZE){
+	for(unsigned long long int offset = work_start; offset < work_limit; offset += WG_SIZE){
 
 		unsigned long long int start = offset + threadIdx.x;
 
@@ -294,12 +294,6 @@ __device__ void do_async(ctx_shared& shr,ctx_local& loc, unsigned int func_id,ct
 }
 
 
-/*
-// END EXAMPLE CODE //////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////
-*/
 
 
 struct program_context{
@@ -315,7 +309,7 @@ struct program_context{
 
 
 
-program_context* initialize(runtime_context runtime){
+program_context* initialize(runtime_context context, int argc, char *argv[]){
 
 	program_context* result = new program_context;
 
@@ -443,7 +437,7 @@ void finalize(runtime_context runtime, program_context* program){
 	}
 	avg /= span;
 	//printf("Average iteration value is %d\n",avg);
-	//printf("\nSpan: %d\tTEAM_COUNT: %d\tWARP_SIZE: %d\n\n",span,TEAM_COUNT,WARP_SIZE);
+	//printf("\nSpan: %d\tWG_COUNT: %d\tWG_SIZE: %d\n\n",span,WG_COUNT,WG_SIZE);
 	
 
 	printf("%f",msecTotal);

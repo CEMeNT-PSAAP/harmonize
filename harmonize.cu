@@ -33,12 +33,12 @@
 // These values should eventually be externally defined by the build system so that these 
 // values may be tailored to machines at compile time.
 */
-#ifndef DEF_MULTIPROCESSOR_COUNT
-	#define DEF_MULTIPROCESSOR_COUNT 	1
+#ifndef DEF_WG_COUNT
+	#define DEF_WG_COUNT 			1
 #endif
 
-#ifndef DEF_WARP_SIZE
-	#define DEF_WARP_SIZE 			32
+#ifndef DEF_WG_SIZE
+	#define DEF_WG_SIZE 			32
 #endif
 
 #ifndef DEF_FUNCTION_ID_COUNT
@@ -58,7 +58,9 @@
 #endif
 
 #ifndef DEF_RETRY_LIMIT
-	#define DEF_RETRY_LIMIT			64
+	//#define DEF_RETRY_LIMIT			64
+	//#define DEF_RETRY_LIMIT			32
+	#define DEF_RETRY_LIMIT			16
 #endif
 
 #ifndef DEF_QUEUE_WIDTH
@@ -76,8 +78,9 @@ const unsigned int RETRY_LIMIT = DEF_RETRY_LIMIT;
 /*
 // This helps in determining how many warps and threads can reasonably be running simultaneously.
 */
-const unsigned int MULTIPROCESSOR_COUNT	= DEF_MULTIPROCESSOR_COUNT;
-const unsigned int WARP_SIZE		= DEF_WARP_SIZE;
+const unsigned int WG_COUNT	= DEF_WG_COUNT;
+const unsigned int WG_SIZE	= DEF_WG_SIZE;
+const unsigned int WORKER_COUNT = WG_COUNT * WG_SIZE;
 
 
 /*
@@ -88,14 +91,6 @@ const unsigned int WARP_SIZE		= DEF_WARP_SIZE;
 */
 const unsigned int FUNCTION_ID_COUNT    = DEF_FUNCTION_ID_COUNT;
 const unsigned int THUNK_SIZE 		= DEF_THUNK_SIZE;
-
-
-/*
-// Constant values determining the number and dimensions of work groups.
-*/
-const unsigned int TEAMS_PER_SM = 1u;
-const unsigned int TEAM_COUNT = TEAMS_PER_SM * MULTIPROCESSOR_COUNT;
-const unsigned int WORKER_COUNT = TEAM_COUNT * WARP_SIZE;
 
 
 /*
@@ -120,7 +115,7 @@ const unsigned int STACK_SIZE	= 1024u;
 // can reduce atomic operation contention but can increase memory footprint as well as exacerbate
 // search times during periods of high work scarcity.
 */
-const unsigned int POOL_SIZE	= TEAM_COUNT;
+const unsigned int POOL_SIZE	= WG_COUNT;
 
 /*
 // The number of links that are stored in the shared memory for work caching and load balancing
@@ -256,7 +251,7 @@ struct ctx_thunk {
 // and within the shared memory of groups.
 */
 struct ctx_link_payload {
-	ctx_thunk data[WARP_SIZE];
+	ctx_thunk data[WG_SIZE];
 };
 
 
@@ -309,7 +304,7 @@ struct ctx_link_meta_data {
 
 
 /*
-// Stores up to WARP_SIZE thunks in the data field, all corresponding to the same function id, 
+// Stores up to WG_SIZE thunks in the data field, all corresponding to the same function id, 
 // which is stored in the id field, and all corresponding to the same call depth, stored in the
 // depth field.
 //
@@ -1735,8 +1730,17 @@ __device__ void async_call(ctx_shared& shr, ctx_local& loc, unsigned int func_id
 	unsigned int active = __activemask();
 
 	/*
+	// Calculate how many thunks are being queued as well as the assigned index of the 
+	// current thread's thunk in the write to the stash.
+	*/
+	unsigned int index = warp_inc_scan();
+	unsigned int delta = active_count();
+
+
+	/*
 	// Make room to queue incoming thunks, if there isn't enough room already.
 	*/
+	#if 0
 	if(shr.link_stash_count < 1){
 		fill_stash_links(shr,loc,1);
 	}
@@ -1744,17 +1748,28 @@ __device__ void async_call(ctx_shared& shr, ctx_local& loc, unsigned int func_id
 	if(shr.stash_count >= (STASH_SIZE-1)){
 		spill_stash(shr,loc, STASH_SIZE-2);
 	}
+	#else
+	unsigned int depth = (unsigned int) (shr.level + depth_delta);
+	unsigned int left_jump = partial_map_index(func_id,depth,shr.level);
+	unsigned int space = 0;
+	if( left_jump != PART_MAP_NULL ){
+		unsigned int left_idx = shr.partial_map[left_jump];	
+		if( left_idx != STASH_SIZE ){
+			space = WG_SIZE - shr.stash[left_idx].count;
+		}
+	}
+	if( (shr.stash_count >= (STASH_SIZE-1)) && (space < delta) ){
+		if(shr.link_stash_count < 1){
+			fill_stash_links(shr,loc,1);
+		}
+		spill_stash(shr,loc, STASH_SIZE-2);
+	}
+	#endif
 
 
 
 	__shared__ unsigned int left, left_start, right;
 
-	/*
-	// Calculate how many thunks are being queued as well as the assigned index of the 
-	// current thread's thunk in the write to the stash.
-	*/
-	unsigned int index = warp_inc_scan();
-	unsigned int delta = active_count();
 
 	/*
 	// Locate the destination links in the stash that the thunks will be written to. For now,
@@ -1798,21 +1813,21 @@ __device__ void async_call(ctx_shared& shr, ctx_local& loc, unsigned int func_id
 			left_count = shr.stash[left].count;
 		}
 
-		if ( (left_count + delta) > WARP_SIZE ){
+		if ( (left_count + delta) > WG_SIZE ){
 			//db_printf("C\n");
 			right = claim_empty_slot(shr,loc);
 			shr.stash_count += 1;
 			db_printf("Updated stash count: %d\n",shr.stash_count);
-			shr.stash[right].count = left_count+delta - WARP_SIZE;
+			shr.stash[right].count = left_count+delta - WG_SIZE;
 			shr.stash[right].id    = func_id;
 			insert_full_slot(shr,loc,left);
 			shr.partial_map[left_jump] = right;
-			shr.stash[left].count = WARP_SIZE;
-		} else if ( (left_count + delta) == WARP_SIZE ){
+			shr.stash[left].count = WG_SIZE;
+		} else if ( (left_count + delta) == WG_SIZE ){
 			//db_printf("D\n");
 			shr.partial_map[left_jump] = STASH_SIZE;
 			insert_full_slot(shr,loc,left);
-			shr.stash[left].count = WARP_SIZE;
+			shr.stash[left].count = WG_SIZE;
 		} else {
 			shr.stash[left].count = left_count + delta;
 		}
@@ -1827,9 +1842,9 @@ __device__ void async_call(ctx_shared& shr, ctx_local& loc, unsigned int func_id
 	// when possible and spilling over into the right link when necessary.
 	*/
 	__syncwarp(active);
-	if( (left_start + index) >= WARP_SIZE ){
+	if( (left_start + index) >= WG_SIZE ){
 		//db_printf("Overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
-		copy_ctx_thunk(shr.stash[right].data.data[left_start+index-WARP_SIZE],thunk);
+		copy_ctx_thunk(shr.stash[right].data.data[left_start+index-WG_SIZE],thunk);
 	} else {
 		//db_printf("Non-overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
 		copy_ctx_thunk(shr.stash[left].data.data[left_start+index],thunk);
@@ -2430,7 +2445,7 @@ __global__ void push_runtime(runtime_context runtime, ctx_link* call_buffer, uns
 	init_local(loc);	
 
 
-	for(int link_index=blockIdx.x; link_index < link_count; link_index+= TEAM_COUNT){
+	for(int link_index=blockIdx.x; link_index < link_count; link_index+= WG_COUNT){
 		ctx_link& the_link = call_buffer[link_index];
 		unsigned int count   = the_link.count;
 		unsigned int func_id = the_link.id;
@@ -2482,7 +2497,7 @@ void remote_call(runtime_context runtime, unsigned int func_id, ctx_thunk thunk)
 	cudaMemcpy(call_buffer,&host_link,sizeof(ctx_link),cudaMemcpyHostToDevice);
 
 	
-	push_runtime<<<TEAM_COUNT,WARP_SIZE>>>(runtime,call_buffer,1);
+	push_runtime<<<WG_COUNT,WG_SIZE>>>(runtime,call_buffer,1);
 
 	checkError();
 	
@@ -2760,7 +2775,7 @@ bool runtime_overview(runtime_context runtime){
 /*
 __global__ void basic_collaz(unsigned int start, unsigned int end){
 
-	for(unsigned int offset=blockIdx.x+start; offset < end; offset+= TEAM_COUNT){
+	for(unsigned int offset=blockIdx.x+start; offset < end; offset+= WG_COUNT){
 
 		unsigned int original = offset+threadIdx.x;
 		unsigned int val = original;
@@ -2786,14 +2801,14 @@ __global__ void basic_collaz(unsigned int start, unsigned int end){
 struct program_context;
 
 
-program_context* initialize(runtime_context);
+program_context* initialize(runtime_context context, int argc, char *argv[]);
 
 
 void finalize(runtime_context,program_context*);
 
 
 
-int main() {
+int main(int argc, char *argv[]) {
 
 
 	runtime_context runtime;
@@ -2818,7 +2833,7 @@ int main() {
 
 
 	/* Zero out the runtime data structures. */
-	init_runtime<<<TEAM_COUNT,WARP_SIZE>>>(runtime);
+	init_runtime<<<WG_COUNT,WG_SIZE>>>(runtime);
 
 	cudaDeviceSynchronize();
 	checkError();
@@ -2829,7 +2844,7 @@ int main() {
 	runtime_overview(runtime);
 	// */
 
-	program_context* program = initialize(runtime);
+	program_context* program = initialize(runtime,argc,argv);
 
 	/*
 	cudaDeviceSynchronize();
@@ -2863,7 +2878,7 @@ int main() {
 		
 
 		/* Perform a round of execution. */
-		exec_runtime<<<TEAM_COUNT,WARP_SIZE>>>(runtime,cycle_limit);
+		exec_runtime<<<WG_COUNT,WG_SIZE>>>(runtime,cycle_limit);
 		checkError();
 		/* Load event signals from the GPU. */
 		cudaMemcpyAsync(&event_com,&(runtime.stack->event_com),sizeof(unsigned int),cudaMemcpyDeviceToHost);
