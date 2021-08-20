@@ -3,17 +3,18 @@
 import subprocess
 
 
-on_DGX=False
+#fiss_std size=20 res=0.1 cx=0.01 sx=0.99 num=10000 span=32 hrzn=256 flux=false show=true
 
-if(on_DGX):
-	# FOR DGX
-	make_cmd = [ 	'make',     'hard',           'WG_COUNT=320',      'STD_WG_COUNT=1536', 
-			'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
-else:
-	# FOR RABBIT
-	make_cmd = [ 	'make',     'hard',           'WG_COUNT=240',      'STD_WG_COUNT=1024', 
-			'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
+#make WG_COUNT=240 STD_WG_COUNT=1024
 
+##make_cmd = [ 	'make',     'hard',           'WG_COUNT=240',      'STD_WG_COUNT=1024', 
+##		'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF' ]
+
+#make_cmd = [ 	'make',     'hard',           'WG_COUNT=240',      'STD_WG_COUNT=1024', 
+#		'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
+
+make_cmd = [ 	'make',     'hard',           'WG_COUNT=320',      'STD_WG_COUNT=1536', 
+		'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
 
 params={}
 
@@ -30,11 +31,13 @@ if params["flux"] == "true" :
 else:
 	particle_lim = 23
 
-ratio_start = 0
-ratio_lim   = 12
+ratio_start = 8
+ratio_lim   = 64
+ratio_res   = 8
 
-time_start = 0
-time_lim   = 10
+time_start = 8
+time_lim   = 64
+time_res   = 8
 
 scaled_res = 0.001
 sample_count = 4
@@ -56,12 +59,20 @@ def bench_sample (name,par):
 	return float(result.stdout.decode('utf-8'))
 
 
-def bench (name,par,count):
+def bench (name,par,count, show_first=False):
 	cmd = build_command(name,par)
 	result = 0
+	par["show"] = "false"
 	for i in range(count+1):
+		if i == 0 and show_first:
+			par["show"] = "true"
+			cmd = build_command(name,par)
+		else:
+			par["show"] = "false"
+			cmd = build_command(name,par)
 		samp = subprocess.run(cmd, stdout=subprocess.PIPE)
-		if i == 0:
+		if i == 0 and show_first:
+			print(samp.stdout.decode('utf-8'))
 			continue # throw out first result, which is usually bad due to lazy compilation
 		
 		result += float(samp.stdout.decode('utf-8'))
@@ -113,7 +124,7 @@ def sweet_spot(name,par):
 def perf(name,par):
 	sweet_spot(name,par)
 	#print("Sweet spot: "+str(par["hrzn"]))
-	return bench(name,par,sample_count)
+	return bench(name,par,sample_count)#,True)
 
 
 
@@ -124,8 +135,7 @@ def run_bench(name):
 
 	spots = []
 
-	for ratio_mag in range(ratio_start,ratio_lim+1):
-		ratio = 2**ratio_mag
+	for ratio in range(ratio_start,ratio_lim+1,ratio_res):
 		if csvmode:
 			print(","+str(ratio),end='')
 		else:
@@ -133,24 +143,21 @@ def run_bench(name):
 	print("")
 
 	last = 1
-	for t_mag in range(time_start,time_lim+1):
-		time = 2**t_mag
+	for time in range(time_start,time_lim+1,time_res):
 		for p_mag in range(particle_start,particle_lim+1):
 			params["hrzn"] = last
 			num = int(2**p_mag)
 			print(num,end='')
 			spots.append([])
-			for ratio_mag in range(ratio_start,ratio_lim+1):
-				spread_bound    = time #4*(1.41**ratio_mag)
+			for ratio in range(ratio_start,ratio_lim+1,ratio_res):
 				params["time"]  = time
-				params["size"]  = min(spread_bound,time)
-				params["res"]   = params["size"]*scaled_res
-				ratio           = 2**ratio_mag
+				params["size"]  = time
+				params["res"]   = time*scaled_res
 				params["cx"]    = 1/ratio
 				params["sx"]    = 1-params["cx"]
 				params["num"]   = num
 				std_val = perf(name,params)
-				if ratio_mag == ratio_start:
+				if ratio == ratio_start:
 					last = params["hrzn"]
 				if csvmode:
 					print(","+str(std_val),end='')

@@ -6,6 +6,9 @@
 //#define RACE_COND_PRINT
 //#define QUEUE_PRINT
 
+#define INF_LOOP_SAFE
+
+
 #ifdef QUEUE_PRINT
 	#define q_printf  printf
 #else
@@ -364,6 +367,7 @@ struct ctx_shared {
 	bool				keep_running;
 	bool				busy;
 	bool				can_make_work;	
+	bool				scarce_work;	
 
 	unsigned char			stash_count;	// Number of filled blocks in stash
 	unsigned char			exec_head;	// Indexes the link that is/will be evaluated next
@@ -714,7 +718,8 @@ __device__ void init_shared(ctx_shared& shr, ctx_link* arena, ctx_padded_queue* 
 		shr.exec_head    = STASH_SIZE;
 		shr.full_head    = STASH_SIZE;
 		shr.empty_head   = 0;
-		shr.work_iterator = 0;
+		shr.work_iterator= 0;
+		shr.scarce_work  = false;
 
 		for(unsigned int i=index; i<STASH_SIZE; i++){
 			empty_link(shr.stash[i],i+1);
@@ -974,8 +979,13 @@ __device__ ctx_queue pull_queue(ctx_padded_queue* src, unsigned int start_index,
 // implemented.
 */
 __device__ void push_queue(ctx_shared& shr, ctx_local& loc, ctx_queue& dest, ctx_queue queue){
-	
-	for(int i=0; i<RETRY_LIMIT; i++){
+
+	#ifdef INF_LOOP_SAFE
+	while(true)
+	#else
+	for(int i=0; i<RETRY_LIMIT; i++)
+	#endif
+	{
 		ctx_queue swap;
 		swap.data = atomicExch(&dest.data,queue.data);
 		/*
@@ -1114,8 +1124,8 @@ __device__ void fill_stash_links(ctx_shared& shr, ctx_local& loc, unsigned int t
 	
 			if(shr.link_stash_count >= threashold){
 				break;
-			}		/*
-	
+			}
+			/*	
 			// Attempt to pull a queue from the pool. This should be very unlikely to fail unless
 			// almost all links have been exhausted or the pool size is disproportionately small
 			// relative to the number of work groups. In the worst case, this should simply not 
@@ -2008,6 +2018,7 @@ __device__ void fill_stash(ctx_shared& shr, ctx_local& loc, unsigned int threash
 				break;
 			}
 
+
 			unsigned int src_index;
 			ctx_queue queue;
 
@@ -2250,9 +2261,25 @@ __device__ void exec_cycle(ctx_shared& shr, ctx_local& loc){
 		}
 	}
 
-	if(shr.full_head == STASH_SIZE){	
+
+	#if 1
+	if(shr.full_head == STASH_SIZE){
 		fill_stash(shr,loc,STASH_SIZE-2);
 	}
+	#else
+	if(shr.full_head == STASH_SIZE){
+		if( !shr.scarce_work ){
+			fill_stash(shr,loc,STASH_SIZE-2);
+			if( current_leader() && (shr.full_head == STASH_SIZE) ){
+				shr.scarce_work = true;
+			}
+		}
+	} else {
+		if( current_leader() ){
+			shr.scarce_work = false;
+		}
+	}
+	#endif
 	// */
 
 	if( !advance_stash_iter(shr,loc) ){

@@ -2,7 +2,7 @@
 
 
 
-
+//#define PRE_INIT
 
 
 
@@ -44,6 +44,8 @@ __device__ void do_neutron(ctx_shared& shr, ctx_local& loc, union_thunk& thunk){
 
 
 	#ifdef NEUTRON_3D
+
+	#ifndef PRE_INIT
 	if ( n.time <= 0 ){
 		n.p_x = 0;
 		n.p_y = 0;
@@ -51,6 +53,8 @@ __device__ void do_neutron(ctx_shared& shr, ctx_local& loc, union_thunk& thunk){
 		n.time = 0.0;
 		random_3D_iso_mom(n);
 	}
+	#endif
+
 	#else
 	if ( n.weight <= 0 ){
 		n.pos = 0;
@@ -136,8 +140,18 @@ __device__ void make_work(ctx_shared& shr,ctx_local& loc){
 		#ifdef INDIRECT
 		thunk.data[0] = (unsigned int) id;
 		neutron n;
-		n.time   = -1.0;
 		n.seed   = id;
+
+		#ifdef PRE_INIT
+		n.p_x = 0.0;
+		n.p_y = 0.0;
+		n.p_z = 0.0;
+		random_3D_iso_mom(n);
+		n.time = 0.0;
+		#else
+		n.time   = -1.0;
+		#endif
+
 		dev_params.old_data[id] = n;
 		#else
 		thunk.data[6] = (unsigned int) __float_as_uint(-1.0);

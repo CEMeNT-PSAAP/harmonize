@@ -74,7 +74,7 @@ do_touch:
 
 
 fiss_hrm:       $(HARMONIZE_PATH) fiss_harmonized.cu fiss_common.cu
-	$(CUDA_NVCC) $(STD) -o fiss_hrm fiss_harmonized.cu --restrict -include $(HARMONIZE_PATH) -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=4 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
+	$(CUDA_NVCC) $(STD) -o fiss_hrm fiss_harmonized.cu --restrict -include $(HARMONIZE_PATH) -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=16 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
 
 
 
