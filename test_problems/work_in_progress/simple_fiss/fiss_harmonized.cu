@@ -6,6 +6,11 @@
 
 
 
+
+
+
+
+
 __device__ sim_params dev_params;
 
 
@@ -229,6 +234,7 @@ struct program_context{
 
 
 program_context* initialize(runtime_context context, int argc, char *argv[]){
+
 
 	program_context* result = new program_context;
 

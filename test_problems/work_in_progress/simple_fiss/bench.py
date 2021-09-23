@@ -1,13 +1,23 @@
 #!/usr/bin/python3
 
+#SBATCH  -J  fissbatch
+#SBATCH  -A  eecs
+#SBATCH  -p  dgx2
+#SBATCH  --gres=gpu:1
+#SBATCH  -o  fissbatch.out
+#SBATCH  -e  fissbatch.err
+#SBATCH  --mail-type=NONE
+#SBATCH  --mail-user=cuneob@oregonstate.edu
+
+
 import subprocess
 
 
-on_DGX=False
+on_DGX=True
 
 if(on_DGX):
 	# FOR DGX
-	make_cmd = [ 	'make',     'hard',           'WG_COUNT=320',      'STD_WG_COUNT=1536', 
+	make_cmd = [ 	'make',     'hard',           'WG_COUNT=896' ,      'STD_WG_COUNT=4096', 
 			'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
 else:
 	# FOR RABBIT
@@ -30,15 +40,18 @@ if params["flux"] == "true" :
 else:
 	particle_lim = 23
 
-ratio_start = 0
+ratio_start =  0
 ratio_lim   = 12
 
-time_start = 0
+#ratio_start =  5
+#ratio_lim   =  8
+
+time_start = 10
 time_lim   = 10
 
 scaled_res = 0.001
 sample_count = 4
-spot_sample_count = 4
+spot_sample_count = 8
 
 csvmode=True
 
@@ -169,8 +182,8 @@ def run_bench(name):
 
 print("STANDARD:")
 run_bench("fiss_std")
-print("HARMONIZED:")
-run_bench("fiss_hrm")
+#print("HARMONIZED:")
+#run_bench("fiss_hrm")
 
 
 

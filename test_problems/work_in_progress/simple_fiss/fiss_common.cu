@@ -489,7 +489,7 @@ union ArgData {
 			} else if ( strcmp(str,"=true" ) == 0 ){
 				opt = true;
 			} else {
-				printf("BRUH: '%s'\n\n",str);
+				result = 0;
 			}
 			break;
 		}

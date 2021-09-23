@@ -1,0 +1,18 @@
+fiss_harmonized.cu(18): error: parameter pack "Tail" was referenced but not expanded
+
+fiss_harmonized.cu(23): error: this declaration has no storage class or type specifier
+
+fiss_harmonized.cu(23): error: "async_fn" is not a function or static data member
+
+fiss_harmonized.cu(44): warning: parsing restarts here after previous syntax error
+
+fiss_harmonized.cu(75): error: identifier "dev_params" is undefined
+
+fiss_harmonized.cu(135): error: identifier "dev_params" is undefined
+
+fiss_harmonized.cu(190): error: identifier "dev_params" is undefined
+
+fiss_harmonized.cu(272): error: identifier "dev_params" is undefined
+
+7 errors detected in the compilation of "/tmp/tmpxft_00040e78_00000000-8_fiss_harmonized.cpp1.ii".
+make: *** [fiss_hrm] Error 1
