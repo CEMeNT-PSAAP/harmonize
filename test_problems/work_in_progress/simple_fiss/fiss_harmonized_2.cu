@@ -2,8 +2,6 @@
 
 #define checkError  util::check_error
 
-const unsigned int WG_SIZE = DEF_WG_SIZE;
-const unsigned int WG_COUNT= DEF_WG_COUNT;
 
 #include "fiss_common.cu"
 
@@ -154,11 +152,11 @@ DEF_MAKE_WORK(ProgType) {
 int main(int argc, char *argv[]){
 
 
-
+	util::ArgSet args(argc,argv);
 
 	common_context com;
 
-	com = common_initialize(argc,argv);
+	com = common_initialize(args);
 	cudaDeviceSynchronize();
 		
 	checkError();
@@ -174,12 +172,12 @@ int main(int argc, char *argv[]){
 	util::check_error();
 	
 	//printf("Initing an instance...\n");
-	init<ProgType>(instance,WG_COUNT);
+	init<ProgType>(instance,DEF_WG_COUNT);
 	cudaDeviceSynchronize();
 	util::check_error();
 
 	//printf("Execing an instance...\n");
-	exec<ProgType>(instance,WG_COUNT,0xFFFFF);
+	exec<ProgType>(instance,DEF_WG_COUNT,0xFFFFF);
 	cudaDeviceSynchronize();
 	util::check_error();
 	//printf("Finished exec.\n");

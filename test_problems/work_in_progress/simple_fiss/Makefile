@@ -74,16 +74,16 @@ do_touch:
 	touch fiss_common.cu
 
 
-fiss_hrm:       ../../../harmonize.cu fiss_harmonized.cu fiss_common.cu
-	$(CUDA_NVCC) $(STD) -o fiss_hrm fiss_harmonized.cu --restrict -include ../../../harmonize.cu -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=16 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
+fiss_hrm:       ../../../harmonize.cu fiss_harmonized.cu fiss_common.cu $(UTIL_PATH)
+	$(CUDA_NVCC) $(STD) -o fiss_hrm fiss_harmonized.cu --restrict -include ../../../harmonize.cu -include $(UTIL_PATH) -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=16 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
 
 
-fiss_hrm2:      $(HARMONIZE_PATH) $(UTIL_PATH) fiss_harmonized_2.cu
-	$(CUDA_NVCC) $(STD) -o fiss_hrm2 fiss_harmonized_2.cu --restrict -include $(HARMONIZE_PATH) -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=16 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
+fiss_hrm2:      $(HARMONIZE_PATH) $(UTIL_PATH) fiss_harmonized_2.cu fiss_common.cu
+	$(CUDA_NVCC) $(STD) -o fiss_hrm2 fiss_harmonized_2.cu --restrict -include $(HARMONIZE_PATH) -include $(UTIL_PATH) -DDEFFUNCTION_ID_COUNT=1 -DDEF_STASH_SIZE=16 $(DEF_THUNK_SIZE) $(DEF_WG_COUNT) $(DEF_WG_SIZE) $(DEF_QUEUE_WIDTH) $(DEF_ARENA_SIZE) $(DEF_INDIRECT) $(DEF_NEU_3D)
 
 
 
-fiss_std:       fiss_standard.cu fiss_common.cu
-	$(CUDA_NVCC) $(STD) -o fiss_std fiss_standard.cu --restrict $(DEF_STD_WG_COUNT) $(DEF_WG_SIZE) $(DEF_NEU_3D)
+fiss_std:       fiss_standard.cu fiss_common.cu $(UTIL_PATH)
+	$(CUDA_NVCC) $(STD) -o fiss_std fiss_standard.cu --restrict -include $(UTIL_PATH) $(DEF_STD_WG_COUNT) $(DEF_WG_SIZE) $(DEF_NEU_3D)
 
 

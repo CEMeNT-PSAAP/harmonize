@@ -4,46 +4,24 @@
 
 
 
-typedef common_context program_context;
-
-
-program_context* initialize(int argc, char *argv[]){
-
-
-	program_context* result = new program_context;
-
-	*result = common_initialize(argc,argv); 
-
-
-        cudaDeviceSynchronize( );
-
-	checkError();
-	
-	return result;
-
-}
-
-
-
-void finalize(program_context* program){
-
-	common_finalize(*program);
-
-}
-
-
-
 int main(int argc, char *argv[]){
 
-	
+	util::ArgSet args(argc,argv);
 
-	program_context* program = initialize(argc,argv);	
-	sim_init<<<WG_COUNT,WG_SIZE>>>(program->params);
+	unsigned int wg_count = args["wg_count"];
+	unsigned int wg_size  = args["wg_size"] | 32u;
+
+	common_context context = common_initialize(args); 
         cudaDeviceSynchronize( );
-	//printf("Initialized.\n");
-	sim_pass<<<WG_COUNT,WG_SIZE>>>(program->params);
-	finalize(program);
+	util::check_error();
+	
+	sim_pass<<<wg_count,wg_size>>>(context.params);
+
+	common_finalize(context);
 
 	return 0;
+
 }
+
+
 

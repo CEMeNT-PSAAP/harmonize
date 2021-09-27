@@ -1,7 +1,4 @@
 
-#include <stdio.h>
-#include <type_traits>
-#include <limits>
 
 
 
@@ -30,47 +27,6 @@
 	#define db_printf  printf
 #else
 	#define db_printf(fmt, ...) ;
-#endif
-
-
-
-
-/*
-// These values should eventually be externally defined by the build system so that these 
-// values may be tailored to machines at compile time.
-*/
-#ifndef DEF_WG_COUNT
-	#define DEF_WG_COUNT 			1
-#endif
-
-#ifndef DEF_WG_SIZE
-	#define DEF_WG_SIZE 			32
-#endif
-
-#ifndef DEF_FUNCTION_ID_COUNT
-	#define DEF_FUNCTION_ID_COUNT 		4
-#endif
-
-#ifndef DEF_THUNK_SIZE
-	#define DEF_THUNK_SIZE 			4
-#endif
-
-#ifndef DEF_STASH_SIZE
-	#define DEF_STASH_SIZE 			8
-#endif
-
-#ifndef DEF_STACK_MODE
-	#define DEF_STACK_MODE			0
-#endif
-
-#ifndef DEF_RETRY_LIMIT
-	//#define DEF_RETRY_LIMIT			64
-	//#define DEF_RETRY_LIMIT			32
-	#define DEF_RETRY_LIMIT			16
-#endif
-
-#ifndef DEF_QUEUE_WIDTH
-	#define DEF_QUEUE_WIDTH			32
 #endif
 
 
@@ -570,7 +526,7 @@ struct HarmonizeProgram<
 	// During system verification/debugging, this will be used as a cutoff to prevent infinite
 	// looping
 	*/
-	static const unsigned int RETRY_LIMIT      = DEF_RETRY_LIMIT;
+	static const unsigned int RETRY_LIMIT      = 32;
 	
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;

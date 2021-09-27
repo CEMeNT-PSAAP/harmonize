@@ -1,6 +1,6 @@
 
 // Don't forget to include harmonize
-#include "harmonize.cu"
+#include "../../harmonize_2.cu"
 
 
 // The state that will be stored per program instance and accessible by all work groups
@@ -169,27 +169,37 @@ unsigned int checker(unsigned int val){
 
 
 
-int main(){
+int main(int argc, char* argv[]){
+
+	util::ArgSet args(argc,argv);
+
+
+	unsigned int wg_count    = args["wg_count"];
+	unsigned int cycle_count = args["cycle_count"] | 65536u;
+
+	util::Stopwatch watch;
+
+	watch.start();
 
 	// Declare a global state and initialize it with the information  it requires:
 	GlobalState gs;
 
 	// Define the range of values to process through the collaz iteration
 	gs.start  = 0;
-	gs.limit  = 655360;
+	gs.limit  = args["limit"];
 	
 	// Define a device-side buffer of type 'unsigned int' with size 'gs.limit'
-	util::DevVec<unsigned int> devout = util::DevVec<unsigned int>(gs.limit);
+	util::DevVec<unsigned int> dev_out = util::DevVec<unsigned int>(gs.limit);
 	// Assign the address of the device-side buffer to the global state so that the program
 	// can know where to put its output.
-	gs.output = devout.adr;
+	gs.output = dev_out;
 
 	// Declare and instance of type 'ProgType' with an arena size of 2^(20) with a global state
 	// initialized to the value of our declared global state struct. The arena size of a
 	// program determines how much extra space it has to store work if it cannot store
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// global memory, you may get some performance benefits by seting the arena size to zero.
-	ProgType::Instance instance = ProgType::Instance(0xFFFFF,gs);
+	ProgType::Instance instance = ProgType::Instance(0x0,gs);
 	cudaDeviceSynchronize();
 	util::check_error();
 	
@@ -201,22 +211,26 @@ int main(){
 	// Execute the instance using 240 work groups, with each work group performing up to
 	// 65536 promise executions per thread before halting. If all promises are exhausted
 	// before this, the program exits early.
-	printf("Execing an instance...\n");
-	exec<ProgType>(instance,240,65536);
+	exec<ProgType>(instance,wg_count,cycle_count);
 	cudaDeviceSynchronize();
 	util::check_error();	
 
+	watch.stop();
+
+	float msec = watch.ms_duration();
 
 	// Retrieve the data from the device-side buffer into a host-side vector.
-	std::vector<unsigned int> hostout(gs.limit);
-	devout >> hostout;
+	std::vector<unsigned int> host_out(gs.limit);
+	dev_out >> host_out;
 
 	// Double-check that the program has accurately evaluated the iterations assigned to it.
 	for(unsigned int i=0; i<gs.limit; i++){
-		if( hostout[i] != checker(i) ){
-			printf("Bad output for input %d. Output is %d when it should be %d\n",i,hostout[i],checker(i));
+		if( host_out[i] != checker(i) ){
+			printf("Bad output for input %d. Output is %d when it should be %d\n",i,host_out[i],checker(i));
 		}
 	}
+
+	printf("Runtime: %f\n",msec);
 
 	return 0;
 

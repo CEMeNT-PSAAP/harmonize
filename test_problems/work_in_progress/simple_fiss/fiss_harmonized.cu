@@ -236,9 +236,11 @@ struct program_context{
 program_context* initialize(runtime_context context, int argc, char *argv[]){
 
 
+	util::ArgSet args(argc,argv);
+
 	program_context* result = new program_context;
 
-	result->common = common_initialize(argc,argv);
+	result->common = common_initialize(args);
 	
 	cudaError succ = cudaMemcpyToSymbol(dev_params, &result->common.params,sizeof(sim_params));
         

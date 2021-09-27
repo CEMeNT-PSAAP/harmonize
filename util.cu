@@ -1,7 +1,12 @@
+#pragma once
+
 #include "math.h"
 #include <vector>
-
-
+#include <cstdint>
+#include <cstdio>
+#include <type_traits>
+#include <limits>
+#include <memory>
 
 
 
@@ -93,18 +98,27 @@ struct DevObj
 
 
 template<typename T>
-struct DevVec
+struct _DevVec_Inner
 {
 	size_t size;
 	T* adr;
 
-	__host__ DevVec<T>(size_t s){
+	__host__ _DevVec_Inner<T>(size_t s){
 		size = s;
 		cudaMalloc( (void**) &adr,  sizeof(T)*size  );
 	}
 
-	__host__ ~DevVec<T>(){
+	__host__ ~_DevVec_Inner<T>(){
 		cudaFree(adr);
+	}
+
+	__host__ void resize(size_t s){
+		T* new_adr = cudaMalloc(&adr, sizeof(T)*s);
+		size_t copy_count = ( s < size ) ? s : size;
+		cudaMemcpy(new_adr,adr,sizeof(T)*copy_count);
+		cudaFree(adr);
+		size = s;
+		adr = new_adr;
 	}
 
 	__host__ void operator<<(std::vector<T> &other) {
@@ -112,7 +126,40 @@ struct DevVec
 	}
 
 	__host__ void operator>>(std::vector<T> &other) {
+		if( other.size() != size ){
+			other.resize(size);
+		}
 		cudaMemcpy(other.data(),adr,sizeof(T)*size,cudaMemcpyDeviceToHost);
+	}
+
+};
+
+
+template<typename T>
+struct DevVec
+{
+
+	std::shared_ptr<_DevVec_Inner<T>> _inner;
+
+	__host__ DevVec<T>(size_t s) {
+		_inner = std::make_shared<_DevVec_Inner<T>>(s);
+	}
+
+
+	__host__ void resize(size_t s) {
+		_inner->resize(s);
+	}
+
+	__host__ void operator<<(std::vector<T> &other) {
+		(*_inner)<<other;
+	}
+
+	__host__ void operator>>(std::vector<T> &other) {
+		(*_inner)>>other;
+	}
+
+	__host__ operator T* () const {
+		return _inner->adr;
 	}
 
 };
@@ -174,6 +221,10 @@ struct BasicIter
 	IterType value;
 	IterType limit;
 	IterType width;
+
+
+	__device__ BasicIter<ITER_TYPE> (IterType v, IterType l, IterType w)
+	: value(v), limit(l), width(w) {}
 
 
 	 __device__ bool step(IterType& iter_val){
@@ -242,10 +293,7 @@ struct GroupWorkIter
 	template<size_t MULTIPLIER>
 	 __device__ BasicIter<IterType> multi_step() {
 	
-		BasicIter<IterType> result;
-		result.value = 0;
-		result.limit = 0;
-		result.width = blockDim.x;
+		BasicIter<IterType> result(0,0,blockDim.x);
 		if( chunk <= chunk_limit ){
 			IterType start_val = start + chunk*blockDim.x + threadIdx.x;	
 			IterType limit_val = start_val + MULTIPLIER*blockDim.x;
@@ -321,10 +369,37 @@ void check_error(){
 
 
 
+enum class GraphMode { Ascii, Braille, Block1x1, Block2x2, Block3x3, Slope };
+
+
+struct GraphShape {
+
+	int width;
+	int height;
+	float low;
+	float high;
+
+
+};
+
+
+struct GraphConfig {
+
+	GraphShape shape;
+	GraphMode  mode;
+
+};
+
 
 
 void cli_graph(float* data, int size, int width, int height, float low, float high){
 
+
+
+
+	#if GRAPH_MODE == 4
+	const int   cols = 5;
+	const int   rows = 5;
 	const char* lookup[25] = {
 		"⠀","⡀","⡄","⡆","⡇",
 		"⢀","⣀","⣄","⣆","⣇",
@@ -332,6 +407,21 @@ void cli_graph(float* data, int size, int width, int height, float low, float hi
 		"⢰","⣰","⣴","⣶","⣷",
 		"⢸","⣸","⣼","⣾","⣿"
 	};
+	#elif GRAPH_MODE == 1
+	const char* lookup[9] = {
+		" ","▖","▌",
+		"▗","▄","▙",
+		"▐","▟","█"
+	};
+	#else
+	const char* lookup[25] = {
+		" ",".",".","i","|",
+		".","_","_","L","L",
+		".","_","o","b","b",
+		"i","j","d",":","%",
+		"|","J","d","4","#"
+	};
+	#endif
 
 	
 	float max = 0;
@@ -413,15 +503,178 @@ void cli_graph(float* data, int size, int width, int height, float low, float hi
 
 
 
+struct ArgSet
+{
+
+	int    argc;
+	char** argv;
+
+	int get_flag_idx(char* flag){
+		for(int i=0; i<argc; i++){
+			char* str = argv[i];
+			if(    (str    != NULL )
+			    && (str[0] == '-'  )
+			    && (strcmp(str+1,flag) == 0)
+                        ){
+				return i;
+			}
+		}
+		return -1;
+	}
+
+
+	char* get_flag_str(char* flag){
+		int idx = get_flag_idx(flag);
+		if( idx == -1 ) {
+			return NULL;
+		} else if (idx == (argc-1) ) {
+			return (char*) "";
+		}
+		return argv[idx+1];
+	}
 
 
 
+	template<typename T>
+	struct ArgVal {
+
+		T     value;
+
+		ArgVal(T val) : value(val)  {}
+		
+		operator T() const {
+			return value;
+		}
+
+	};
 
 
+	struct ArgQuery {
+
+		char* flag_str;
+		char* value_str;
 
 
+		template<typename T>
+		bool scan_arg(char *str, T &dest) const {
+			return false;
+		}
+
+		bool scan_arg(char *str, unsigned int &dest) const {	
+			return ( 0 < sscanf(str,"%u",&dest) );
+		}
+		
+		bool scan_arg(char *str, int &dest) const {	
+			return ( 0 < sscanf(str,"%d",&dest) );
+		}
+		
+		bool scan_arg(char *str, float &dest) const {	
+			return ( 0 < sscanf(str,"%f",&dest) );
+		}
+		
+		bool scan_arg(char *str, bool &dest) const{
+			if        ( strcmp(str,"false") == 0 ){
+				dest = false;
+			} else if ( strcmp(str,"true" ) == 0 ){
+				dest = true;
+			} else {
+				return false;
+			}
+			return true;
+		}
+
+		template<typename T>
+		void scan_or_fail(T& dest) const{
+			if(value_str == NULL) {
+				printf("No value provided for flag '-%s'\n", flag_str);
+				std::exit(1);
+			}
+			if( !scan_arg(value_str,dest) ){
+				printf("Value string '%s' provided for flag '-%s' "
+					"could not be parsed\n",
+					value_str,flag_str
+				);
+				std::exit(1);
+			}
+		}
+
+		void scan_or_fail(bool& dest) const{
+			dest = (value_str != NULL);
+		}
+
+		template<typename T>
+		ArgVal<T> operator| (T other) {
+			if(value_str == NULL){
+				return ArgVal<T>(other);
+			} else {
+				T value;
+				scan_or_fail(value);
+				return ArgVal<T>(value);
+			}
+		}
 
 
+		template<typename T>
+		operator T() const {
+			T value;
+			scan_or_fail(value);
+			return value;
+		}
+
+
+		ArgQuery(char* f, char* v) : flag_str(f), value_str(v) {}
+
+	};
+
+
+	ArgQuery operator[] (char* flag_str) {
+		char* val_str = get_flag_str(flag_str);
+		return ArgQuery(flag_str,val_str);
+	}
+	
+	ArgQuery operator[] (const char* flag_str) {
+		return (*this)[(char*)flag_str];
+	}
+
+	ArgSet(int c, char** v) : argc(c), argv(v) {}
+
+};
+
+
+struct Stopwatch {
+
+	cudaEvent_t beg;
+	cudaEvent_t end;
+	float duration;
+
+	Stopwatch() {
+        	if (  ( cudaEventCreate( &beg ) != cudaSuccess )
+		   || ( cudaEventCreate( &end  ) != cudaSuccess )
+		) {
+			printf("Failed to create Stopwatch\n");
+			std::exit(1);
+		}
+	}
+
+
+	bool start() {
+		return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+	}
+
+	bool stop() {
+		if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
+			return false;
+		}
+		cudaEventSynchronize( end );
+        	cudaEventElapsedTime( &duration, beg, end );
+		return true;
+	}
+
+	float ms_duration(){
+		return duration;
+	}
+
+};
 
 
 
