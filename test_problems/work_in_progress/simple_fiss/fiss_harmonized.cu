@@ -1,54 +1,33 @@
+
+
+#define checkError  util::check_error
+
+
 #include "fiss_common.cu"
 
 
-
-//#define PRE_INIT
-
-
-
-
-
-
-
-
-__device__ sim_params dev_params;
-
-
-
-enum async_fn {
-	NEUTRON=0,
+struct GlobalState{
+	unsigned int  start;
+	unsigned int  limit;
+	sim_params    params;
 };
 
+struct GroupState { util::GroupWorkIter<unsigned int> iterator; };
 
-struct union_thunk {
+typedef ProgramStateDef<GlobalState,GroupState,VoidState> ProgState;
 
-	union {
+enum class Fn { Neutron };
 
-		ctx_thunk	thunk;
+DEF_PROMISE_TYPE(Fn::Neutron, unsigned int);
 
-		#ifdef INDIRECT
-		unsigned int	neu_index;
-		#else
-		neutron		neu_thunk;
-		#endif
-
-	};
-
-};
+typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 
 
+DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
-__device__ void do_neutron(ctx_shared& shr, ctx_local& loc, union_thunk& thunk){
 
 	neutron n;
-	#ifdef INDIRECT
-	n = dev_params.old_data[thunk.neu_index];
-	#else
-	n = thunk.neu_thunk;
-	#endif
-
-
-	#ifdef NEUTRON_3D
+	n = global.params.old_data[arg];
 
 	#ifndef PRE_INIT
 	if ( n.time <= 0 ){
@@ -60,92 +39,53 @@ __device__ void do_neutron(ctx_shared& shr, ctx_local& loc, union_thunk& thunk){
 	}
 	#endif
 
-	#else
-	if ( n.weight <= 0 ){
-		n.pos = 0;
-		n.weight = 1.0;
-		n.mom = random_2D_iso(n.seed);
-	}
-	#endif
 
-	for(int i=0; i < dev_params.horizon; i++){
-		if( ! step_neutron(dev_params,n) ){
+	for(int i=0; i < global.params.horizon; i++){
+		if( ! step_neutron(global.params,n) ){
 			return;
 		}
 	}
 
-	#ifdef INDIRECT
-	dev_params.old_data[thunk.neu_index] = n;
-	#else
-	thunk.neu_thunk = n;
-	#endif	
+	global.params.old_data[arg] = n;
+	ASYNC_CALL(Fn::Neutron,arg);		
 
-	async_call(shr,loc, NEUTRON, 0, thunk.thunk);		
+
 
 }
 
 
+DEF_INITIALIZE(ProgType) {
 
-
-
-
-
-
-__device__ void make_work(ctx_shared& shr,ctx_local& loc){
-
-
-	__shared__ unsigned long long int work_start;
-	__shared__ unsigned long long int work_limit;
-	__shared__ unsigned long long int end;
-
-	if( current_leader() ){
-
-		
-		unsigned long long int work_space = WG_SIZE*(STASH_SIZE-2);
-		const unsigned long long int work_width = dev_params.count_lim / WG_COUNT;
-		unsigned long long int base = work_width * blockIdx.x;
-		end  = base + work_width;
-
-		if( blockIdx.x == (WG_COUNT-1)){
-			end = dev_params.count_lim;
-		}
-		
-		work_start = base + work_space * shr.work_iterator;
-
-		if( work_start >= end ){
-			work_start = end;
-			work_limit = end;
-		} else if ( (work_start + work_space) >= end ) {
-			work_limit = end;
-		} else {
-			work_limit = work_start + work_space;
-		}
-
-		shr.work_iterator += 1;
-
+	unsigned int group_data_size = (global.limit - global.start) / gridDim.x;
+	unsigned int group_start = global.start + group_data_size * blockIdx.x;
+	unsigned int group_end   = group_start + group_data_size;
+	if( blockIdx.x == (gridDim.x-1) ){
+		group_end = global.limit;
 	}
 
-	__syncwarp();
+	group.iterator.reset(group_start,group_end);
 
-	if( current_leader() && (work_limit >= end) ){
-		shr.can_make_work = false;
-	}
 
-	ctx_thunk thunk;
-	for(unsigned long long int offset = work_start; offset < work_limit; offset += WG_SIZE){
+}
 
-		unsigned long long int id = offset + threadIdx.x;
 
-		if( id >= work_limit ) {
-			break;
-		}
+DEF_FINALIZE(ProgType) {
 
-		#ifdef NEUTRON_3D
-		
-		#ifdef INDIRECT
-		thunk.data[0] = (unsigned int) id;
+
+}
+
+
+DEF_MAKE_WORK(ProgType) {
+
+
+	unsigned int index;
+
+	#if 1
+	util::BasicIter<unsigned int> iter = group.iterator.multi_step<14>();
+
+	while(iter.step(index)){
 		neutron n;
-		n.seed   = id;
+		n.seed   = index;
 
 		#ifdef PRE_INIT
 		n.p_x = 0.0;
@@ -155,118 +95,86 @@ __device__ void make_work(ctx_shared& shr,ctx_local& loc){
 		n.time = 0.0;
 		#else
 		n.time   = -1.0;
-		#endif
+		#endif //PRE_INIT
 
-		dev_params.old_data[id] = n;
-		#else
-		thunk.data[6] = (unsigned int) __float_as_uint(-1.0);
-		thunk.data[7] = (unsigned int) id;	
-		#endif	
+		global.params.old_data[index] = n;
 		
-		#else
-		
-		#ifdef INDIRECT
-		thunk.data[0] = (unsigned int) id;
-		neutron n;
-		n.weight = -1.0;
-		n.seed   = id;
-		dev_params.old_data[id] = n;
-		#else
-		thunk.data[2] = (unsigned int) __float_as_uint(-1.0);
-		thunk.data[3] = (unsigned int) id;	
-		#endif	
-		
-		#endif
-		
-		async_call(shr,loc,NEUTRON,0,thunk);
-
-	} 
-
-
-	__syncwarp();
-
-
-}
-
-
-
-
-__device__ void do_async(ctx_shared& shr,ctx_local& loc, unsigned int func_id,ctx_thunk& thunk){
-
-	/*
-	// This switch is where one of the most abstract aspects of this system is handled,
-	// namely diverting the flow of execution of work groups to the functions that are
-	// required to process queued work. This is simply handled by switching to the function
-	// by the function id that a respective link is labeled with.
-	*/
-	switch(func_id){
-		case NEUTRON:
-			do_neutron (shr,loc,*(union_thunk*)&thunk);
-			break;
-		
-		default:
-			/* 
-			// REALLY BAD: We've been asked to execute a function
-			// with an ID that we haven't heard of. In this case,
-			// we set an error flag and halt.
-			*/
-			set_flags(shr,BAD_FUNC_ID_FLAG);
-			shr.keep_running = false;
-			break;
+		ASYNC_CALL(Fn::Neutron,index);
 	}
+	#else
 
+	group.iterator.step(index);
+
+	#ifdef INDIRECT
+	neutron n;
+	n.seed   = index;
+
+	#ifdef PRE_INIT
+	n.p_x = 0.0;
+	n.p_y = 0.0;
+	n.p_z = 0.0;
+	random_3D_iso_mom(n);
+	n.time = 0.0;
+	#else
+	n.time   = -1.0;
+	#endif //PRE_INIT
+
+	global.params.old_data[index] = n;
+	#else
+	thunk.data[6] = (unsigned int) __float_as_uint(-1.0);
+	thunk.data[7] = (unsigned int) id;	
+	#endif //INDIRECT
+	
+	ASYNC_CALL(Fn::Neutron,index);
+
+
+	#endif
+
+	return !group.iterator.done();
 
 }
 
 
 
-struct program_context{
-
-	sim_params* dev_params_ptr;
-
-	common_context common;
-
-};
-
-
-
-
-
-
-program_context* initialize(runtime_context context, int argc, char *argv[]){
+int main(int argc, char *argv[]){
 
 
 	util::ArgSet args(argc,argv);
 
-	program_context* result = new program_context;
+	unsigned int wg_count = args["wg_count"];
 
-	result->common = common_initialize(args);
-	
-	cudaError succ = cudaMemcpyToSymbol(dev_params, &result->common.params,sizeof(sim_params));
-        
-	cudaDeviceSynchronize( );
+	common_context com;
 
+	com = common_initialize(args);
+	cudaDeviceSynchronize();
+		
 	checkError();
 
-	return result;
+	GlobalState gs;
+	gs.start  = 0;
+	gs.limit  = com.params.count_lim;
+	gs.params = com.params;
+	
+	//printf("Making an instance...\n");
+	ProgType::Instance instance = ProgType::Instance(0xFFFFF,gs);
+	cudaDeviceSynchronize();
+	util::check_error();
+	
+	//printf("Initing an instance...\n");
+	init<ProgType>(instance,wg_count);
+	cudaDeviceSynchronize();
+	util::check_error();
+
+	//printf("Execing an instance...\n");
+	exec<ProgType>(instance,wg_count,0xFFFFF);
+	cudaDeviceSynchronize();
+	util::check_error();
+	//printf("Finished exec.\n");
+	
+
+	common_finalize(com);
+
+	return 0;
 
 }
-
-
-
-
-
-
-
-
-void finalize(runtime_context runtime, program_context* program){
-
-	common_finalize(program->common);
-
-}
-
-
-
-
-
 

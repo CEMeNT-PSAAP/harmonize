@@ -15,30 +15,25 @@ import subprocess
 
 on_DGX=True
 
-if(on_DGX):
-	# FOR DGX
-	make_cmd = [ 	'make',     'hard',           'WG_COUNT=896' ,      'STD_WG_COUNT=4096', 
-			'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
-else:
-	# FOR RABBIT
-	make_cmd = [ 	'make',     'hard',           'WG_COUNT=240',      'STD_WG_COUNT=1024', 
-			'NEU_3D=X', 'QUEUE_WIDTH=64', 'ARENA_SIZE=0xFFFFF', 'INDIRECT=X' ]
-
+make_cmd = [ 'make' ]
 
 params={}
 
-params["show"]="false"
-#params["flux"]="false"
-params["flux"]="false"
+
+if(on_DGX):
+	# FOR DGX
+	params["wg_count"] = 512 
+else:
+	# FOR RABBIT
+	params["wg_count"] = 240 
+
+
+
 params["span"]=32
 
 
 particle_start = 23
-
-if params["flux"] == "true" :
-	particle_lim = 19
-else:
-	particle_lim = 23
+particle_lim = 23
 
 ratio_start =  0
 ratio_lim   = 12
@@ -46,12 +41,12 @@ ratio_lim   = 12
 #ratio_start =  5
 #ratio_lim   =  8
 
-time_start = 10
+time_start = 0
 time_lim   = 10
 
 scaled_res = 0.001
-sample_count = 4
-spot_sample_count = 8
+sample_count = 3
+spot_sample_count = 3
 
 csvmode=True
 
@@ -59,7 +54,8 @@ csvmode=True
 def build_command(name,par):
 	result = [name]
 	for arg, val in par.items():
-		result.append(str(arg)+"="+str(val))
+		result.append("-"+str(arg))
+		result.append(str(val))
 	return result
 
 
@@ -89,38 +85,68 @@ def sweet_spot(name,par):
 
 	mom=0
 	old = bench(name,par,spot_sample_count)
-	while True:
-		#print("Time: "+str(old)+"\thrzn: "+str(par["hrzn"]))
-		if mom == 0:
-			par["hrzn"] += 1
-			high = bench(name,par,spot_sample_count)
-			if high < old:
-				mom = 1
-				old = high
+	best_hrzn = par["hrzn"]
+	best_time = old
+
+
+	lookabout=3
+	changed = True
+
+	tries={}
+	
+	while changed:
+
+		new_best=best_hrzn
+		new_time=best_time
+
+		min_look=0
+
+		for i in range(lookabout):
+			try_hrzn = int(best_hrzn - 2**i)
+			if try_hrzn <= 0:
 				continue
-			par["hrzn"] -= 2
-			low  = bench(name,par,spot_sample_count)
-			if low < old:
-				old = low
-				mom = -1
+			if try_hrzn in tries:
 				continue
-			par["hrzn"] += 1
-			return
-				
-		elif mom > 0:
-			par["hrzn"] += 1
-			high = bench(name,par,spot_sample_count)
-			if high > old:
-				par["hrzn"] -= 1
-				return
-			old = high
-		else:	
-			par["hrzn"] -= 1
-			low = bench(name,par,spot_sample_count)
-			if low > old:
-				par["hrzn"] += 1
-				return
-			old = low
+			tries[try_hrzn] = True
+			par["hrzn"] = try_hrzn
+			try_time = bench(name,par,spot_sample_count)
+			#print("Found time "+str(try_time)+" for horizon "+str(try_hrzn))
+			if try_time < new_time:
+				new_best = try_hrzn
+				new_time = try_time
+				if i > min_look:
+					min_look = i
+
+
+		for i in range(lookabout):
+			try_hrzn = int(best_hrzn + 2**i)
+			if try_hrzn <= 0:
+				continue
+			if try_hrzn in tries:
+				continue
+			tries[try_hrzn] = True
+			par["hrzn"] = try_hrzn
+			try_time = bench(name,par,spot_sample_count)
+			#print("Found time "+str(try_time)+" for horizon "+str(try_hrzn))
+			if try_time < new_time:
+				new_best = try_hrzn
+				new_time = try_time
+				if i > min_look:
+					min_look = i
+
+		if lookabout == (min_look+1):
+			lookabout += 1
+		else:
+			lookabout = min_look+1
+
+		changed = (best_hrzn != new_best)
+
+		best_hrzn = new_best
+		best_time = new_time
+
+	par["hrzn"] = best_hrzn
+	#print("Found horizon "+str(best_hrzn))
+
 
 
 def perf(name,par):
@@ -140,7 +166,7 @@ def run_bench(name):
 	for ratio_mag in range(ratio_start,ratio_lim+1):
 		ratio = 2**ratio_mag
 		if csvmode:
-			print(","+str(ratio),end='')
+			print(","+str(ratio),end='',flush=True)
 		else:
 			print("\t"+"{0:12.0f}".format(ratio),end='')
 	print("")
@@ -166,7 +192,7 @@ def run_bench(name):
 				if ratio_mag == ratio_start:
 					last = params["hrzn"]
 				if csvmode:
-					print(","+str(std_val),end='')
+					print(","+str(std_val),end='',flush=True)
 				else:
 					print("\t"+"{0:12.6f}".format(std_val),end='')
 				spots[-1].append(params["hrzn"])
