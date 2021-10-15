@@ -3,10 +3,14 @@
 #include <vector>
 
 
+//#define IOBUFF
 
+struct Neutron;
 
+__device__ void random_3D_iso_mom(Neutron& n);
+__device__ unsigned int random_uint(unsigned int& rand_state);
 
-struct neutron {
+struct Neutron {
 
 	float p_x;
 	float p_y;
@@ -17,17 +21,44 @@ struct neutron {
 	float time;
 	unsigned int seed;
 
+	Neutron() = default;
+	
+	__device__ Neutron(unsigned int s, float t, float x, float y, float z)
+		: seed(s)
+		, time(t)
+		, p_x(x)
+		, p_y(y)
+		, p_z(z)
+	{
+		random_3D_iso_mom(*this);
+	}
+
+	
+	__device__ Neutron(Neutron& parent)
+		: seed(random_uint(parent.seed))
+		, time(parent.time)
+		, p_x(parent.p_x)
+		, p_y(parent.p_y)
+		, p_z(parent.p_z)
+	{
+		random_3D_iso_mom(*this);
+	}
+
 };
 
-struct sim_params {
+struct SimParams {
 
 	int	span;
 	int	horizon;
 
-	int	count_lim;
-	
-	neutron* old_data;
-	neutron* new_data;
+	int	source_count;
+	util::AtomicIter<unsigned int>* source_id_iter;
+
+	#ifdef IOBUFF
+	util::IOBuffer<Neutron>* neutron_io;
+	#else
+	Neutron* neutron_buffer;
+	#endif
 
 	unsigned long long int* halted;
 
@@ -41,6 +72,8 @@ struct sim_params {
 	float	combine_x;
 
 	float   time_limit;
+
+	int     fiss_mult;
 
 };
 
@@ -90,7 +123,7 @@ __device__ float random_2D_iso(unsigned int& rand_state){
 }
 
 
-__device__ void random_3D_iso_mom(neutron& n){
+__device__ void random_3D_iso_mom(Neutron& n){
 
 
 	float mu = random_norm(n.seed);
@@ -104,7 +137,7 @@ __device__ void random_3D_iso_mom(neutron& n){
 
 }
 
-__device__ int pos_to_idx(sim_params& params, float pos){
+__device__ int pos_to_idx(SimParams& params, float pos){
 
 	return params.div_count + (int) floor(pos / params.div_width);
 
@@ -134,7 +167,7 @@ __device__ float clamp(float val, float low, float high){
 
 
 
-__device__ bool step_neutron(sim_params params, neutron& n){
+__device__ int step_neutron(SimParams params, Neutron& n){
 
 	// Advance particle position
 	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;
@@ -156,7 +189,7 @@ __device__ bool step_neutron(sim_params params, neutron& n){
 
 	// Break upon exiting medium
 	if( (index < 0) || (index >= params.div_count*2) ){
-		return false;
+		return -1;
 	}
 
 	// Sample the event that occurs
@@ -164,13 +197,13 @@ __device__ bool step_neutron(sim_params params, neutron& n){
 	
 	if ( halt ){
 		atomicAdd(&params.halted[index],1);
-		return false;
+		return -1;
 	}else if( samp <= (params.scatter_x/params.combine_x) ){
 		random_3D_iso_mom(n);
-		return true;
+		return 0;
 	} 
 	else {
-		return false;
+		return params.fiss_mult;
 	}
 
 }
@@ -178,132 +211,145 @@ __device__ bool step_neutron(sim_params params, neutron& n){
 
 
 
-struct common_context{
+struct CommonContext{
 
-	sim_params  params;
+	SimParams  params;
 
 	bool	    show;
 	bool	    csv;
 
+	util::DevBuf<util::AtomicIter<unsigned int>> source_id_iter;
+	util::DevBuf<unsigned long long int> halted;
+	
+	#ifdef IOBUFF
+	util::DevObj<util::IOBuffer<Neutron>> neutron_io;
+	#else
+	util::DevBuf<Neutron> neutron_buffer;
+	#endif
+
 	util::Stopwatch watch;
 
-};
+	CommonContext(util::ArgSet& args)
+		#ifdef IOBUFF
+		: neutron_io( args["io_cap"] | args["num"] | 1000u )
+		#else
+		: neutron_buffer( args["num"] | 1000u )
+		#endif
+	{
+
+
+		params.span       = args["span"] | 32u;
+		params.horizon    = args["hrzn"] | 32u;
+		params.source_count  = args["num"]  | 1000u;;
+
+		params.time_limit = args["time"] | 1.0f;
+
+		params.div_width  = args["res"]  | 1.0f;
+		params.pos_limit  = args["size"] | 1.0f;
+		params.div_count  = params.pos_limit/params.div_width;
+
+		params.fission_x  = args["fx"]   | 0.0f;
+		params.capture_x  = args["cx"]   | 0.0f;
+		params.scatter_x  = args["sx"]   | 0.0f;
+		params.combine_x  = params.fission_x + params.capture_x + params.scatter_x;
+
+		params.fiss_mult  = args["mult"] | 2;
+
+		show = args["show"];
+		csv  = args["csv"];
 
 
 
-common_context common_initialize(util::ArgSet& args){
+		watch.start();
 
 
-	common_context result;
-
-	sim_params& params = result.params;
-
-	params.span       = args["span"] | 32u;
-	params.horizon    = args["hrzn"] | 32u;
-	params.count_lim  = args["num"]  | 1000u;;
-	
-	params.time_limit = args["time"] | 1.0f;
-
-	params.div_width  = args["res"]  | 1.0f;
-	params.pos_limit  = args["size"] | 1.0f;
-	params.div_count  = params.pos_limit/params.div_width;
-
-	params.fission_x  = args["fx"]   | 0.0f;
-	params.capture_x  = args["cx"]   | 0.0f;
-	params.scatter_x  = args["sx"]   | 0.0f;
-	params.combine_x  = params.fission_x + params.capture_x + params.scatter_x;
-
-	result.show       = args["show"];
-	result.csv        = args["csv"];
+		int elem_count = params.div_count*2;
+		halted.resize(elem_count);
+		params.halted = halted;
+		cudaMemset( halted, 0, sizeof(unsigned long long int) * elem_count );
 
 
-	result.watch.start();
+		source_id_iter<< util::AtomicIter<unsigned int>(0,args["num"]);
+		params.source_id_iter = source_id_iter;
 
-	cudaMalloc( (void**) &params.old_data,  sizeof(neutron) * params.count_lim );
-
-	int elem_count = params.div_count*2;
-
-
-	cudaMalloc( (void**) &params.halted,   sizeof(unsigned long long int)   * elem_count );
-	cudaMemset( params.halted, 0, sizeof(unsigned long long int) * elem_count );
-
-	return result;
-
-}
-
-
-
-void common_finalize(common_context& context){
-
-
-	sim_params& params = context.params;
-
-	context.watch.stop();
-
-        float msecTotal = context.watch.ms_duration();
-	
-	int elem_count = params.div_count*2;
-
-
-	unsigned long long int* result_raw;
-	float* result;
-
-	if( context.show || context.csv ){
-
-		result_raw = (unsigned long long int*) malloc(sizeof(unsigned long long int)*elem_count);
-		result = (float*) malloc(sizeof(float)*elem_count);
-
-		cudaMemcpy(
-			(void*)result_raw,
-			params.halted,
-			sizeof(unsigned long long int)*elem_count,
-			cudaMemcpyDeviceToHost
-		);
-
-		float sum = 0;
-		for(unsigned int i=0; i<elem_count; i++){
-			float value = ((float)result_raw[i])/ (((float)params.div_width)*((float)params.count_lim));
-			sum += value * params.div_width;
-			result[i] = value;
-		}
-
-		printf("\n\nSUM IS: %f\n\n",sum);
-
-
-	}
-
-
-	if( context.csv ){
-
-		for(unsigned int i=0; i<elem_count; i++){
-			if( i == 0 ){
-				printf("%f",result[i]);
-			} else {
-				printf(",%f",result[i]);
-			}
-		}
-		printf("\n");
 		
-		return;
+		#ifdef IOBUFF
+		params.neutron_io = neutron_io;
+		#else
+		params.neutron_buffer = neutron_buffer;
+		#endif
+	}
+
+
+	~CommonContext(){
+
+		watch.stop();
+
+		float msecTotal = watch.ms_duration();
+		
+		int elem_count = params.div_count*2;
+
+
+		unsigned long long int* result_raw;
+		float* result;
+
+		if( show || csv ){
+
+			result_raw = (unsigned long long int*) malloc(sizeof(unsigned long long int)*elem_count);
+			result = (float*) malloc(sizeof(float)*elem_count);
+
+			cudaMemcpy(
+				(void*)result_raw,
+				params.halted,
+				sizeof(unsigned long long int)*elem_count,
+				cudaMemcpyDeviceToHost
+			);
+
+			float sum = 0;
+			for(unsigned int i=0; i<elem_count; i++){
+				float value = ((float)result_raw[i])/ (((float)params.div_width)*((float)params.source_count));
+				sum += value * params.div_width;
+				result[i] = value;
+			}
+
+			printf("\n\nSUM IS: %f\n\n",sum);
+
+
+		}
+
+
+		if( csv ){
+
+			for(unsigned int i=0; i<elem_count; i++){
+				if( i == 0 ){
+					printf("%f",result[i]);
+				} else {
+					printf(",%f",result[i]);
+				}
+			}
+			printf("\n");
+			
+			return;
+
+		}
+
+
+		if( show ){
+
+			util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
+
+		}
+
+		
+		if( show ){
+			printf("%f\n",msecTotal);
+		} else {
+			printf("%f",msecTotal);
+		}
 
 	}
 
 
-	if( context.show ){
-
-		util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
-
-	}
-
-	
-	if( context.show ){
-		printf("%f\n",msecTotal);
-	} else {
-		printf("%f",msecTotal);
-	}
-
-
-
-}
+};
 
 

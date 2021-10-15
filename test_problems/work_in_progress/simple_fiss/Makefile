@@ -22,6 +22,6 @@ fiss_hrm:      Makefile ../../../harmonize.cu fiss_harmonized.cu fiss_common.cu 
 
 
 fiss_std:      Makefile fiss_standard.cu fiss_common.cu $(UTIL_PATH)
-	$(CUDA_NVCC) $(STD) -o fiss_std fiss_standard.cu --restrict -include $(UTIL_PATH)
+	$(CUDA_NVCC) $(STD) -o fiss_std fiss_standard.cu -g --restrict -include $(UTIL_PATH)
 
 

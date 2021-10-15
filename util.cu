@@ -14,6 +14,120 @@ namespace util {
 
 
 
+template<typename T>
+class Option {
+
+	T    data;
+	bool some;
+
+	operator bool() { return some; }
+
+	T unwrap()
+	{
+		if ( some ) {
+			return data;
+		}
+		throw std::string("Attempted to unwrap empty Option.");
+	}
+
+};
+
+
+
+template<typename OKAY, typename FAIL>
+class Result {
+
+	union OkayOrFail {
+		OKAY okay;
+		FAIL fail;
+	};
+
+	OkayOrFail data;
+	bool       okay;
+
+
+	operator bool() { return okay; }
+
+	Result<OKAY,FAIL>(OKAY value){
+		data.okay = value;
+		okay = true;
+	}
+
+	Result<OKAY,FAIL>(FAIL value){
+		data.fail = value;
+		okay = false;
+	}
+
+	static Result<OKAY,FAIL> wrap(OKAY value){
+		Result<OKAY,FAIL> result;
+		result.data.okay = value;
+		result.okay = true;
+		return result;
+	}
+	
+	static Result<OKAY,FAIL> wrap_fail(FAIL value){
+		Result<OKAY,FAIL> result;
+		result.data.fail = value;
+		result.okay = false;
+		return result;
+	}
+
+	OKAY unwrap()
+	{
+		if ( okay ) {
+			return data.okay;
+		}
+		throw std::string("Attempted to unwrap failed Result.");
+	}
+
+	FAIL unwrap_fail()
+	{
+		if ( !okay ) {
+			return data.fail;
+		}
+		throw std::string("Attempted to unwrap failed Result.");
+	}
+
+
+	OKAY unwrap_or(OKAY other){
+		return okay ? data.okay : other;
+	}
+	
+	FAIL unwrap_fail_or(FAIL other){
+		return !okay ? data.fail : other;
+	}
+
+	
+	template<typename FUNCTION>
+	auto and_then(FUNCTION f) -> Result<decltype(f(data.okay)),FAIL>
+	{
+		typedef Result<decltype(f(data.okay)),FAIL> RetType;
+
+		if( ! okay ){
+			return RetType::wrap_fail(data.fail);
+		} else {
+			return RetType::wrap_okay(f(data.okay));
+		}
+	}
+
+
+
+};
+
+
+void auto_throw(cudaError_t value){
+	if ( value != cudaSuccess ) { throw value; }
+}
+
+
+template<typename T>
+T* hardMalloc(size_t size){
+	T* result;
+	auto_throw( cudaMalloc(&result, sizeof(T)*size) );
+	return result;
+}
+
+
 
 template<typename T>
 struct PairEquivalent;
@@ -66,7 +180,6 @@ struct PairPack
 
 	PairPack<T> () = default;
 
-
 	__host__  __device__ PairPack<T> (T left, T right){
 		data   = left;
 		data <<= HALF_WIDTH;
@@ -77,92 +190,217 @@ struct PairPack
 
 
 
-template<typename T>
-struct DevObj
-{
-	T* adr;
-
-	__host__ DevObj<T>(){
-		cudaMalloc( (void**) &adr,  sizeof(T)  );
-	}
-
-	__host__ DevObj<T>(size_t size){
-		cudaMalloc( (void**) &adr,  sizeof(T)*size  );
-	}
-
-	__host__ ~DevObj<T>(){
-		cudaFree(adr);
-	}
-
-};
 
 
 template<typename T>
-struct _DevVec_Inner
-{
-	size_t size;
-	T* adr;
+class DevBuf {
 
-	__host__ _DevVec_Inner<T>(size_t s){
-		size = s;
-		cudaMalloc( (void**) &adr,  sizeof(T)*size  );
-	}
+	protected:
 
-	__host__ ~_DevVec_Inner<T>(){
-		cudaFree(adr);
-	}
+	struct Inner {
+
+		size_t  size;
+		T       *adr;
+		
+		Inner(T *adr_val, size_t size_val)
+		: adr (adr_val ) 
+		, size(size_val)
+		{}
+
+		~Inner() {
+			if ( adr != NULL) {
+				cudaFree(adr);
+			}
+		}
+
+	};
+
+	std::shared_ptr<Inner> inner;
+
+	public:
+
+
+	operator T*&() { return inner->adr; }
 
 	__host__ void resize(size_t s){
-		T* new_adr = cudaMalloc(&adr, sizeof(T)*s);
-		size_t copy_count = ( s < size ) ? s : size;
-		cudaMemcpy(new_adr,adr,sizeof(T)*copy_count);
-		cudaFree(adr);
-		size = s;
-		adr = new_adr;
+		T* new_adr = hardMalloc<T>(s);
+		size_t copy_count = ( s < inner->size ) ? s : inner->size;
+		auto_throw( cudaMemcpy(
+			new_adr,
+			inner->adr,
+			sizeof(T)*copy_count,
+			cudaMemcpyDeviceToDevice
+		) );
+		auto_throw( cudaFree(inner->adr) );
+		inner->size = s;
+		inner->adr = new_adr;
 	}
 
 	__host__ void operator<<(std::vector<T> &other) {
-		cudaMemcpy(adr,other.data(),sizeof(T)*size,cudaMemcpyHostToDevice);
+		if( other.size() != inner->size ){
+			resize(other->size);
+		}
+		auto_throw( cudaMemcpy(
+			inner->adr,
+			other.data(),
+			sizeof(T)*inner->size,
+			cudaMemcpyHostToDevice
+		) );
 	}
 
 	__host__ void operator>>(std::vector<T> &other) {
-		if( other.size() != size ){
-			other.resize(size);
+		if( other.size() != inner->size ){
+			other.resize(inner->size);
 		}
-		cudaMemcpy(other.data(),adr,sizeof(T)*size,cudaMemcpyDeviceToHost);
+		auto_throw( cudaMemcpy(
+			other.data(),
+			inner->adr,
+			sizeof(T)*inner->size,
+			cudaMemcpyDeviceToHost
+		) );
 	}
 
+
+	__host__ void operator<<(T &other) {
+		if( inner->size != 1 ){
+			resize(1);
+		}
+		auto_throw( cudaMemcpy(
+			inner->adr,
+			&other,
+			sizeof(T),
+			cudaMemcpyHostToDevice
+		) );
+	}
+
+	__host__ void operator<<(T &&other) {
+		T host_copy = other;
+		if( inner->size != 1 ){
+			resize(1);
+		}
+		auto_throw( cudaMemcpy(
+			inner->adr,
+			&host_copy,
+			sizeof(T),
+			cudaMemcpyHostToDevice
+		) );
+	}
+
+
+
+	DevBuf<T> (T* adr, size_t size)
+		: inner(new Inner(adr,size))
+	{}
+
+	DevBuf<T> ()
+		: DevBuf<T>((T*)NULL,(size_t)0)
+	{}
+
+	DevBuf<T> (size_t size)
+		: DevBuf<T> (hardMalloc<T>(size),size)
+	{}
+	
+	DevBuf<T> (T& value)
+		: DevBuf<T>()
+	{
+		(*this) << value;
+	}
+
+	DevBuf<T> (T&& value)
+		: DevBuf<T>()
+	{
+		(*this) << value;
+	}
+
+	
+	template<typename... ARGS>
+	static DevBuf<T> make(ARGS... args)
+	{
+		return DevBuf<T>( T(args...) );
+	}
+	
+
 };
+
+
 
 
 template<typename T>
-struct DevVec
-{
+class DevObj {
 
-	std::shared_ptr<_DevVec_Inner<T>> _inner;
+	protected:
 
-	__host__ DevVec<T>(size_t s) {
-		_inner = std::make_shared<_DevVec_Inner<T>>(s);
+	struct Inner {
+
+		T *adr;
+		T host_copy;
+
+
+		void push_data(){
+			printf("Pushing data into %p\n",adr);
+			auto_throw( cudaMemcpy(
+				adr,
+				&host_copy,
+				sizeof(T),
+				cudaMemcpyHostToDevice
+			) );
+		}
+
+		void pull_data(){
+			printf("Pulling data from %p\n",adr);
+			auto_throw( cudaMemcpy(
+				&host_copy,
+				adr,
+				sizeof(T),
+				cudaMemcpyDefault
+			) );
+		}
+		
+		template<typename... ARGS>
+		Inner(T *adr_val, ARGS... args)
+			: adr (adr_val)
+			, host_copy(args...)
+		{
+			host_copy.host_init();
+			push_data();
+		}
+
+		~Inner() {
+			if ( adr != NULL) {
+				printf("Doing a free\n");
+				pull_data();
+				host_copy.host_free();
+				cudaFree(adr);
+			}
+		}
+
+	};
+
+	std::shared_ptr<Inner> inner;
+
+	public:
+
+
+	void push_data(){
+		inner->push_data();
 	}
 
-
-	__host__ void resize(size_t s) {
-		_inner->resize(s);
+	void pull_data(){
+		inner->pull_data();
 	}
 
-	__host__ void operator<<(std::vector<T> &other) {
-		(*_inner)<<other;
-	}
+	operator T*() { return inner->adr; }
 
-	__host__ void operator>>(std::vector<T> &other) {
-		(*_inner)>>other;
-	}
 
-	__host__ operator T* () const {
-		return _inner->adr;
-	}
-
+	template<typename... ARGS>
+	DevObj<T>(ARGS... args)
+		: inner(new Inner(hardMalloc<T>(1),args...))
+	{}
+	
 };
+
+
+
 
 
 /*
@@ -212,19 +450,18 @@ struct DevVec
 
 
 template<typename ITER_TYPE>
-struct BasicIter
+struct Iter
 {
-
 
 	typedef ITER_TYPE IterType;
 
 	IterType value;
 	IterType limit;
-	IterType width;
+	IterType tempo;
 
 
-	__device__ BasicIter<ITER_TYPE> (IterType v, IterType l, IterType w)
-	: value(v), limit(l), width(w) {}
+	__host__ __device__ Iter<ITER_TYPE> (IterType v, IterType l, IterType w)
+	: value(v), limit(l), tempo(w) {}
 
 
 	 __device__ bool step(IterType& iter_val){
@@ -234,38 +471,35 @@ struct BasicIter
 		}
 
 		iter_val = value;
-		value += width;
-		return true;
+		value   += tempo;
 
+		return true;
 	}
+
+	__device__ bool done() const {
+		return (value >= limit);
+	}
+
 
 };
 
 
 
 template<typename ITER_TYPE>
-struct GroupWorkIter
+struct WarpIter
 {
 
 
 	typedef ITER_TYPE IterType;
 
-	IterType start;
+	IterType value;
 	IterType limit;
-	IterType chunk;
-	IterType chunk_limit;
 
 	 __device__ void reset(IterType start_val, IterType limit_val) {
 		__syncwarp();
 		if( current_leader() ){
-			start = start_val;
+			value = start_val;
 			limit = limit_val;
-			chunk = 0;
-			IterType iter_width = limit_val - start_val;
-			chunk_limit = iter_width / blockDim.x;
-			if( (iter_width % blockDim.x) != 0 ){
-				chunk_limit += 1;
-			}
 		}
 		__syncwarp();
 	}
@@ -273,14 +507,14 @@ struct GroupWorkIter
 
 	 __device__ bool step(IterType& iter_val) {
 		
-		if( chunk <= chunk_limit ){
-			IterType val = start + chunk*blockDim.x + threadIdx.x;	
+		if( value < limit ){
+			IterType val = value + threadIdx.x;	
 			if ( val < limit ){
 				iter_val = val;
 			}
 			__syncwarp();
 			if( current_leader() ){
-				chunk += 1;
+				val += blockDim.x;
 			}
 			__syncwarp();
 			return val < limit;
@@ -290,26 +524,17 @@ struct GroupWorkIter
 	}
 
 
-	template<size_t MULTIPLIER>
-	 __device__ BasicIter<IterType> multi_step() {
+	 __device__ Iter<IterType> leap(IterType length) {
 	
-		BasicIter<IterType> result(0,0,blockDim.x);
-		if( chunk <= chunk_limit ){
-			IterType start_val = start + chunk*blockDim.x + threadIdx.x;	
-			IterType limit_val = start_val + MULTIPLIER*blockDim.x;
-			if ( start_val < limit ){
-				result.value = start_val;
-			} else {
-				result.value = limit;
-			}
-			if ( limit_val < limit ){
-				result.limit = limit_val;
-			} else {
-				result.limit = limit;
-			}
+		Iter<IterType> result(0,0,blockDim.x);
+		if( value < limit ){
+			IterType start_val = value + threadIdx.x;	
+			IterType limit_val = start_val + blockDim.x * length;
+			result.value = (start_val < limit) ? start_val : limit;
+			result.limit = (limit_val < limit) ? limit_val : limit;
 			__syncwarp();
 			if( current_leader() ){
-				chunk += MULTIPLIER;
+				value += blockDim.x * length;
 			}
 			__syncwarp();
 		}
@@ -318,41 +543,453 @@ struct GroupWorkIter
 	}
 
 
-	 __device__ bool done() {
+	 __device__ bool done() const {
 		
-		return ( chunk > chunk_limit );
+		return ( value >= limit );
 		
 	}
-
 
 };
 
 
 
-struct GlobalTurnstile
+
+template<typename ITER_TYPE>
+struct AtomicIter
 {
 
-	unsigned long long int counter;
+	typedef ITER_TYPE IterType;
 
-	__host__ static void reset(GlobalTurnstile* turnstile) {
+	IterType value;
+	IterType limit;
+
+	 __device__ void reset(IterType start_val, IterType limit_val) {
+		value = start_val;
+		limit = limit_val;
+	}
+
+
+	 __device__ WarpIter<IterType> warp_leap(IterType leap_size) {
+	
+		WarpIter<IterType> result;
+		result.value = limit;
+		result.limit = limit;
+	
+		if( value <= limit ){
+			IterType start_val = atomicAdd(&value,leap_size);	
+			IterType limit_val = start_val + leap_size;
+			result.value = (start_val < limit) ? start_val : limit;
+			result.limit = (limit_val < limit) ? limit_val : limit;
+		}
+		return result;
+		
+	}
+
+	 __device__ Iter<IterType> leap(IterType leap_size) {
+	
+		Iter<IterType> result(0,0,0);
+
+		__shared__ IterType start_val;
+		__shared__ IterType limit_val;
+
+		if( current_leader() ){
+			start_val = 0;
+			limit_val = 0;
+			if( value < limit ){
+				start_val = atomicAdd(&value,leap_size*blockDim.x);
+				limit_val = start_val + leap_size*blockDim.x;
+				start_val = (start_val < limit) ? start_val : limit;
+				limit_val = (limit_val < limit) ? limit_val : limit;
+			}
+		}
+		__syncwarp();
+
+		result.value = start_val + threadIdx.x;
+		result.limit = limit_val;
+		result.tempo = blockDim.x;
+
+		return result;
 		
 	}
 
 
-	 __device__ bool cross() {
+	 __device__ bool step(IterType& iter_val) {
 	
-		unsigned long long int checkout_index = atomicAdd(&counter,1);
-
-		if(checkout_index == (gridDim.x-1)){
-			atomicExch(&counter,0); 
-			return true;
-		} else {
+		if( value >= limit ){
 			return false;
 		}
+
+		IterType try_val = atomicAdd(&value,1);
 		
+		if( try_val >= limit ){
+			return false;
+		}
+
+		iter_val = try_val;
+
+		return true;
+		
+	}
+
+
+	 __device__ bool done() const {
+		
+		return ( value >= limit );
+		
+	}
+
+
+	__host__ __device__ AtomicIter<IterType> () {}
+
+	__host__ __device__ AtomicIter<IterType> ( IterType start_val, IterType limit_val )
+		: value(start_val)
+		, limit(limit_val)
+	{}
+
+};
+
+
+
+
+
+template<typename ITER_TYPE>
+__device__ Iter<ITER_TYPE> tiered_leap (
+	AtomicIter<ITER_TYPE> &glb, ITER_TYPE global_leap,
+	WarpIter  <ITER_TYPE> &wrp, ITER_TYPE warp_leap
+) {
+
+	if( ! wrp.done() ){
+		return wrp.leap(warp_leap);
+	}
+
+	if( !glb.done() ){
+		if( current_leader() ){
+			wrp = glb.warp_leap(global_leap);
+		}
+		__syncwarp();
+		return wrp.leap(warp_leap);
+	}
+
+	return Iter<ITER_TYPE>(0,0,0);
+
+}
+
+
+template<typename T,typename ITER_TYPE = unsigned int>
+struct ArrayIter {
+
+	typedef ITER_TYPE IterType;
+
+	T* array;
+	Iter<IterType> iter;
+
+	__device__ bool step_val(T  &val){
+		IterType index;
+		if( iter.step(index) ){
+			val = array[index];
+			return true;
+		}
+		return false;
+	}
+
+
+	__device__ bool step_idx_val(IterType& idx, T  &val){
+		IterType index;
+		if( iter.step(index) ){
+			idx = index;
+			val = array[index];
+			return true;
+		}
+		return false;
+	}
+
+
+	__device__ bool step_ptr(T *&val){
+		IterType index;
+		if( iter.step(index) ){
+			val = &(array[index]);
+			return true;
+		}
+		return false;
+	}
+	
+	__device__ bool step_idx_ptr(IterType& idx, T *&val){
+		IterType index;
+		if( iter.step(index) ){
+			idx = index;
+			val = &(array[index]);
+			return true;
+		}
+		return false;
+	}
+
+	__device__ ArrayIter<T,IterType> (T* adr, Iter<IterType> itr)
+		: array(adr)
+		, iter (itr)
+	{}
+	
+};
+
+
+template<typename T, typename ITER_TYPE = unsigned int>
+struct IOBuffer
+{
+
+	typedef ITER_TYPE IterType;
+
+	bool  toggle; //True means A is in and B is out. False indicates vice-versa.
+	T    *data_a;
+	T    *data_b;
+
+	IterType capacity;
+
+	AtomicIter<IterType> input_iter;
+	AtomicIter<IterType> output_iter;
+
+
+	__device__  IOBuffer<T,IterType>()
+		: capacity(0)
+		, toggle(false)
+		, input_iter (0,0)
+		, output_iter(0,0)
+		, data_a(NULL)
+		, data_b(NULL)
+	{}
+
+	__device__  IOBuffer<T,IterType>(IterType cap,T* a, T* b)
+		: capacity(cap)
+		, toggle(false)
+		, input_iter (0,0  )
+		, output_iter(0,cap)
+		, data_a(a)
+		, data_b(b)
+	{}
+
+	__host__  IOBuffer<T,IterType>(IterType cap)
+		: capacity(cap)
+		, toggle(false)
+		, input_iter (0,0  )
+		, output_iter(0,cap)
+	{}
+ 
+	__host__ void host_init()
+	{
+		data_a = hardMalloc<T>( capacity );
+		data_b = hardMalloc<T>( capacity );
+	}
+
+	__host__ void host_free()
+	{
+		auto_throw( cudaFree( data_a ) );
+		auto_throw( cudaFree( data_b ) );
+	}
+
+
+	__device__ T* input_ptr(){
+		return toggle ? data_b : data_a;
+	}
+
+	__device__ T* output_ptr(){
+		return toggle ? data_a : data_b;
+	}
+
+	__device__ ArrayIter<T,IterType> pull_span(IterType pull_size)
+	{
+		Iter<IterType> pull_iter = input_iter.leap(pull_size);
+		return ArrayIter<T,IterType>(input_ptr(),pull_iter);
+	}
+
+	__device__ ArrayIter<T,IterType> push_span(IterType push_size)
+	{
+		Iter<IterType> push_iter = output_iter.leap(push_size);
+		return ArrayIter<T,IterType>(output_ptr(),push_iter);
+	}
+
+
+	__device__ bool pull(T& value){
+		IterType index;
+		if( ! input_iter.step(index) ){
+			return false;
+		}
+		value = input_ptr()[index];
+		return true;
+	}
+
+	__device__ bool pull_idx(IterType& value){
+		return input_iter.step(index);
+	}
+
+	__device__ bool push(T value){
+		IterType index;
+		if( ! input_iter.step(index) ){
+			return false;
+		}
+		input_ptr()[index] = value;
+		return true;
+	}
+
+
+	__device__ void flip()
+	{
+		toggle = !toggle;	
+		input_iter  = AtomicIter<IterType>(0,output_iter.value);
+		output_iter = AtomicIter<IterType>(0,capacity);
+	}
+
+	__device__ bool input_empty()
+	{
+		return input_iter.done();
+	}
+	
+	__device__ bool output_full()
+	{
+		return output_iter.done();
 	}
 
 };
+
+
+
+template<typename T, typename INDEX>
+struct MemPool {
+
+	typedef INDEX Index;
+
+	static const Index null = 0;
+
+	T*     arena;
+	Index  arena_size;
+
+	Index* pool;
+	Index  pool_size;
+
+
+	__host__ void host_init()
+	{
+		arena  = hardMalloc<T>    ( arena_size );
+		pool   = hardMalloc<Index>( pool_size  );
+	}
+
+	__host__ void host_free()
+	{
+		auto_throw( cudaFree( arena ) );
+		auto_throw( cudaFree( pool  ) );
+	}
+
+
+	
+
+	__device__ Index pull( Index count, unsigned int& rand_state ){
+		
+	}
+
+	__device__ void  push( Index count, unsigned int& rand_state ){
+
+	}
+
+	__device__ T& operator[] (Index index){
+		return arena[index];
+	}
+
+	__device__ Index& next(Index index){
+		return *((Index*)&(arena[index]));
+	}
+
+
+};
+
+
+
+template<typename T, typename INDEX>
+__global__ void mempool_init(MemPool<T,INDEX>& mempool){
+
+	typedef MemPool<T,INDEX> PoolType;
+	typedef INDEX Index;
+
+	int limit = mempool.arena_size - 1;
+	for(Index i=0; i<limit; i++){
+		mempool.next(i) = i+1;
+	}
+
+	Index span = mempool.arena_size / mempool.pool_size;
+	for(Index i=0; i<mempool.pool_size; i++){
+		mempool.pool [i] = i*span;
+		if( i != 0 ){
+			mempool.next(i*span-1) = PoolType::null;
+		}
+	}
+
+}
+
+
+
+
+// Experimental population control mechanism
+#if 0
+template<typename T, typename ID>
+struct TitanicValue {
+
+	PairPack<ID>
+
+};
+
+
+
+
+template<typename T, typename ITER_TYPE = unsigned int, typename HASH_TYPE = unsigned long long int>
+struct TitanicIOBuffer {
+
+	typedef ITER_TYPE IterType;
+	typedef HASH_TYPE HashType;
+
+	bool  mode;
+
+	struct TitanicLink {
+		IterType next;
+		HashType hash;
+		T        data;
+	};
+
+	IterType capacity;
+	IterType overflow;
+
+	AtomicIter<IterType> pull_exit_iter;
+
+
+	__device__ ArrayIter<T,IterType> pull_span(IterType pull_size){
+		Iter<IterType> pull_iter(0,0,0);
+		if( mode ){
+			pull_iter = iter.leap(pull_size);
+		}
+		return ArrayIter<T,IterType>(data,pull_iter);
+	}
+
+	__device__ ArrayIter<T,IterType> push(T value, unsigned int index, unsigned int priority){
+		Iter<IterType> push_iter(0,0,0);
+		if( !mode ){
+			push_iter = iter.leap(push_size);
+		}
+		return ArrayIter<T,IterType>(data,push_iter);
+	}
+
+	__device__ void flip(){
+		mode = !mode;	
+		if(mode){
+			iter = AtomicIter<IterType>(0,iter.value);
+		} else {
+			iter = AtomicIter<IterType>(0,0);
+		}
+	}
+
+	__device__ bool empty() {
+		return iter.done();
+	}
+	
+};
+#endif
+
+
+
 
 
 
@@ -542,6 +1179,10 @@ struct ArgSet
 
 		ArgVal(T val) : value(val)  {}
 		
+		ArgVal<T> operator| (T other) {
+			return *this;
+		}
+
 		operator T() const {
 			return value;
 		}
@@ -610,6 +1251,14 @@ struct ArgSet
 				T value;
 				scan_or_fail(value);
 				return ArgVal<T>(value);
+			}
+		}
+
+		ArgQuery operator| (ArgQuery other) {
+			if(value_str == NULL){
+				return other;
+			} else {
+				return *this;
 			}
 		}
 

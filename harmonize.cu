@@ -651,13 +651,15 @@ struct HarmonizeProgram<
 	struct Instance {
 
 		size_t arena_size;
-		util::DevObj<LinkType>  arena;
-		util::DevObj<PoolType>  pool;
-		util::DevObj<StackType> stack;
+		util::DevBuf<LinkType>  arena;
+		util::DevBuf<PoolType>  pool;
+		util::DevBuf<StackType> stack;
 		GlobalState global_state;		
 
 		__host__ Instance (size_t arsize, GlobalState gs)
 			: arena(arsize)
+			, pool (1)
+			, stack(1)
 			, arena_size(arsize)
 			, global_state(gs)
 		{ }
@@ -666,9 +668,9 @@ struct HarmonizeProgram<
 
 			GlobalContext result;
 			result.arena.size   = arena_size;
-			result.arena.links  = arena.adr;
-			result.pool         = pool .adr;
-			result.stack        = stack.adr;
+			result.arena.links  = arena;
+			result.pool         = pool ;
+			result.stack        = stack;
 			result.global_state = global_state;
 
 			return result;
