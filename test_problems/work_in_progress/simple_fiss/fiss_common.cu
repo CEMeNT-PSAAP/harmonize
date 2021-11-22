@@ -4,11 +4,15 @@
 
 
 //#define IOBUFF
+#define FILO
+
+
+using namespace util;
+
 
 struct Neutron;
 
 __device__ void random_3D_iso_mom(Neutron& n);
-__device__ unsigned int random_uint(unsigned int& rand_state);
 
 struct Neutron {
 
@@ -21,6 +25,13 @@ struct Neutron {
 	float time;
 	unsigned int seed;
 
+	#ifdef HARMONIZE
+	#ifdef FILO
+	unsigned int next;
+	#endif
+	unsigned int checkout;
+	#endif
+
 	Neutron() = default;
 	
 	__device__ Neutron(unsigned int s, float t, float x, float y, float z)
@@ -29,6 +40,11 @@ struct Neutron {
 		, p_x(x)
 		, p_y(y)
 		, p_z(z)
+		#ifdef HARMONIZE
+		#ifdef FILO
+		, next(Adr<unsigned int>::null)
+		#endif
+		#endif
 	{
 		random_3D_iso_mom(*this);
 	}
@@ -40,7 +56,20 @@ struct Neutron {
 		, p_x(parent.p_x)
 		, p_y(parent.p_y)
 		, p_z(parent.p_z)
+		#ifdef HARMONIZE
+		#ifdef FILO
+		, next(Adr<unsigned int>::null)
+		#endif
+		#endif
 	{
+		seed ^= __float_as_uint(time);
+		random_uint(seed);
+		seed ^= __float_as_uint(p_x);
+		random_uint(seed);
+		seed ^= __float_as_uint(p_y);
+		random_uint(seed);
+		seed ^= __float_as_uint(p_z);
+		random_uint(seed);
 		random_3D_iso_mom(*this);
 	}
 
@@ -52,10 +81,12 @@ struct SimParams {
 	int	horizon;
 
 	int	source_count;
-	util::AtomicIter<unsigned int>* source_id_iter;
+	util::AtomicIter<unsigned int> *source_id_iter;
+
+	util::MemPool<Neutron,unsigned int> *neutron_pool;
 
 	#ifdef IOBUFF
-	util::IOBuffer<Neutron>* neutron_io;
+	util::IOBuffer<unsigned int> *neutron_io;
 	#else
 	Neutron* neutron_buffer;
 	#endif
@@ -78,14 +109,6 @@ struct SimParams {
 };
 
 
-
-
-__device__ unsigned int random_uint(unsigned int& rand_state){
-
-	rand_state = (1103515245u * rand_state + 12345u) % 0x80000000;
-	return rand_state;
-
-}
 
 
 
@@ -194,16 +217,20 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 
 	// Sample the event that occurs
 	float samp = random_unorm(n.seed);
+
 	
 	if ( halt ){
 		atomicAdd(&params.halted[index],1);
 		return -1;
-	}else if( samp <= (params.scatter_x/params.combine_x) ){
+	} else if( samp <= (params.scatter_x/params.combine_x) ){
 		random_3D_iso_mom(n);
 		return 0;
-	} 
-	else {
+	} else if ( samp <= ((params.scatter_x + params.capture_x) / params.combine_x) ) {
+		return -1;
+	} else if ( samp <= ((params.scatter_x + params.capture_x + params.fission_x) / params.combine_x) ) {
 		return params.fiss_mult;
+	} else {
+		return -1;
 	}
 
 }
@@ -220,9 +247,13 @@ struct CommonContext{
 
 	util::DevBuf<util::AtomicIter<unsigned int>> source_id_iter;
 	util::DevBuf<unsigned long long int> halted;
+
+
+	util::DevObj<util::MemPool<Neutron,unsigned int>> neutron_pool;
+
 	
 	#ifdef IOBUFF
-	util::DevObj<util::IOBuffer<Neutron>> neutron_io;
+	util::DevObj<util::IOBuffer<unsigned int>> neutron_io;
 	#else
 	util::DevBuf<Neutron> neutron_buffer;
 	#endif
@@ -235,6 +266,7 @@ struct CommonContext{
 		#else
 		: neutron_buffer( args["num"] | 1000u )
 		#endif
+		, neutron_pool(655360,8191)
 	{
 
 
@@ -268,10 +300,14 @@ struct CommonContext{
 		params.halted = halted;
 		cudaMemset( halted, 0, sizeof(unsigned long long int) * elem_count );
 
+		
+		//cudaMemset( neutron_pool->arena, 0, sizeof(Neutron) * neutron_pool->arena_size.adr );
+
 
 		source_id_iter<< util::AtomicIter<unsigned int>(0,args["num"]);
 		params.source_id_iter = source_id_iter;
 
+		params.neutron_pool = neutron_pool;
 		
 		#ifdef IOBUFF
 		params.neutron_io = neutron_io;
@@ -292,6 +328,7 @@ struct CommonContext{
 
 		unsigned long long int* result_raw;
 		float* result;
+		float y_min, y_max;
 
 		if( show || csv ){
 
@@ -310,6 +347,12 @@ struct CommonContext{
 				float value = ((float)result_raw[i])/ (((float)params.div_width)*((float)params.source_count));
 				sum += value * params.div_width;
 				result[i] = value;
+				if( i == 0 ){
+					y_min = value;
+					y_max = value;
+				}
+				y_min = (value < y_min) ? value : y_min;
+				y_max = (value > y_max) ? value : y_max;
 			}
 
 			printf("\n\nSUM IS: %f\n\n",sum);
@@ -336,7 +379,16 @@ struct CommonContext{
 
 		if( show ){
 
-			util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
+			util::GraphShape shape;
+			shape.y_min  = y_min;
+			shape.y_max  = y_max;
+			shape.x_min  = -params.pos_limit;
+			shape.x_max  =  params.pos_limit;
+			shape.width  = 100;
+			shape.height = 20;
+
+			//util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
+			util::cli_graph(result,elem_count,shape,util::Block2x2Fill);
 
 		}
 

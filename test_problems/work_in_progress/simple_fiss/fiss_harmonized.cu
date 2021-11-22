@@ -8,7 +8,7 @@
 using namespace util;
 
 
-
+#define DYN
 
 typedef ProgramStateDef<SimParams,VoidState,VoidState> ProgState;
 
@@ -22,31 +22,88 @@ typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
 
-	Neutron n;
-	n = global.neutron_buffer[arg];
-
-	#ifndef PRE_INIT
-	if ( n.time <= 0 ){
-		n.p_x = 0;
-		n.p_y = 0;
-		n.p_z = 0;
-		n.time = 0.0;
-		random_3D_iso_mom(n);
+	if( arg == Adr<unsigned int>::null ){
+		printf("{   Bad argument!   }");
+		return;
 	}
+
+
+	Neutron n;
+
+	#ifdef DYN
+	n = (*global.neutron_pool)[arg];
+	#else
+	n =  global.neutron_buffer[arg];
 	#endif
 
-
-	int result;
+	int result = 0;
 	for(int i=0; i < global.horizon; i++){
 		result = step_neutron(global,n);
 		if( result != 0 ){
-			return;
+			break;
 		}
 	}
 
-	#ifdef IOBUFF
-	global.neutron_io.input_ptr()[arg] = n;
-	ASYNC_CALL(Fn::Neutron,arg);		
+	#ifdef DYN
+
+	#ifdef FILO
+	unsigned int last = n.next;
+	#endif
+
+	for(int i=0; i<result; i++){
+		Neutron new_neutron(n);
+
+		#ifdef FILO
+		new_neutron.next = last;
+		#endif
+
+		unsigned int index = global.neutron_pool->alloc(_thread_context.rand_state);
+		if( index != Adr<unsigned int>::null ){
+			unsigned int old = atomicCAS(&(*global.neutron_pool)[index].checkout,0u,1u);
+			if( old != 0 ){
+				printf("\n{Bad fiss alloc %d at %d}\n",old,index);
+			}
+
+			#ifdef FILO
+			last = index;
+			#endif
+
+			(*global.neutron_pool)[index] = new_neutron;
+
+			#ifdef FILO
+			if( i == (result-1) ){
+				ASYNC_CALL(Fn::Neutron,index);
+			}
+			#else
+			ASYNC_CALL(Fn::Neutron,index);
+			#endif
+		} else {
+			printf("{Fiss alloc fail}");
+		}
+
+
+	}
+
+
+
+	if( result == 0 ) {
+		(*global.neutron_pool)[arg] = n;
+		ASYNC_CALL(Fn::Neutron,arg);		
+	}
+	else {
+
+		#ifdef FILO
+		if( (result < 0) && (n.next != Adr<unsigned int>::null) ){
+			ASYNC_CALL(Fn::Neutron,n.next);
+		}
+		#endif
+		unsigned int old = atomicCAS(&(*global.neutron_pool)[arg].checkout,1u,0u);
+		if( old != 1 ){
+			printf("{Bad dealloc %d at %d}",old,arg);
+		}
+		global.neutron_pool->free(arg,_thread_context.rand_state);
+	}
+
 	#else
 	global.neutron_buffer[arg] = n;
 	ASYNC_CALL(Fn::Neutron,arg);		
@@ -70,27 +127,37 @@ DEF_FINALIZE(ProgType) {
 DEF_MAKE_WORK(ProgType) {
 
 
-	unsigned int index;
+	unsigned int id;
 
-	Iter<unsigned int> iter = global.source_id_iter->leap(14u);
+	Iter<unsigned int> iter = global.source_id_iter->leap(8u);//(14u);
 
-	while(iter.step(index)){
-		Neutron n;
-		n.seed   = index;
+	while(iter.step(id)){
+		Neutron n(id,0.0,0.0,0.0,0.0);
 
-		#ifdef PRE_INIT
-		n.p_x = 0.0;
-		n.p_y = 0.0;
-		n.p_z = 0.0;
-		random_3D_iso_mom(n);
-		n.time = 0.0;
-		#else
-		n.time   = -1.0;
-		#endif //PRE_INIT
+		#ifdef FILO
+		n.next = Adr<unsigned int>::null;
+		#endif
 
-		global.neutron_buffer[index] = n;
+		#ifdef DYN
+		unsigned int index = global.neutron_pool->alloc(_thread_context.rand_state);
+		while(index == Adr<unsigned int>::null){
+			printf("FAIL");
+			index = global.neutron_pool->alloc(_thread_context.rand_state);
+		}
 		
-		ASYNC_CALL(Fn::Neutron,index);
+		if( (index != Adr<unsigned int>::null) ) { //&& (index != 0) ){
+			(*global.neutron_pool)[index] = n;
+			ASYNC_CALL(Fn::Neutron,index);
+			unsigned int old = atomicCAS(&(*global.neutron_pool)[index].checkout,0u,1u);
+			if( old != 0 ){
+				printf("\n{Bad alloc %d at %d}\n",old,index);
+			}
+		}
+		#else
+		global.neutron_buffer [id] = n;
+		ASYNC_CALL(Fn::Neutron,id);
+		#endif
+		
 	}
 
 	return !global.source_id_iter->done();
@@ -115,14 +182,17 @@ int main(int argc, char *argv[]){
 	ProgType::Instance instance = ProgType::Instance(0xFFFFF,com.params);
 	cudaDeviceSynchronize();
 	check_error();
-	
+
 	init<ProgType>(instance,wg_count);
 	cudaDeviceSynchronize();
 	check_error();
 
+	printf("Did init\n");
 	exec<ProgType>(instance,wg_count,0xFFFFF);
 	cudaDeviceSynchronize();
 	check_error();
+	printf("Ran program\n");
+
 	
 	return 0;
 

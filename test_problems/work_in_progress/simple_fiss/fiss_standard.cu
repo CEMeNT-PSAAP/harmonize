@@ -9,6 +9,9 @@ using namespace util;
 
 __global__ void sim_pass(SimParams params){
 
+	#ifdef IOBUFF
+	unsigned int rand_state = blockDim.x * blockIdx.x + threadIdx.x;
+	#endif
 
 	while( ! params.source_id_iter->done() ) {
 
@@ -30,8 +33,10 @@ __global__ void sim_pass(SimParams params){
 
 			#ifdef IOBUFF
 			for(int i=0; i<result; i++){
-				Neutron new_neu(n);
-				param.neutron_io.push(new_neu);
+				Neutron new_neutron(n);
+				unsigned int index = params.neutron_pool->alloc(rand_state);
+				(*params.neutron_pool)[index] = new_neutron;
+				params.neutron_io->push(index);
 			}
 			#endif
 		

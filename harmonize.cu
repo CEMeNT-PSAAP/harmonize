@@ -2,6 +2,8 @@
 
 
 
+#define HARMONIZE
+
 //#define DEBUG_PRINT
 //#define RACE_COND_PRINT
 //#define QUEUE_PRINT
@@ -31,7 +33,7 @@
 
 
 
-#include "util.cu"
+#include "util/util.cu"
 
 
 enum class Fn;
@@ -232,102 +234,6 @@ union PromiseUnion<HEAD, TAIL...>
 
 
 
-template <typename ADR_INNER_TYPE>
-struct WorkLinkAdr
-{
-
-	typedef ADR_INNER_TYPE AdrType;
-
-	static const AdrType null = std::numeric_limits<AdrType>::max();
-
-	AdrType adr;
-
-
-	WorkLinkAdr<AdrType>() = default;
-
-	 __device__ WorkLinkAdr<AdrType>(AdrType adr_val) : adr(adr_val) {}
-
-	 __device__ bool operator==(const WorkLinkAdr<AdrType>& link_adr){
-		return (adr == link_adr.adr);
-	}
-
-
-	 __device__ bool is_null(){
-		return (adr == null);
-	}
-
-
-};
-
-
-
-template <typename ADR_TYPE>
-struct WorkQueue;
-
-
-template <typename ADR_TYPE>
-struct WorkQueue <WorkLinkAdr<ADR_TYPE>>
-{
-
-	typedef ADR_TYPE AdrType;
-	typedef WorkLinkAdr<AdrType> LinkAdrType;
-	typedef WorkQueue<LinkAdrType> Self;
-
-	typedef typename util::PairEquivalent<AdrType>::Type QueueType;
-	util::PairPack<AdrType> pair;
-
-	static const QueueType null = std::numeric_limits<QueueType>::max();
-
-	 __device__ LinkAdrType get_head(){
-		return pair.get_left();
-	}
-
-	/*
-	// This function extracts the tail of the given queue
-	*/
-	 __device__ LinkAdrType get_tail(){
-		return pair.get_right();
-	}
-
-	/*
-	// Enable default constructor
-	*/
-	WorkQueue<WorkLinkAdr<ADR_TYPE>>() = default;
-
-	/*
-	// This function concatenates two link addresses into a queue
-	*/
-	 __device__ WorkQueue<WorkLinkAdr<ADR_TYPE>>
-	(LinkAdrType head, LinkAdrType tail)
-	{
-		pair = util::PairPack<AdrType>(head.adr,tail.adr);
-	}
-
-	/*
-	// This function sets the head of the queue to the given link address
-	*/
-	 __device__ void set_head(LinkAdrType head){
-		pair.set_left(head.adr);
-	}
-
-	/*
-	// This function sets the tail of the queue to the given link address
-	*/
-	 __device__ void set_tail(LinkAdrType tail){
-		pair.set_right(tail.adr);
-	}
-
-	/*
-	// Returns true if and only if queue is empty
-	*/
-	 __device__ bool is_null(){
-		return (pair.data == Self::null);
-	}
-
-
-};
-
-
 
 
 template <typename PROMISE_UNION, typename ADR_TYPE, size_t GROUP_SIZE>
@@ -486,6 +392,8 @@ template<
 >
 struct HarmonizeProgram;
 
+
+
 template<
 	Fn... FN_IDS,
 	typename PROGRAM_STATE,
@@ -522,6 +430,7 @@ struct HarmonizeProgram<
 		> ProgramType;
 
 
+
 	/*
 	// During system verification/debugging, this will be used as a cutoff to prevent infinite
 	// looping
@@ -548,16 +457,16 @@ struct HarmonizeProgram<
 	typedef typename PROGRAM_STATE::ThreadState   ThreadState;
 
 
-	typedef PromiseUnion <FN_IDS...>  PromiseUnionType;
-	typedef WorkLinkAdr  <ADR_TYPE>                 LinkAdrType;
-	typedef WorkQueue    <LinkAdrType>              QueueType;
-	typedef WorkFrame    <QueueType,FRAME_SIZE>     FrameType;
-	typedef WorkStack    <FrameType,STACK_SIZE>     StackType;
-	typedef WorkPool     <QueueType,POOL_SIZE>      PoolType;
+	typedef PromiseUnion    <FN_IDS...>  PromiseUnionType;
+	typedef util::Adr       <ADR_TYPE>                 LinkAdrType;
+	typedef util::PoolQueue <LinkAdrType>              QueueType;
+	typedef WorkFrame       <QueueType,FRAME_SIZE>     FrameType;
+	typedef WorkStack       <FrameType,STACK_SIZE>     StackType;
+	typedef WorkPool        <QueueType,POOL_SIZE>      PoolType;
 
-	typedef WorkLink     <PromiseUnionType, LinkAdrType, WORK_GROUP_SIZE> LinkType;
+	typedef WorkLink        <PromiseUnionType, LinkAdrType, WORK_GROUP_SIZE> LinkType;
 	
-	typedef WorkArena    <LinkAdrType,LinkType>     ArenaType;
+	typedef WorkArena       <LinkAdrType,LinkType>     ArenaType;
 
 
 	/*
@@ -879,7 +788,7 @@ struct HarmonizeProgram<
 	// atomically. If not, one of the queues manipulated with this function will almost certainly
 	// become malformed at some point. Woe betide those that do not heed this dire message.
 	*/
-	 __device__ static LinkAdrType pop_front(_CTX_ARGS, QueueType queue){
+	 __device__ static LinkAdrType pop_front(_CTX_ARGS, QueueType& queue){
 
 		LinkAdrType result;
 		/*
@@ -894,7 +803,9 @@ struct HarmonizeProgram<
 			if(next.adr == LinkAdrType::null){
 				queue.set_tail(next);
 			} else if ( queue.get_tail() == result ){
-				q_printf("\n\nFinal link does not have a null next.\n\n");
+				q_printf("ERROR: Final link does not have a null next.\n");
+				queue.pair.data = QueueType::null;
+				return result;
 			}
 		}
 		return result;
@@ -1000,13 +911,13 @@ struct HarmonizeProgram<
 			// of which attempt from which call will suffer from an incurred failure.
 			*/
 			if( ! swap.is_null() ){
-				q_printf("Ugh. We got queue (%d,%d) when trying to push a queue\n",get_head(swap),get_tail(swap));
+				q_printf("Ugh. We got queue (%d,%d) when trying to push a queue\n",swap.get_head().adr,swap.get_tail().adr);
 				QueueType other_swap;
 				other_swap.pair.data = atomicExch(&dest.pair.data,QueueType::null); 
 				queue = join_queues(_CTX_REFS,other_swap,swap);
-				q_printf("Merged it to form queue (%d,%d)\n",get_head(queue),get_tail(queue));
+				q_printf("Merged it to form queue (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
 			} else {
-				q_printf("Finally pushed (%d,%d)\n",get_head(queue),get_tail(queue));
+				q_printf("Finally pushed (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
 				break;
 			}
 		}
@@ -1137,7 +1048,7 @@ struct HarmonizeProgram<
 				unsigned int src_index = LinkAdrType::null;
 				unsigned int start = util::random_uint(thd.rand_state)%POOL_SIZE;
 				QueueType queue = pull_queue(glb.pool->queues,start,POOL_SIZE,src_index);
-				q_printf("Pulled queue (%d,%d) from pool %d\n",get_head(queue),get_tail(queue),src_index);
+				q_printf("Pulled queue (%d,%d) from pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
 
 				/*
 				// Keep popping links from the queue until the full number of links have been added or
@@ -1147,14 +1058,14 @@ struct HarmonizeProgram<
 					LinkAdrType link = pop_front(_CTX_REFS,queue);
 					if( ! link.is_null() ){
 						insert_stash_link(_CTX_REFS,link);
-						q_printf("Inserted link %d into link stash\n",link);
+						q_printf("Inserted link %d into link stash\n",link.adr);
 					} else {
 						break;
 					}
 				}
 				__threadfence();
 				push_queue(_CTX_REFS,glb.pool->queues[src_index],queue);
-				q_printf("Pushed queue (%d,%d) to pool %d\n",get_head(queue),get_tail(queue),src_index);
+				q_printf("Pushed queue (%d,%d) to pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
 
 			}
 
@@ -1364,9 +1275,9 @@ struct HarmonizeProgram<
 		
 		QueueType queue = pull_queue(src.pool.queues,src_idx,FRAME_SIZE,source_index);
 		if( ! queue.is_null() ){
-			q_printf("SM %d: Pulled queue (%d,%d) from stack at index %d\n",bthdkIdx.x,get_tail(queue),get_head(queue), src_idx);
+			q_printf("SM %d: Pulled queue (%d,%d) from stack at index %d\n",blockIdx.x,queue.get_tail().adr,queue.get_head().adr, src_idx);
 		} else {
-			q_printf("SM %d: Failed to pull queue from stack starting at index %d\n",bthdkIdx.x, src_idx);
+			q_printf("SM %d: Failed to pull queue from stack starting at index %d\n",blockIdx.x, src_idx);
 		}
 		return queue;
 
@@ -1418,7 +1329,7 @@ struct HarmonizeProgram<
 		
 		//if(util::current_leader()){
 			LinkAdrType link_index = claim_stash_link(_CTX_REFS);
-			db_printf("Claimed link %d from stash\n",link_index);
+			q_printf("Claimed link %d from stash\n",link_index.adr);
 			LinkType& the_link = glb.arena[link_index];
 			//grp.SM_promise_delta += grp.stash[slot_index].count;
 			grp.stash[slot_index].next = LinkAdrType::null;
@@ -1482,6 +1393,7 @@ struct HarmonizeProgram<
 		
 		if(util::current_leader() && (grp.stash_count > threashold)){
 
+
 			unsigned int spill_count = grp.stash_count - threashold;
 			int delta = 0;
 			fill_stash_links(_CTX_REFS,spill_count);
@@ -1513,7 +1425,7 @@ struct HarmonizeProgram<
 				}
 				
 				delta += grp.stash[slot].count;
-				db_printf("Slot for production (%d) has %d promises\n",slot,grp.stash[slot].count);
+				q_printf("Slot for production (%d) has %d promises\n",slot,grp.stash[slot].count);
 				LinkAdrType link = produce_link(_CTX_REFS,slot);
 				push_back(_CTX_REFS,queue,link);
 				insert_empty_slot(_CTX_REFS,slot);
@@ -1524,9 +1436,9 @@ struct HarmonizeProgram<
 		
 			
 			unsigned int push_index = util::random_uint(thd.rand_state)%FRAME_SIZE;
-			rc_printf("Pushing promises for spilling\n");
+			q_printf("Pushing promises in (%d,%d) for spilling\n",queue.get_head().adr,queue.get_tail().adr);
 			push_promises(_CTX_REFS,0,push_index,queue,delta);
-			db_printf("Pushed queue (%d,%d) to stack\n",get_head(queue),get_tail(queue));
+			q_printf("Pushed queue (%d,%d) to stack\n",queue.get_head().adr,queue.get_tail().adr);
 			
 		
 		}
@@ -1622,16 +1534,17 @@ struct HarmonizeProgram<
 		// Make room to queue incoming promises, if there isn't enough room already.
 		*/
 		#if 0
-		if(grp.link_stash_count < 1){
-			fill_stash_links(_CTX_REFS,1);
+		if(grp.link_stash_count < 2){
+			fill_stash_links(_CTX_REFS,2);
 		}
 
-		if(grp.stash_count >= (STASH_SIZE-1)){
-			spill_stash(_CTX_REFS, STASH_SIZE-2);
+		if(grp.stash_count >= (STASH_SIZE-2)){
+			spill_stash(_CTX_REFS, STASH_SIZE-3);
 		}
 		#else
 		unsigned int depth = (unsigned int) (grp.level + depth_delta);
 		unsigned int left_jump = partial_map_index(func_id,depth,grp.level);
+		/*
 		unsigned int space = 0;
 		if( left_jump != PART_ENTRY_COUNT ){
 			unsigned int left_idx = grp.partial_map[left_jump];	
@@ -1639,11 +1552,12 @@ struct HarmonizeProgram<
 				space = WORK_GROUP_SIZE - grp.stash[left_idx].count;
 			}
 		}
-		if( (grp.stash_count >= (STASH_SIZE-1)) && (space < delta) ){
-			if(grp.link_stash_count < 1){
-				fill_stash_links(_CTX_REFS,1);
+		*/
+		if( (grp.stash_count >= (STASH_SIZE-2)) ) { //&& (space < delta) ){
+			if(grp.link_stash_count < 2){
+				fill_stash_links(_CTX_REFS,2);
 			}
-			spill_stash(_CTX_REFS, STASH_SIZE-2);
+			spill_stash(_CTX_REFS, STASH_SIZE-3);
 		}
 		#endif
 
@@ -1746,7 +1660,8 @@ struct HarmonizeProgram<
 
 
 		async_call_stash_prep(_CTX_REFS,func_id,depth_delta,delta,left,left_start,right);
-		
+	
+
 		/*
 		// Write the promise into the appropriate part of the stash, writing into the left link 
 		// when possible and spilling over into the right link when necessary.
@@ -1769,6 +1684,7 @@ struct HarmonizeProgram<
 	*/
 	template<Fn FUNC_ID>
 	 __device__ static void async_call_cast(_CTX_ARGS, int depth_delta, typename PromiseType<FUNC_ID>::ParamType param_value){
+
 
 		unsigned int active = __activemask();
 
@@ -1824,6 +1740,8 @@ struct HarmonizeProgram<
 		__syncwarp(active);
 		
 		if(util::current_leader()){
+		
+			q_printf("Consuming link %d\n",link_index.adr);
 
 			the_index = link_index;
 			add_count = glb.arena[link_index].count;
@@ -2011,8 +1929,9 @@ struct HarmonizeProgram<
 				     && (grp.link_stash_count < STASH_SIZE) 
 				){
 					LinkAdrType link = pop_front(_CTX_REFS,queue);					
+					q_printf("Popping front %d. Q is now (%d,%d)\n",link.adr,queue.get_head().adr,queue.get_tail().adr);
+					
 					if( ! link.is_null() ){
-						q_printf("Popping front %d\n",link);
 						taken += consume_link(_CTX_REFS,link);
 					} else {
 						break;
@@ -2232,7 +2151,7 @@ struct HarmonizeProgram<
 			// is being executed.
 			*/
 			if(util::current_leader()){
-				q_printf("Executing slot %d, which is %d promises of type %d\n",grp.exec_head,promise_count,func_id);
+				db_printf("Executing slot %d, which is %d promises of type %d\n",grp.exec_head,promise_count,func_id);
 			}
 			if( threadIdx.x < promise_count ){
 				//db_printf("Executing...\n");
@@ -2253,9 +2172,10 @@ struct HarmonizeProgram<
 
 		unsigned int active = __activemask();
 		__syncwarp(active);
-		if(util::current_leader()){
+		if(util::current_leader()){	
 			q_printf("CLEANING UP\n");
-			spill_stash(_CTX_REFS,0);
+			clear_exec_head(_CTX_REFS);
+			//spill_stash(_CTX_REFS,0);
 			spill_stash_links(_CTX_REFS,0);	
 			if(grp.busy){
 				atomicSub(&(glb.stack->depth_live),1);
@@ -2352,7 +2272,6 @@ struct HarmonizeProgram<
 				next = LinkAdrType::null;
 			}
 			arena[index].empty(LinkAdrType(next));
-
 		}
 
 
@@ -2481,8 +2400,6 @@ struct HarmonizeProgram<
 	*/
 	 __device__ static void exec(GlobalContext glb, unsigned int cycle_count){
 
-		
-
 		/* Initialize per-warp resources */
 		__shared__ GroupContext grp;
 		init_group(grp);
@@ -2518,13 +2435,198 @@ struct HarmonizeProgram<
 		// shared or private memory of the halting program.
 		*/
 		cleanup_runtime(_CTX_REFS);
-
 			
 		if(util::current_leader()){
 			rc_printf("SM %d finished after %d cycles with promise delta %d\n",bthdkIdx.x,cycle_break,grp.SM_promise_delta);
 		}
 
 	}
+
+	#if 0
+
+
+	__host__ bool queue_count(LinkType* host_arena, QueueType queue, LinkAdrType& result){
+
+		LinkAdrType head = (queue.data >> LINK_BITS) & LINK_MASK;
+		LinkAdrType tail = queue.data & LINK_MASK;
+		LinkAdrType last = NULL_LINK;
+		LinkAdrType count = 0;	
+		
+		if( head == NULL_LINK ){
+			if( tail == NULL_LINK ) {
+				result = 0;
+				return true;
+			} else {
+				printf("NULL head with a non-NULL tail\n");
+				return false;
+			}
+		} else if ( tail == NULL_LINK ){
+			printf("Non-NULL head with a NULL tail\n");
+			return false;
+		}
+
+		LinkAdrType iter = head;
+		while(iter != NULL_LINK){
+			if(host_arena[iter].meta_data.data != 0){
+				printf("Link re-visited\n");
+				LinkAdrType loop_point = iter;
+				LinkAdrType visit_count = 0;
+				iter = head;
+				printf("(%d,%d): ",head,tail);
+				LinkAdrType step_count = 0;
+				while(true){
+					if(iter == loop_point){
+						if(visit_count == 0){
+							printf("{%d}->",iter);
+						} else {
+							printf("{%d}\n");
+							break;
+						}
+						visit_count += 1;
+					} else {
+						printf("%d->",iter);
+					}
+					iter = host_arena[iter].next;
+					step_count +=1;
+					if(step_count > 64){
+						printf("...{%d}\n",loop_point);
+						break;
+					}
+				}
+				return false;
+			} else {
+				host_arena[iter].meta_data.data = 1;
+			}
+			last = iter;
+			iter = host_arena[iter].next;
+			count += 1;
+		}
+		
+		if( last != tail ){
+			printf("Final link %d in the queue (%d,%d) not the tail\n",last,head,tail);
+			return false;
+		}
+
+		result = count;
+		return true;
+
+	}
+
+
+
+
+
+
+	/*
+	// Counts the number of links in each queue in the pool and in the stack, storing the counts in
+	// the provided arrays. This funciton returns true if counting was successful and returns false
+	// if an invalid state is detected.
+	*/
+	bool runtime_overview(runtime_context runtime){
+
+		bool result = true;
+		
+		#ifdef DEBUG_PRINT
+		const bool always_print = true;
+		#else
+		const bool always_print = true;
+		#endif
+
+		LinkAdrType* pool_counts  = new LinkAdrType[POOL_SIZE];
+		bool*         pool_count_validity  = new bool[POOL_SIZE];
+		LinkAdrType* stack_counts = new LinkAdrType[STACK_SIZE*QUEUES_PER_FRAME];
+		bool*         stack_count_validity = new bool[STACK_SIZE*QUEUES_PER_FRAME];
+
+
+		LinkType* host_arena = new LinkType[ARENA_SIZE];
+
+		ctx_padded_queue* host_pool = new ctx_padded_queue[POOL_SIZE];
+
+		ctx_stack* host_stack = new ctx_stack;
+
+
+		LinkAdrType link_total = 0;
+
+		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *ARENA_SIZE,cudaMemcpyDeviceToHost);
+		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,cudaMemcpyDeviceToHost);
+		cudaMemcpy(host_stack,runtime.stack,sizeof(ctx_stack)           ,cudaMemcpyDeviceToHost);
+
+
+		for(LinkAdrType i = 0; i < ARENA_SIZE; i++){
+			host_arena[i].meta_data.data = 0;
+		}
+
+
+
+		//printf("Counting through pool links...\n");
+		for(int i=0; i < POOL_SIZE; i++){
+			//printf("Counting pool queue %d\n",i);	
+			QueueType queue = host_pool[i].queue;
+			pool_count_validity[i] = queue_count(host_arena,queue,pool_counts[i]);
+			result = result && pool_count_validity[i];
+			if(pool_count_validity[i]){
+				link_total += pool_counts[i];
+			}
+		}
+
+		//printf("Counting through stack links...\n");
+		for(int i=0; i < STACK_SIZE; i++){
+			for(int j=0; j < QUEUES_PER_FRAME; j++){
+				QueueType queue = host_stack->frames[i].queues[j].queue;
+				unsigned int index = i*QUEUES_PER_FRAME + j;
+				stack_count_validity[i] = queue_count(host_arena,queue,stack_counts[index]);
+				result = result && stack_count_validity[i];
+				if(stack_count_validity[i]){
+					link_total += stack_counts[index];
+				}
+			}
+
+		}
+
+
+		if( (!result) || always_print ){
+			printf("POOL:\t[");
+			for(int i=0; i<POOL_SIZE; i++){
+				if(pool_count_validity[i]){
+					printf("\t%d",pool_counts[i]);
+				} else {
+					printf("\t????");
+				}
+			}
+			printf("\t]\n");
+
+			unsigned int event_com	= host_stack->event_com;
+			unsigned int depth	= (host_stack->depth_live >> 16) & 0xFFFF;
+			unsigned int live	= (host_stack->depth_live) & 0xFFFF;
+			printf("STACK:\t(event_com: %#010x\tdepth: %d\tlive: %d)\t{\n",event_com,depth,live);
+			for(int i=0; i < STACK_SIZE; i++){
+				unsigned int children_residents = host_stack->frames[i].children_residents;
+				unsigned int children  = (children_residents >> 16) & 0xFFFF;
+				unsigned int residents = children_residents & 0xFFFF;
+				printf("(children: %d\t residents: %d)\t[",children,residents);
+				for(int j=0; j < QUEUES_PER_FRAME; j++){
+					unsigned int index = i*QUEUES_PER_FRAME + j;
+					if(stack_count_validity[i]){
+						printf("\t%d",stack_counts[index]);
+					} else {
+						printf("\t????");
+					}
+				}
+				printf("\t]\n");
+
+			}
+			printf("} LINK TOTAL: %d\n",link_total);
+		}
+
+		delete[] host_arena;
+		delete[] host_pool;
+		delete[] host_stack;
+
+		return result;
+
+	}
+
+	#endif
 
 
 };
@@ -2565,6 +2667,9 @@ template<typename ProgType>
 __host__ void exec(typename ProgType::Instance& instance,size_t group_count, unsigned int cycle_count) {
 	_dev_exec<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),cycle_count);
 }
+
+
+
 
 
 
