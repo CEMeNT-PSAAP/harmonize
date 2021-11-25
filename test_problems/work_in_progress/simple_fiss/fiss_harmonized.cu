@@ -1,8 +1,5 @@
 
 
-#define checkError  check_error
-
-
 #include "fiss_common.cu"
 
 using namespace util;
@@ -147,11 +144,11 @@ DEF_MAKE_WORK(ProgType) {
 		
 		if( (index != Adr<unsigned int>::null) ) { //&& (index != 0) ){
 			(*global.neutron_pool)[index] = n;
-			ASYNC_CALL(Fn::Neutron,index);
 			unsigned int old = atomicCAS(&(*global.neutron_pool)[index].checkout,0u,1u);
 			if( old != 0 ){
 				printf("\n{Bad alloc %d at %d}\n",old,index);
 			}
+			ASYNC_CALL(Fn::Neutron,index);
 		}
 		#else
 		global.neutron_buffer [id] = n;
@@ -177,7 +174,7 @@ int main(int argc, char *argv[]){
 
 	cudaDeviceSynchronize();
 		
-	checkError();
+	check_error();
 	
 	ProgType::Instance instance = ProgType::Instance(0xFFFFF,com.params);
 	cudaDeviceSynchronize();

@@ -1,86 +1,205 @@
+
+
 #include "fiss_common.cu"
 
 using namespace util;
 
 
-__global__ void sim_init(sim_params params){
-	
-	unsigned int group_data_size = params.count_lim / gridDim.x;
-	unsigned int group_start = group_data_size * blockIdx.x;
-	unsigned int group_end   = group_start + group_data_size;
-	if( blockIdx.x == (gridDim.x-1) ){
-		group_end = params.count_lim;
+#define DYN
+
+typedef ProgramStateDef<SimParams,VoidState,VoidState> ProgState;
+
+enum class Fn { Neutron };
+
+DEF_PROMISE_TYPE(Fn::Neutron, unsigned int);
+
+typedef  EventProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
+
+
+DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
+
+
+	if( arg == Adr<unsigned int>::null ){
+		printf("{   Bad argument!   }");
+		return;
 	}
 
-	Iter<unsigned int> iter(group_start+threadIdx.x,group_end,blockDim.x);
-	
-	unsigned int id;
-	while ( iter.step(id) ){
 
-		params.neutron_buffer[id].time = -1.0;
-	
+	Neutron n;
+
+	#ifdef DYN
+	n = (*global.neutron_pool)[arg];
+	#else
+	n =  global.neutron_buffer[arg];
+	#endif
+
+	int result = 0;
+	for(int i=0; i < global.horizon; i++){
+		result = step_neutron(global,n);
+		if( result != 0 ){
+			break;
+		}
 	}
+
+	#ifdef DYN
+
+	#ifdef FILO
+	unsigned int last = n.next;
+	#endif
+
+	for(int i=0; i<result; i++){
+		Neutron new_neutron(n);
+
+		#ifdef FILO
+		new_neutron.next = last;
+		#endif
+
+		unsigned int index = global.neutron_pool->alloc(_thread_context.rand_state);
+		if( index != Adr<unsigned int>::null ){
+			unsigned int old = atomicCAS(&(*global.neutron_pool)[index].checkout,0u,1u);
+			if( old != 0 ){
+				printf("\n{Bad fiss alloc %d at %d}\n",old,index);
+			}
+
+			#ifdef FILO
+			last = index;
+			#endif
+
+			(*global.neutron_pool)[index] = new_neutron;
+
+			#ifdef FILO
+			if( i == (result-1) ){
+				QUEUE_EVENT(Fn::Neutron,index);
+			}
+			#else
+			QUEUE_EVENT(Fn::Neutron,index);
+			#endif
+		} else {
+			printf("{Fiss alloc fail}");
+		}
+
+
+	}
+
+
+
+	if( result == 0 ) {
+		(*global.neutron_pool)[arg] = n;
+		QUEUE_EVENT(Fn::Neutron,arg);		
+	}
+	else {
+
+		#ifdef FILO
+		if( (result < 0) && (n.next != Adr<unsigned int>::null) ){
+			QUEUE_EVENT(Fn::Neutron,n.next);
+		}
+		#endif
+		unsigned int old = atomicCAS(&(*global.neutron_pool)[arg].checkout,1u,0u);
+		if( old != 1 ){
+			printf("{Bad dealloc %d at %d}",old,arg);
+		}
+		global.neutron_pool->free(arg,_thread_context.rand_state);
+	}
+
+	#else
+	global.neutron_buffer[arg] = n;
+	QUEUE_EVENT(Fn::Neutron,arg);		
+	#endif
 
 }
 
-__global__ void sim_pass(sim_params params){
-	
-	unsigned int group_data_size = params.count_lim / gridDim.x;
-	unsigned int group_start = group_data_size * blockIdx.x;
-	unsigned int group_end   = group_start + group_data_size;
-	if( blockIdx.x == (gridDim.x-1) ){
-		group_end = params.count_lim;
-	}
 
-	Iter<unsigned int> iter(group_start+threadIdx.x,group_end,blockDim.x);
-	
-	unsigned int id;
-	while ( iter.step(id) ){
+DEF_INITIALIZE(ProgType) {
 
-		neutron n = params.neutron_buffer[id];
-		if( n.time < 0 ){
-			n.seed = id;
-			n.p_x = 0.0;
-			n.p_y = 0.0;
-			n.p_z = 0.0;
-			random_3D_iso_mom(n);
-			n.time = 0.0;
-		}
-
-		if( step_neutron(params,n) ){
-				
-		}
-	
-	}
 
 }
+
+
+DEF_FINALIZE(ProgType) {
+
+
+}
+
+
+DEF_MAKE_EVENTS(ProgType) {
+
+
+	unsigned int id;
+
+
+	if( QUEUE_FILL_FRACTION(Fn::Neutron) > 0.5 ){
+		/*
+		if( threadIdx.x == 0 ){
+			printf("{Early escape.}");
+		}
+		*/
+		return false;
+	}
+
+	Iter<unsigned int> iter = global.source_id_iter->leap(8u);//(14u);
+
+	while(iter.step(id)){
+		Neutron n(id,0.0,0.0,0.0,0.0);
+
+		#ifdef FILO
+		n.next = Adr<unsigned int>::null;
+		#endif
+
+		#ifdef DYN
+		unsigned int index = global.neutron_pool->alloc(_thread_context.rand_state);
+		while(index == Adr<unsigned int>::null){
+			printf("FAIL");
+			index = global.neutron_pool->alloc(_thread_context.rand_state);
+		}
+		
+		if( (index != Adr<unsigned int>::null) ) { //&& (index != 0) ){
+			(*global.neutron_pool)[index] = n;
+			unsigned int old = atomicCAS(&(*global.neutron_pool)[index].checkout,0u,1u);
+			if( old != 0 ){
+				printf("\n{Bad alloc %d at %d}\n",old,index);
+			}
+			PROCESS_EVENT(Fn::Neutron,index);
+		}
+		#else
+		global.neutron_buffer [id] = n;
+		PROCESS_EVENT(Fn::Neutron,id);
+		#endif
+		
+	}
+
+	return !global.source_id_iter->done();
+
+}
+
 
 
 int main(int argc, char *argv[]){
 
+
 	ArgSet args(argc,argv);
 
 	unsigned int wg_count = args["wg_count"];
-	unsigned int wg_size  = args["wg_size"] | 32u;
 
-	CommonContext context(args);
-	
-	cudaMalloc( (void**) &context.params.new_data,  sizeof(neutron) * context.params.count_lim );
- 
-        cudaDeviceSynchronize( );
+	CommonContext com(args);
+
+	cudaDeviceSynchronize();
+		
 	check_error();
 	
-	sim_pass<<<wg_count,wg_size>>>(context.params,true);
+	ProgType::Instance instance = ProgType::Instance(0x100000,com.params);
+	cudaDeviceSynchronize();
+	check_error();
 
-	while(true){
-		sim_pass<<<wg_count,wg_size>>>(context.params,false);
+	for(int i=0; i < 1000; i++){
+		exec<ProgType>(instance,wg_count,1);
+		cudaDeviceSynchronize();
+		check_error();
+		//printf("[%d]",i);
 	}
+	printf("Ran program\n");
 
-	common_finalize(context);
-
+	
 	return 0;
 
 }
-
-
 

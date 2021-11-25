@@ -85,7 +85,7 @@ const GraphStyle BrailleFill  = GraphStyle( 4, 2, BrailleFillTiles);
 unsigned int lead_char_count(float val) {
 	unsigned int result = 1;
 	if( val >= 10.0 ){
-		result = ceil(log10(val));
+		result = ceil(log10(val)+0.00000000001);
 	} else if ( val < 0.0 ){
 		if( val <= -10.0 ){
 			result = ceil(log10(abs(val))) + 1;

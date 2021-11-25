@@ -8,12 +8,13 @@ UTIL_PATH       =       ../../../util/util.cu
 UTIL_SOURCE     =       $(shell find ../../../util -type f -name '*.cu' )
 
 
-all: fiss_hrm fiss_std
+all: fiss_hrm fiss_std fiss_evt
 
 hard: do_touch all
 
 do_touch:
 	touch fiss_harmonized.cu
+	touch fiss_event.cu
 	touch fiss_standard.cu
 	touch fiss_common.cu
 
@@ -25,4 +26,7 @@ fiss_hrm:      Makefile ../../../harmonize.cu fiss_harmonized.cu fiss_common.cu 
 fiss_std:      Makefile fiss_standard.cu fiss_common.cu $(UTIL_SOURCE)
 	$(CUDA_NVCC) $(STD) -o fiss_std fiss_standard.cu -g --restrict -include $(UTIL_PATH)
 
+
+fiss_evt:      Makefile ../../../harmonize.cu fiss_event.cu fiss_common.cu $(UTIL_SOURCE)
+	$(CUDA_NVCC) $(STD) -o fiss_evt fiss_event.cu --restrict -include $(HARMONIZE_PATH)
 

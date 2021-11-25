@@ -3,7 +3,6 @@
 #include <vector>
 
 
-//#define IOBUFF
 #define FILO
 
 
@@ -85,11 +84,7 @@ struct SimParams {
 
 	util::MemPool<Neutron,unsigned int> *neutron_pool;
 
-	#ifdef IOBUFF
 	util::IOBuffer<unsigned int> *neutron_io;
-	#else
-	Neutron* neutron_buffer;
-	#endif
 
 	unsigned long long int* halted;
 
@@ -252,20 +247,12 @@ struct CommonContext{
 	util::DevObj<util::MemPool<Neutron,unsigned int>> neutron_pool;
 
 	
-	#ifdef IOBUFF
 	util::DevObj<util::IOBuffer<unsigned int>> neutron_io;
-	#else
-	util::DevBuf<Neutron> neutron_buffer;
-	#endif
 
 	util::Stopwatch watch;
 
 	CommonContext(util::ArgSet& args)
-		#ifdef IOBUFF
 		: neutron_io( args["io_cap"] | args["num"] | 1000u )
-		#else
-		: neutron_buffer( args["num"] | 1000u )
-		#endif
 		, neutron_pool(655360,8191)
 	{
 
@@ -309,11 +296,7 @@ struct CommonContext{
 
 		params.neutron_pool = neutron_pool;
 		
-		#ifdef IOBUFF
 		params.neutron_io = neutron_io;
-		#else
-		params.neutron_buffer = neutron_buffer;
-		#endif
 	}
 
 
@@ -385,7 +368,7 @@ struct CommonContext{
 			shape.x_min  = -params.pos_limit;
 			shape.x_max  =  params.pos_limit;
 			shape.width  = 100;
-			shape.height = 20;
+			shape.height = 32;
 
 			//util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
 			util::cli_graph(result,elem_count,shape,util::Block2x2Fill);

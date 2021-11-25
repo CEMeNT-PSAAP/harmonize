@@ -1,5 +1,3 @@
-#include "../../util.cu"
-
 
 __global__ void collaz(unsigned int start, unsigned int end, unsigned int* output){
 
@@ -24,7 +22,7 @@ __global__ void collaz(unsigned int start, unsigned int end, unsigned int* outpu
 
 
 // A function to double-check our work
-unsigned int checker(unsigned int val){
+unsigned int checker(unsigned long long int val){
 	unsigned int res = 0;
 	while(val > 1){
 		res++;
@@ -59,7 +57,7 @@ int main(int argc, char* argv[]){
 	}
 
 	// Make device-side output buffer
-	util::DevVec<unsigned int> dev_out(limit);	
+	util::DevBuf<unsigned int> dev_out((size_t)limit);	
 	cudaDeviceSynchronize();
 	util::check_error();
 

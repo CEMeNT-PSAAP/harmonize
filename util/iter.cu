@@ -42,7 +42,7 @@ struct Iter
 
 
 template<typename ITER_TYPE>
-struct WarpIter
+struct GroupIter
 {
 
 
@@ -52,12 +52,12 @@ struct WarpIter
 	IterType limit;
 
 	 __device__ void reset(IterType start_val, IterType limit_val) {
-		__syncwarp();
+		__syncthreads();
 		if( current_leader() ){
 			value = start_val;
 			limit = limit_val;
 		}
-		__syncwarp();
+		__syncthreads();
 	}
 
 
@@ -68,11 +68,11 @@ struct WarpIter
 			if ( val < limit ){
 				iter_val = val;
 			}
-			__syncwarp();
+			__syncthreads();
 			if( current_leader() ){
-				val += blockDim.x;
+				value += blockDim.x;
 			}
-			__syncwarp();
+			__syncthreads();
 			return val < limit;
 		}
 		return false;
@@ -88,11 +88,11 @@ struct WarpIter
 			IterType limit_val = start_val + blockDim.x * length;
 			result.value = (start_val < limit) ? start_val : limit;
 			result.limit = (limit_val < limit) ? limit_val : limit;
-			__syncwarp();
+			__syncthreads();
 			if( current_leader() ){
 				value += blockDim.x * length;
 			}
-			__syncwarp();
+			__syncthreads();
 		}
 		return result;
 		
@@ -125,9 +125,9 @@ struct AtomicIter
 	}
 
 
-	 __device__ WarpIter<IterType> warp_leap(IterType leap_size) {
+	 __device__ GroupIter<IterType> group_leap(IterType leap_size) {
 	
-		WarpIter<IterType> result;
+		GroupIter<IterType> result;
 		result.value = limit;
 		result.limit = limit;
 	
@@ -158,7 +158,7 @@ struct AtomicIter
 				limit_val = (limit_val < limit) ? limit_val : limit;
 			}
 		}
-		__syncwarp();
+		__syncthreads();
 
 		result.value = start_val + threadIdx.x;
 		result.limit = limit_val;
@@ -211,19 +211,19 @@ struct AtomicIter
 template<typename ITER_TYPE>
 __device__ Iter<ITER_TYPE> tiered_leap (
 	AtomicIter<ITER_TYPE> &glb, ITER_TYPE global_leap,
-	WarpIter  <ITER_TYPE> &wrp, ITER_TYPE warp_leap
+	GroupIter  <ITER_TYPE> &wrp, ITER_TYPE group_leap
 ) {
 
 	if( ! wrp.done() ){
-		return wrp.leap(warp_leap);
+		return wrp.leap(group_leap);
 	}
 
 	if( !glb.done() ){
 		if( current_leader() ){
-			wrp = glb.warp_leap(global_leap);
+			wrp = glb.group_leap(global_leap);
 		}
-		__syncwarp();
-		return wrp.leap(warp_leap);
+		__syncthreads();
+		return wrp.leap(group_leap);
 	}
 
 	return Iter<ITER_TYPE>(0,0,0);
@@ -284,7 +284,79 @@ struct ArrayIter {
 		, iter (itr)
 	{}
 	
+	__device__ ArrayIter<T,IterType> ()
+		: array(NULL)
+		, iter(0,0,0)
+	{}
+
 };
+
+
+
+
+
+
+template<typename T,typename ITER_TYPE = unsigned int>
+struct GroupArrayIter {
+
+	typedef ITER_TYPE IterType;
+
+	T* array;
+	GroupIter<IterType> iter;
+
+	__device__ bool step_val(T  &val){
+		IterType index;
+		if( iter.step(index) ){
+			val = array[index];
+			return true;
+		}
+		return false;
+	}
+
+
+	__device__ bool step_idx_val(IterType& idx, T  &val){
+		IterType index;
+		if( iter.step(index) ){
+			idx = index;
+			val = array[index];
+			return true;
+		}
+		return false;
+	}
+
+
+	__device__ bool step_ptr(T *&val){
+		IterType index;
+		if( iter.step(index) ){
+			val = &(array[index]);
+			return true;
+		}
+		return false;
+	}
+	
+	__device__ bool step_idx_ptr(IterType& idx, T *&val){
+		IterType index;
+		if( iter.step(index) ){
+			idx = index;
+			val = &(array[index]);
+			return true;
+		}
+		return false;
+	}
+
+	__device__ GroupArrayIter<T,IterType> (T* adr, GroupIter<IterType> itr)
+		: array(adr)
+		, iter (itr)
+	{}
+
+	GroupArrayIter<T,IterType> () = default;
+
+	__device__ ArrayIter<T,IterType> leap(IterType length) {
+		return ArrayIter<T,IterType>(array,iter.leap(length));
+	}
+	
+};
+
 
 
 template<typename T, typename ITER_TYPE = unsigned int>
@@ -336,8 +408,13 @@ struct IOBuffer
 
 	__host__ void host_free()
 	{
-		auto_throw( cudaFree( data_a ) );
-		auto_throw( cudaFree( data_b ) );
+		if ( data_a != NULL ) {
+			auto_throw( cudaFree( data_a ) );
+		}
+
+		if ( data_b != NULL ) {
+			auto_throw( cudaFree( data_b ) );
+		}
 	}
 
 
@@ -362,6 +439,18 @@ struct IOBuffer
 	}
 
 
+	__device__ GroupArrayIter<T,IterType> pull_group_span(IterType pull_size)
+	{
+		GroupIter<IterType> pull_iter = input_iter.group_leap(pull_size);
+		return GroupArrayIter<T,IterType>(input_ptr(),pull_iter);
+	}
+
+	__device__ GroupArrayIter<T,IterType> push_group_span(IterType push_size)
+	{
+		GroupIter<IterType> push_iter = output_iter.group_leap(push_size);
+		return GroupArrayIter<T,IterType>(output_ptr(),push_iter);
+	}
+
 	__device__ bool pull(T& value){
 		IterType index;
 		if( ! input_iter.step(index) ){
@@ -371,7 +460,7 @@ struct IOBuffer
 		return true;
 	}
 
-	__device__ bool pull_idx(IterType& value){
+	__device__ bool pull_idx(IterType& index){
 		return input_iter.step(index);
 	}
 
@@ -384,6 +473,11 @@ struct IOBuffer
 		return true;
 	}
 
+
+
+	__device__ bool push_idx(IterType& index){
+		return output_iter.step(index);
+	}
 
 	__device__ void flip()
 	{
@@ -400,6 +494,10 @@ struct IOBuffer
 	__device__ bool output_full()
 	{
 		return output_iter.done();
+	}
+
+	__device__ float output_fill_fraction(){
+		return ((float) output_iter.value) / ((float) capacity); 
 	}
 
 };

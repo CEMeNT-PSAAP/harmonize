@@ -1,7 +1,4 @@
 
-// Don't forget to include harmonize
-#include "../../harmonize_2.cu"
-
 
 // The state that will be stored per program instance and accessible by all work groups
 struct GlobalState{
@@ -12,7 +9,7 @@ struct GlobalState{
 
 // The state that will be stored per work group
 struct GroupState {
-	util::GroupWorkIter<unsigned int> iterator;
+	util::WarpIter<unsigned int> iterator;
 };
 
 /*
@@ -25,7 +22,7 @@ typedef ProgramStateDef<GlobalState,GroupState,VoidState> ProgState;
 enum class Fn { Even, Odd };
 
 // Define a 'collaz' struct to hold the arguments for the even and odd async functions
-struct collaz{ unsigned int step; unsigned int original; unsigned int val; };
+struct collaz{ unsigned int step; unsigned int original; unsigned long long int val; };
 
 // Declare that our even and odd async functions accept an argument of type 'collaz'
 DEF_PROMISE_TYPE(Fn::Even, collaz);
@@ -136,24 +133,22 @@ DEF_MAKE_WORK(ProgType) {
 
 
 	unsigned int index;
-        if(!group.iterator.step(index)){
-		return false;
+        if(group.iterator.step(index)){
+		collaz prom = { 0, index, index};
+		if( (index % 2) == 0 ){
+			ASYNC_CALL(Fn::Even,prom);
+		} else {
+			ASYNC_CALL(Fn::Odd,prom);
+		}
 	}
 
-	collaz prom = { 0, index, index};
-	if( (index % 2) == 0 ){
-		ASYNC_CALL(Fn::Even,prom);
-	} else {
-		ASYNC_CALL(Fn::Odd,prom);
-	}
-
-	return true;
+	return ! group.iterator.done();
 
 }
 
 
 // A function to double-check our work
-unsigned int checker(unsigned int val){
+unsigned int checker(unsigned long long int val){
 	unsigned int res = 0;
 	while(val > 1){
 		res++;
@@ -175,7 +170,7 @@ int main(int argc, char* argv[]){
 
 
 	unsigned int wg_count    = args["wg_count"];
-	unsigned int cycle_count = args["cycle_count"] | 65536u;
+	unsigned int cycle_count = args["cycle_count"] | 0x100000u;
 
 	util::Stopwatch watch;
 
@@ -189,7 +184,7 @@ int main(int argc, char* argv[]){
 	gs.limit  = args["limit"];
 	
 	// Define a device-side buffer of type 'unsigned int' with size 'gs.limit'
-	util::DevVec<unsigned int> dev_out = util::DevVec<unsigned int>(gs.limit);
+	util::DevBuf<unsigned int> dev_out = util::DevBuf<unsigned int>((size_t)gs.limit);
 	// Assign the address of the device-side buffer to the global state so that the program
 	// can know where to put its output.
 	gs.output = dev_out;
@@ -199,7 +194,7 @@ int main(int argc, char* argv[]){
 	// program determines how much extra space it has to store work if it cannot store
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// global memory, you may get some performance benefits by seting the arena size to zero.
-	ProgType::Instance instance = ProgType::Instance(0x0,gs);
+	ProgType::Instance instance = ProgType::Instance(0x10000,gs);
 	cudaDeviceSynchronize();
 	util::check_error();
 	
@@ -222,6 +217,8 @@ int main(int argc, char* argv[]){
 	// Retrieve the data from the device-side buffer into a host-side vector.
 	std::vector<unsigned int> host_out(gs.limit);
 	dev_out >> host_out;
+	util::check_error();	
+
 
 	// Double-check that the program has accurately evaluated the iterations assigned to it.
 	for(unsigned int i=0; i<gs.limit; i++){

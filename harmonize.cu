@@ -2728,3 +2728,333 @@ __host__ void exec(typename ProgType::Instance& instance,size_t group_count, uns
 #define ASYNC_CALL(fn_id,param) std::remove_reference<decltype(_global_context)>::type::ParentProgramType::template async_call_cast<fn_id>(_global_context,_group_context,_thread_context, 0, param)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<
+	typename PROMISE_UNION,
+	typename PROGRAM_STATE,
+	typename ADR_TYPE = unsigned int,
+	size_t   GROUP_SIZE = 32
+>
+struct EventProgram;
+
+
+
+template<
+	Fn... FN_IDS,
+	typename PROGRAM_STATE,
+	typename ADR_TYPE,
+	size_t   GROUP_SIZE
+>
+struct EventProgram<
+	PromiseUnion<FN_IDS...>,
+	PROGRAM_STATE,
+	ADR_TYPE,
+	GROUP_SIZE
+>
+{
+
+
+
+	typedef struct EventProgram<
+			PromiseUnion<FN_IDS...>,
+			PROGRAM_STATE,
+			ADR_TYPE,
+			GROUP_SIZE
+		> ProgramType;
+
+
+	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
+
+	/*
+	// A set of halting condition flags
+	*/
+	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
+	static const unsigned int COMPLETION_FLAG	= 0x80000000;
+
+
+	/*
+	// The types representing the global, per-group, and per-thread information that needs to
+	// be tracked for the developer's program.
+	*/
+	typedef typename PROGRAM_STATE::GlobalState   GlobalState;
+	typedef typename PROGRAM_STATE::GroupState    GroupState;
+	typedef typename PROGRAM_STATE::ThreadState   ThreadState;
+
+
+	typedef PromiseUnion    <FN_IDS...>                PromiseUnionType;
+	typedef ADR_TYPE                                   AdrType;
+
+	/*
+	// The number of async functions present in the program.
+	*/
+	static const unsigned char FN_ID_COUNT = PromiseCount<FN_IDS...>::value;
+
+	/*
+	// This struct represents the entire set of data structures that must be stored in thread
+	// memory to track te state of the program defined by the developer as well as the state of
+	// the context which is driving exection.
+	*/
+	struct ThreadContext {
+
+		unsigned int	thread_id;	
+		unsigned int	rand_state;
+
+		ThreadState	thread_state;
+
+	};
+
+
+
+	/*
+	// This struct represents the entire set of data structures that must be stored in group
+	// memory to track te state of the program defined by the developer as well as the state of
+	// the context which is driving exection.
+	*/
+	struct GroupContext {
+
+		GroupState			group_state;
+
+	};
+
+
+	/*
+	// This struct represents the entire set of data structures that must be stored in global
+	// memory to track the state of the program defined by the developer as well as the state
+	// of the context which is driving execution.
+	*/
+	struct GlobalContext {
+
+		typedef		ProgramType       ParentProgramType;
+
+		unsigned int*                               checkout;
+		util::IOBuffer<PromiseUnionType,AdrType>*   event_io[PromiseUnionType::Count::value];
+		GlobalState               global_state;
+
+	};
+
+
+	/*
+	// Instances wrap around their program scope's GlobalContext. These differ from a program's
+	// GlobalContext object in that they perform automatic deallocation as soon as they drop
+	// out of scope.
+	*/
+	struct Instance {
+
+		
+		util::DevBuf<unsigned int> checkout;
+		util::DevObj<util::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Count::value];
+		GlobalState global_state;		
+
+		__host__ Instance (size_t io_size, GlobalState gs)
+			: global_state(gs)
+		{
+			for( unsigned int i=0; i<PromiseUnionType::Count::value; i++){
+				event_io[i] = util::DevObj<util::IOBuffer<PromiseUnionType>>(io_size);
+			}
+			checkout<< 0u;
+		}
+
+		__host__ GlobalContext to_context(){
+
+			GlobalContext result;
+			
+			result.checkout = checkout;
+			for( unsigned int i=0; i<PromiseUnionType::Count::value; i++){
+				result.event_io[i] = event_io[i];
+			}
+			result.global_state   = global_state;
+
+			return result;
+
+		}
+
+	};
+
+
+
+	/*
+	// To be defined by developer. These can be given an empty definition, if desired.
+	*/
+	__device__ static void        initialize (_CTX_ARGS, _STATE_ARGS);
+	__device__ static void        finalize   (_CTX_ARGS, _STATE_ARGS);
+	__device__ static bool        make_events(_CTX_ARGS, _STATE_ARGS);
+
+
+	/*
+	// Initializes the shared state of a work group, which is stored as a ctx_shared struct. This
+	// is mainly done by initializing handles to the arena, pool, and stack, setting the current
+	// level to null, setting the stash iterator to null, and zeroing the stash.
+	*/
+	__device__ static void init_group(GroupContext& grp){ }
+
+	/*
+	// Initializes the local state of a thread, which is just the global id of the thread and the
+	// state used by the thread to generate random numbers for stochastic choices needed to manage
+	// the runtime state.
+	*/
+	__device__ static ThreadContext init_thread(){
+
+		ThreadContext result;
+
+		result.thread_id  = (blockIdx.x * blockDim.x) + threadIdx.x;
+		result.rand_state = result.thread_id;
+
+		return result;
+	}
+
+
+	/*
+	// Sets the bits in the event_com field of the stack according to the given flag bits.
+	*/
+	 __device__ static void set_flags(_CTX_ARGS, unsigned int flag_bits){
+
+		atomicOr(&glb.stack->event_com,flag_bits);
+
+	}
+
+
+
+	static void checkError(){
+
+		cudaError_t status = cudaGetLastError();
+
+		if(status != cudaSuccess){
+			const char* err_str = cudaGetErrorString(status);
+			printf("ERROR: \"%s\"\n",err_str);
+		}
+
+	}
+
+
+
+	template<Fn FUNC_ID>
+	__device__ static void queue_event(_CTX_ARGS, typename PromiseType<FUNC_ID>::ParamType param_value){
+		AdrType promise_index = 0;
+		AdrType io_index = static_cast<AdrType>(FUNC_ID);
+		if( glb.event_io[io_index]->push_idx(promise_index) ){
+			glb.event_io[io_index]->output_ptr()[promise_index].template cast<FUNC_ID>() = param_value;
+		}
+	}
+
+
+	template<Fn FUNC_ID>
+	__device__ static void process_event(_CTX_ARGS, typename PromiseType<FUNC_ID>::ParamType param_value){
+		PromiseUnionType promise;
+		promise.template cast<FUNC_ID>() = param_value;
+		promise.template rigid_eval<ProgramType,FUNC_ID>(_CTX_REFS,glb.global_state,grp.group_state,thd.thread_state);
+
+	}
+
+
+	/*
+	// The workhorse of the program. This function executes until either a halting condition 
+	// is encountered or a maximum number of processing cycles has occured. This makes sure 
+	// that long-running programs don't time out on the GPU. In practice, cycle_count may have
+	// to be tuned to the average cycle execution time for a given application. This could
+	// potentially be automated using an exponential backoff heuristic.
+	*/
+	 __device__ static void exec(GlobalContext glb, unsigned int chunk_size){
+
+		/* Initialize per-warp resources */
+		__shared__ GroupContext grp;
+		init_group(grp);
+		
+		/* Initialize per-thread resources */
+		ThreadContext thd = init_thread();
+
+		initialize(_CTX_REFS,_STATE_REFS);
+
+		__shared__ util::GroupArrayIter<PromiseUnionType,unsigned int> group_work;
+		__shared__ bool done;
+		__shared__ Fn func_id;
+
+		/* The execution loop. */
+		unsigned int loop_lim = 0xFFFFF;
+		unsigned int loop_count = 0;
+		while(true){
+			
+			__syncthreads();
+			if( util::current_leader() ) {
+				done = true;
+				for(unsigned int i=0; i < PromiseUnionType::Count::value; i++){
+					if( !glb.event_io[i]->input_empty() ){
+						done = false;
+						func_id = static_cast<Fn>(i);
+						group_work = glb.event_io[i]->pull_group_span(chunk_size);
+						break;
+					}
+				}
+			}
+			__syncthreads();
+
+			if( done ){
+				while(make_events(_CTX_REFS,_STATE_REFS)){}
+				break;
+			}
+
+			util::ArrayIter<PromiseUnionType,unsigned int> thread_work;
+			thread_work = group_work.leap(chunk_size);
+			PromiseUnionType promise;
+			while( thread_work.step_val(promise) ){
+				promise.template loose_eval<ProgramType>(func_id,_CTX_REFS,glb.global_state,grp.group_state,thd.thread_state);
+			}
+
+			if(loop_count < loop_lim){
+				loop_count++;
+			} else {
+				break;
+			}
+
+		}
+
+		__syncthreads();
+		if( threadIdx.x == 0 ){
+			unsigned int checkout_index = atomicAdd(glb.checkout,1);
+			if( checkout_index == (gridDim.x - 1) ){
+				atomicExch(glb.checkout,0);
+				 for(unsigned int i=0; i < PromiseUnionType::Count::value; i++){
+					 glb.event_io[i]->flip();
+				 }
+				 
+			}
+		}
+
+		finalize(_CTX_REFS,_STATE_REFS);
+
+
+	}
+
+
+
+};
+
+
+#define DEF_MAKE_EVENTS(progtype)                           \
+        template<>  __device__                              \
+        bool progtype::make_events(                         \
+                HARM_ARG_PREAMBLE(progtype)                 \
+        )                                                   \
+
+
+#define QUEUE_EVENT(fn_id,param) std::remove_reference<decltype(_global_context)>::type::ParentProgramType::template queue_event<fn_id>(_global_context,_group_context,_thread_context, param)
+
+
+#define PROCESS_EVENT(fn_id,promise) std::remove_reference<decltype(_global_context)>::type::ParentProgramType::template process_event<fn_id>(_global_context,_group_context,_thread_context,promise);
+
+
+#define QUEUE_FILL_FRACTION(fn_id) _global_context.event_io[static_cast<unsigned int>(fn_id)]->output_fill_fraction()
+
+
