@@ -497,9 +497,22 @@ struct IOBuffer
 	}
 
 	__device__ float output_fill_fraction(){
-		return ((float) output_iter.value) / ((float) capacity); 
+		return ((float) atomicAdd(&(output_iter.value),0u)) / ((float) capacity); 
 	}
 
+
+	__device__ float output_fill_fraction_sync(){
+
+		__shared__ unsigned int progress;
+
+		__syncthreads();
+		if( threadIdx.x == 0 ){
+			progress = atomicAdd(&(output_iter.value),0u);
+		}
+		__syncthreads();
+
+		return ((float) progress) / ((float) capacity); 
+	}
 };
 
 

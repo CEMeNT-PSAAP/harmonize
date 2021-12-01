@@ -126,13 +126,12 @@ DEF_MAKE_EVENTS(ProgType) {
 
 	unsigned int id;
 
-
-	if( QUEUE_FILL_FRACTION(Fn::Neutron) > 0.5 ){
+	if( QUEUE_FILL_FRACTION(Fn::Neutron) > 0.01 ){
 		/*
 		if( threadIdx.x == 0 ){
 			printf("{Early escape.}");
 		}
-		*/
+		// */
 		return false;
 	}
 
@@ -148,7 +147,7 @@ DEF_MAKE_EVENTS(ProgType) {
 		#ifdef DYN
 		unsigned int index = global.neutron_pool->alloc(_thread_context.rand_state);
 		while(index == Adr<unsigned int>::null){
-			printf("FAIL");
+			printf("{Unable to alloc at %d}",index);
 			index = global.neutron_pool->alloc(_thread_context.rand_state);
 		}
 		
@@ -190,13 +189,11 @@ int main(int argc, char *argv[]){
 	cudaDeviceSynchronize();
 	check_error();
 
-	for(int i=0; i < 1000; i++){
-		exec<ProgType>(instance,wg_count,1);
+	do {
+		exec<ProgType>(instance,wg_count,24);
 		cudaDeviceSynchronize();
 		check_error();
-		//printf("[%d]",i);
-	}
-	printf("Ran program\n");
+	} while ( ! instance.complete() );
 
 	
 	return 0;

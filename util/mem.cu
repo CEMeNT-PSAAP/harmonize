@@ -310,6 +310,7 @@ struct MemPool {
 		//printf("Pulling from %d",start_idx);
 		bool done = false;
 		QueueType queue = QueueType::null_queue();
+		__threadfence();
 		for(Index i=start_idx; i<pool_size.adr; i++){
 			queue.pair.data = atomicExch(&(pool[i].pair.data),QueueType::null);
 			if( ! queue.is_null() ){

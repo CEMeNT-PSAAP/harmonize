@@ -117,6 +117,7 @@ DEF_INITIALIZE(ProgType) {
 
 DEF_FINALIZE(ProgType) {
 
+	
 
 }
 
@@ -184,13 +185,12 @@ int main(int argc, char *argv[]){
 	cudaDeviceSynchronize();
 	check_error();
 
-	printf("Did init\n");
-	exec<ProgType>(instance,wg_count,0xFFFFF);
-	cudaDeviceSynchronize();
-	check_error();
-	printf("Ran program\n");
+	while(! instance.complete() ){
+		exec<ProgType>(instance,wg_count,0xFFFFF);
+		cudaDeviceSynchronize();
+		check_error();
+	}
 
-	
 	return 0;
 
 }

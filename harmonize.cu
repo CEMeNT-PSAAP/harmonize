@@ -324,7 +324,8 @@ struct WorkStack {
 	static const size_t NULL_LEVEL = STACK_SIZE;
 	static const size_t MAX_LEVEL  = STACK_SIZE-1;
 
-	unsigned int	event_com;
+	unsigned int    checkout;
+	unsigned int	status_flags;
 	unsigned int	depth_live;
 	FRAME_TYPE frames[STACK_SIZE];
 
@@ -338,7 +339,8 @@ struct WorkStack<FRAME_TYPE, 0>
 	static const size_t PART_MULT  = 1;
 	static const size_t NULL_LEVEL = 1;
 	
-	unsigned int	event_com;
+	unsigned int    checkout;
+	unsigned int	status_flags;
 	unsigned int	depth_live;
 	FRAME_TYPE frames[1];
 
@@ -446,6 +448,7 @@ struct HarmonizeProgram<
 	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
 	static const unsigned int STASH_FAIL_FLAG	= 0x00000002;
 	static const unsigned int COMPLETION_FLAG	= 0x80000000;
+	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 
 
 	/*
@@ -543,6 +546,7 @@ struct HarmonizeProgram<
 
 		typedef		ProgramType	ParentProgramType;
 
+
 		ArenaType	arena;
 		PoolType*	pool;
 		StackType*	stack;
@@ -560,9 +564,9 @@ struct HarmonizeProgram<
 	struct Instance {
 
 		size_t arena_size;
-		util::DevBuf<LinkType>  arena;
-		util::DevBuf<PoolType>  pool;
-		util::DevBuf<StackType> stack;
+		util::DevBuf<LinkType>     arena;
+		util::DevBuf<PoolType>     pool;
+		util::DevBuf<StackType>    stack;
 		GlobalState global_state;		
 
 		__host__ Instance (size_t arsize, GlobalState gs)
@@ -571,7 +575,7 @@ struct HarmonizeProgram<
 			, stack(1)
 			, arena_size(arsize)
 			, global_state(gs)
-		{ }
+		{}
 
 		__host__ GlobalContext to_context(){
 
@@ -584,6 +588,16 @@ struct HarmonizeProgram<
 
 			return result;
 
+		}
+
+
+		__host__ bool complete(){
+
+			unsigned int* base_cr_ptr = &(((StackType*)stack)->status_flags); 
+			unsigned int  base_cr = 0;
+			cudaMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			check_error();
+			return (base_cr != 0);
 		}
 
 	};
@@ -701,14 +715,23 @@ struct HarmonizeProgram<
 
 
 	/*
-	// Sets the bits in the event_com field of the stack according to the given flag bits.
+	// Sets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
 	 __device__ static void set_flags(_CTX_ARGS, unsigned int flag_bits){
 
-		atomicOr(&glb.stack->event_com,flag_bits);
+		atomicOr(&glb.stack->status_flags,flag_bits);
 
 	}
 
+
+	/*
+	// Unsets the bits in the status_flags field of the stack according to the given flag bits.
+	*/
+	 __device__ static void unset_flags(_CTX_ARGS, unsigned int flag_bits){
+
+		atomicAnd(&glb.stack->status_flags,~flag_bits);
+
+	}
 
 	/*
 	// Returns the current highest level in the stack. Given that this program is highly parallel,
@@ -1833,7 +1856,6 @@ struct HarmonizeProgram<
 		__shared__ unsigned int links[STASH_SIZE];
 		#endif
 
-		//db_printf("\n\n\nXXXXX\n\n\n");
 		/*
 		// Currently implemented in a single-threaded manner per work group to simplify the initial
 		// correctness checking process. This can later be changed to take advantage of in-group
@@ -1866,7 +1888,7 @@ struct HarmonizeProgram<
 
 				/* If the stack is empty or a flag is set, return false */
 				unsigned int depth_live = glb.stack->depth_live;
-				if( (depth_live == 0u) || ( glb.stack->event_com != 0u) ){
+				if( (depth_live == 0u) || ( glb.stack->status_flags != 0u) ){
 					grp.keep_running = false;
 					break;
 				}
@@ -1944,6 +1966,7 @@ struct HarmonizeProgram<
 					if(!grp.busy){
 						atomicAdd(&(glb.stack->depth_live),1);
 						grp.busy = true;
+						//printf("{got busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 						rc_printf("SM %d: Incremented depth value\n",bthdkIdx.x);
 					}
 					rc_printf("Pushing promises for filling\n");	
@@ -1964,7 +1987,8 @@ struct HarmonizeProgram<
 
 
 			if(grp.busy && (grp.stash_count == 0)){
-				atomicSub(&(glb.stack->depth_live),1);
+				unsigned int depth_live = atomicSub(&(glb.stack->depth_live),1);
+				//printf("{unbusy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 				rc_printf("SM %d: Decremented depth value\n",bthdkIdx.x);
 				grp.busy = false;
 			}
@@ -2083,19 +2107,31 @@ struct HarmonizeProgram<
 		// Advance the stash iterator to the next chunk of work that needs to be done.
 		*/
 		//*
-		if( grp.can_make_work && (grp.full_head == STASH_SIZE) ){
+
+
+		/*
+		if ( ( ((glb.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockDim.x) ) && (grp.full_head == STASH_SIZE) ) { 
+			fill_stash(_CTX_REFS,STASH_SIZE-2);
+		}
+		// */
+
+		if ( grp.can_make_work && (grp.full_head == STASH_SIZE) ) {
 			grp.can_make_work = make_work(_CTX_REFS,_STATE_REFS);
 			if( util::current_leader() && (! grp.busy ) && ( grp.stash_count != 0 ) ){
-				atomicAdd(&(glb.stack->depth_live),1);
+				unsigned int depth_live = atomicAdd(&(glb.stack->depth_live),1);
 				grp.busy = true;
+				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 			}
 		}
 
 
 		#if 1
-		if(grp.full_head == STASH_SIZE){
+
+		/*
+		if ( grp.full_head == STASH_SIZE ) {
 			fill_stash(_CTX_REFS,STASH_SIZE-2);
 		}
+		*/
 		#else
 		if(grp.full_head == STASH_SIZE){
 			if( !grp.scarce_work ){
@@ -2172,19 +2208,40 @@ struct HarmonizeProgram<
 
 		unsigned int active = __activemask();
 		__syncwarp(active);
-		if(util::current_leader()){	
+		if(util::current_leader()){
+
 			q_printf("CLEANING UP\n");
 			clear_exec_head(_CTX_REFS);
-			//spill_stash(_CTX_REFS,0);
-			spill_stash_links(_CTX_REFS,0);	
-			if(grp.busy){
-				atomicSub(&(glb.stack->depth_live),1);
+			spill_stash(_CTX_REFS,0);
+			spill_stash_links(_CTX_REFS,0);
+			
+
+			if( grp.stash_count != 0 ){
+				printf("Leftover work\n");
+			}
+
+			if(grp.can_make_work){
+				//printf("{Setting early halt flag.}");
+				set_flags(_CTX_REFS,EARLY_HALT_FLAG);
+				unsigned int depth_live = atomicSub(&(glb.stack->depth_live),1);
+				//printf("{wrap busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
+			}
+
+			unsigned int checkout_index = atomicAdd(&(glb.stack->checkout),1);
+			if( checkout_index == (gridDim.x-1) ){
+				//printf("{Final}");
+				atomicExch(&(glb.stack->checkout),0);
+				unsigned int old_flags = atomicAnd(&(glb.stack->status_flags),~EARLY_HALT_FLAG);
+				unsigned int depth_live = atomicAdd(&(glb.stack->depth_live),0);
+				bool halted_early       = ( old_flags && EARLY_HALT_FLAG );
+				bool work_left          = ( (depth_live & 0xFFFF0000) != 0 );
+
+				if( (!halted_early) && (!work_left) ){
+					set_flags(_CTX_REFS,COMPLETION_FLAG);
+				}
 			}
 
 		}
-
-
-
 
 	}
 
@@ -2219,8 +2276,9 @@ struct HarmonizeProgram<
 		// of the stack.
 		*/
 		if(thd.thread_id == 0){
-			stack->event_com  = 0;
-			stack->depth_live = 0;
+			stack->status_flags = 0;
+			stack->depth_live   = 0;
+			stack->checkout     = 0;
 		}
 
 
@@ -2326,7 +2384,7 @@ struct HarmonizeProgram<
 
 
 
-	static void checkError(){
+	static void check_error(){
 
 		cudaError_t status = cudaGetLastError();
 
@@ -2362,7 +2420,7 @@ struct HarmonizeProgram<
 		
 		push_runtime<<<1,WORK_GROUP_SIZE>>>(instance.to_context(),call_buffer,1);
 
-		checkError();
+		check_error();
 		
 		cudaFree(call_buffer);
 
@@ -2425,7 +2483,7 @@ struct HarmonizeProgram<
 				cycle_break = cycle+1;
 				#endif
 				break;
-			}		
+			}
 		}
 
 		finalize(_CTX_REFS,_STATE_REFS);
@@ -2441,6 +2499,10 @@ struct HarmonizeProgram<
 		}
 
 	}
+
+
+
+
 
 	#if 0
 
@@ -2595,10 +2657,10 @@ struct HarmonizeProgram<
 			}
 			printf("\t]\n");
 
-			unsigned int event_com	= host_stack->event_com;
+			unsigned int status_flags	= host_stack->status_flags;
 			unsigned int depth	= (host_stack->depth_live >> 16) & 0xFFFF;
 			unsigned int live	= (host_stack->depth_live) & 0xFFFF;
-			printf("STACK:\t(event_com: %#010x\tdepth: %d\tlive: %d)\t{\n",event_com,depth,live);
+			printf("STACK:\t(status_flags: %#010x\tdepth: %d\tlive: %d)\t{\n",status_flags,depth,live);
 			for(int i=0; i < STACK_SIZE; i++){
 				unsigned int children_residents = host_stack->frames[i].children_residents;
 				unsigned int children  = (children_residents >> 16) & 0xFFFF;
@@ -2881,6 +2943,19 @@ struct EventProgram<
 
 		}
 
+		__host__ bool complete(){
+
+			for( unsigned int i=0; i<PromiseUnionType::Count::value; i++){
+				event_io[i].pull_data();
+				check_error();
+				if( ! event_io[i].host_copy().input_iter.limit == 0 ){
+					return false;
+				}
+			}
+			return true;
+
+		}
+
 	};
 
 
@@ -2917,17 +2992,26 @@ struct EventProgram<
 
 
 	/*
-	// Sets the bits in the event_com field of the stack according to the given flag bits.
+	// Sets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
 	 __device__ static void set_flags(_CTX_ARGS, unsigned int flag_bits){
 
-		atomicOr(&glb.stack->event_com,flag_bits);
+		atomicOr(&glb.stack->status_flags,flag_bits);
 
 	}
 
 
+	/*
+	// Unsets the bits in the status_flags field of the stack according to the given flag bits.
+	*/
+	 __device__ static void unset_flags(_CTX_ARGS, unsigned int flag_bits){
 
-	static void checkError(){
+		atomicAnd(&glb.stack->status_flags,~flag_bits);
+
+	}
+
+
+	static void check_error(){
 
 		cudaError_t status = cudaGetLastError();
 
@@ -3042,6 +3126,10 @@ struct EventProgram<
 };
 
 
+
+
+
+
 #define DEF_MAKE_EVENTS(progtype)                           \
         template<>  __device__                              \
         bool progtype::make_events(                         \
@@ -3055,6 +3143,6 @@ struct EventProgram<
 #define PROCESS_EVENT(fn_id,promise) std::remove_reference<decltype(_global_context)>::type::ParentProgramType::template process_event<fn_id>(_global_context,_group_context,_thread_context,promise);
 
 
-#define QUEUE_FILL_FRACTION(fn_id) _global_context.event_io[static_cast<unsigned int>(fn_id)]->output_fill_fraction()
+#define QUEUE_FILL_FRACTION(fn_id) _global_context.event_io[static_cast<unsigned int>(fn_id)]->output_fill_fraction_sync()
 
 
