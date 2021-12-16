@@ -1,0 +1,57 @@
+\hypertarget{mem_8cpp}{\section{/nfs/stak/users/cuneob/harmonize/code/util/mem.cpp File Reference}
+\label{mem_8cpp}\index{/nfs/stak/users/cuneob/harmonize/code/util/mem.\-cpp@{/nfs/stak/users/cuneob/harmonize/code/util/mem.\-cpp}}
+}
+\subsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+struct \hyperlink{structPairEquivalent}{Pair\-Equivalent$<$ T $>$}
+\item 
+struct \hyperlink{structPairEquivalent_3_01unsigned_01short_01_4}{Pair\-Equivalent$<$ unsigned short $>$}
+\item 
+struct \hyperlink{structPairEquivalent_3_01unsigned_01int_01_4}{Pair\-Equivalent$<$ unsigned int $>$}
+\item 
+struct \hyperlink{structPairPack}{Pair\-Pack$<$ T $>$}
+\item 
+struct \hyperlink{structAdr}{Adr$<$ A\-D\-R\-\_\-\-I\-N\-N\-E\-R\-\_\-\-T\-Y\-P\-E $>$}
+\item 
+struct \hyperlink{structPoolQueue}{Pool\-Queue$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E $>$}
+\item 
+struct \hyperlink{structPoolQueue_3_01Adr_3_01ADR__TYPE_01_4_01_4}{Pool\-Queue$<$ Adr$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E $>$ $>$}
+\item 
+struct \hyperlink{structMemPool}{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$}
+\item 
+struct \hyperlink{structMemPool}{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$}
+\item 
+union \hyperlink{unionMemPool_1_1Link}{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$\-::\-Link}
+\item 
+struct \hyperlink{structMemChunk}{Mem\-Chunk$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$}
+\item 
+struct \hyperlink{structMemPoolBank}{Mem\-Pool\-Bank$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$}
+\end{DoxyCompactItemize}
+\subsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$typename T , typename Adr\-Type $>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{mem_8cpp_a47ba4fe619f32e93e349f9d887ca46d7}{mempool\-\_\-check} (T $\ast$arena, size\-\_\-t arena\-\_\-size, \hyperlink{structPoolQueue}{Pool\-Queue}$<$ Adr\-Type $>$ $\ast$pool, size\-\_\-t pool\-\_\-size)
+\item 
+{\footnotesize template$<$typename T , typename I\-N\-D\-E\-X $>$ }\\\-\_\-\-\_\-global\-\_\-\-\_\- void \hyperlink{mem_8cpp_a131eccef025f4347af0bb0cd4ec05ca4}{mempool\-\_\-init} (\hyperlink{structMemPool}{Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$ mempool)
+\end{DoxyCompactItemize}
+
+
+\subsection{Function Documentation}
+\hypertarget{mem_8cpp_a47ba4fe619f32e93e349f9d887ca46d7}{\index{mem.\-cpp@{mem.\-cpp}!mempool\-\_\-check@{mempool\-\_\-check}}
+\index{mempool\-\_\-check@{mempool\-\_\-check}!mem.cpp@{mem.\-cpp}}
+\subsubsection[{mempool\-\_\-check}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename Adr\-Type $>$ \-\_\-\-\_\-host\-\_\-\-\_\- void mempool\-\_\-check (
+\begin{DoxyParamCaption}
+\item[{T $\ast$}]{arena, }
+\item[{size\-\_\-t}]{arena\-\_\-size, }
+\item[{{\bf Pool\-Queue}$<$ Adr\-Type $>$ $\ast$}]{pool, }
+\item[{size\-\_\-t}]{pool\-\_\-size}
+\end{DoxyParamCaption}
+)}}\label{mem_8cpp_a47ba4fe619f32e93e349f9d887ca46d7}
+\hypertarget{mem_8cpp_a131eccef025f4347af0bb0cd4ec05ca4}{\index{mem.\-cpp@{mem.\-cpp}!mempool\-\_\-init@{mempool\-\_\-init}}
+\index{mempool\-\_\-init@{mempool\-\_\-init}!mem.cpp@{mem.\-cpp}}
+\subsubsection[{mempool\-\_\-init}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-global\-\_\-\-\_\- void mempool\-\_\-init (
+\begin{DoxyParamCaption}
+\item[{{\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$}]{mempool}
+\end{DoxyParamCaption}
+)}}\label{mem_8cpp_a131eccef025f4347af0bb0cd4ec05ca4}

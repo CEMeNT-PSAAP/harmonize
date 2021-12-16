@@ -1,0 +1,140 @@
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4}{\section{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$ Union Template Reference}
+\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4}\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef \hyperlink{structPromiseCount}{Promise\-Count}$<$ H\-E\-A\-D, \\*
+T\-A\-I\-L...$>$ \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a0fc2662670f580f9679389bc21d3c825}{Count}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D==H\-E\-A\-D), \\*
+typename \hyperlink{structPromiseType}{Promise\-Type}$<$ I\-D $>$\\*
+\-::Param\-Type \& $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa5cc967e362d0902fb20d586a4a9852b}{cast} ()
+\item 
+{\footnotesize template$<$Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D $>$H\-E\-A\-D), \\*
+typename \hyperlink{structPromiseType}{Promise\-Type}$<$ I\-D $>$\\*
+\-::Param\-Type \& $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_add5a8e6138823156a6b1929522cee154}{cast} ()
+\item 
+{\footnotesize template$<$Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D$<$ H\-E\-A\-D), \\*
+void $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a7f78b66884ac72d59476de7efe9fc221}{cast} ()
+\item 
+{\footnotesize template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D==H\-E\-A\-D), \\*
+void $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ac70fca73e52ab153566959cb7320008f}{rigid\-\_\-eval} (typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&global\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&group\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&thread\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&global\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&group\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&thread\-\_\-state)
+\item 
+{\footnotesize template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D $>$H\-E\-A\-D), \\*
+void $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a1b189e55ba0146e43798c1003467430d}{rigid\-\_\-eval} (typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&global\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&group\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&thread\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&global\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&group\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&thread\-\_\-state)
+\item 
+{\footnotesize template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \\*
+std\-::enable\-\_\-if$<$ (I\-D$<$ H\-E\-A\-D), \\*
+void $>$\-::type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_af60e0a5350bceaf62bb93074064dbada}{rigid\-\_\-eval} ()
+\item 
+{\footnotesize template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E $>$ }\\\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a8df643d5323314d950d3a0955b19f44e}{loose\-\_\-eval} (Fn id, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&global\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&group\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&thread\-\_\-context, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&global\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&group\-\_\-state, typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&thread\-\_\-state)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\hyperlink{structPromiseType}{Promise\-Type}$<$ H\-E\-A\-D $>$\-::Param\-Type \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ad16aa739f66e08aae6b96fb088a8bcce}{head\-\_\-form}
+\item 
+\hyperlink{unionPromiseUnion}{Promise\-Union}$<$ T\-A\-I\-L...$>$ \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa60a2e4583b3dd00b35cee4786b2858c}{tail\-\_\-form}
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+\subsubsection*{template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$union Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}
+
+The recursive case of the {\ttfamily \hyperlink{unionPromiseUnion}{Promise\-Union}} template union defines the {\ttfamily \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa5cc967e362d0902fb20d586a4a9852b}{cast()}}, {\ttfamily \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_af60e0a5350bceaf62bb93074064dbada}{rigid\-\_\-eval()}}, and {\ttfamily \hyperlink{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a8df643d5323314d950d3a0955b19f44e}{loose\-\_\-eval()}} template functions for the async function/parameter type corresponding to the first template argument. 
+
+\subsection{Member Typedef Documentation}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a0fc2662670f580f9679389bc21d3c825}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!Count@{Count}}
+\index{Count@{Count}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{Count}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ typedef {\bf Promise\-Count}$<$H\-E\-A\-D,T\-A\-I\-L...$>$ {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::{\bf Count}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a0fc2662670f580f9679389bc21d3c825}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa5cc967e362d0902fb20d586a4a9852b}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!cast@{cast}}
+\index{cast@{cast}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{cast}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D==H\-E\-A\-D), typename {\bf Promise\-Type}$<$I\-D$>$\-::Param\-Type\& $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::cast (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa5cc967e362d0902fb20d586a4a9852b}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_add5a8e6138823156a6b1929522cee154}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!cast@{cast}}
+\index{cast@{cast}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{cast}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D$>$H\-E\-A\-D), typename {\bf Promise\-Type}$<$I\-D$>$\-::Param\-Type\& $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::cast (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_add5a8e6138823156a6b1929522cee154}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a7f78b66884ac72d59476de7efe9fc221}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!cast@{cast}}
+\index{cast@{cast}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{cast}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D$<$H\-E\-A\-D), void $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::cast (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a7f78b66884ac72d59476de7efe9fc221}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a8df643d5323314d950d3a0955b19f44e}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!loose\-\_\-eval@{loose\-\_\-eval}}
+\index{loose\-\_\-eval@{loose\-\_\-eval}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{loose\-\_\-eval}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E $>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::loose\-\_\-eval (
+\begin{DoxyParamCaption}
+\item[{Fn}]{id, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&}]{global\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&}]{group\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&}]{thread\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&}]{global\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&}]{group\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&}]{thread\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a8df643d5323314d950d3a0955b19f44e}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ac70fca73e52ab153566959cb7320008f}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!rigid\-\_\-eval@{rigid\-\_\-eval}}
+\index{rigid\-\_\-eval@{rigid\-\_\-eval}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{rigid\-\_\-eval}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D==H\-E\-A\-D), void $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::rigid\-\_\-eval (
+\begin{DoxyParamCaption}
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&}]{global\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&}]{group\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&}]{thread\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&}]{global\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&}]{group\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&}]{thread\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ac70fca73e52ab153566959cb7320008f}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a1b189e55ba0146e43798c1003467430d}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!rigid\-\_\-eval@{rigid\-\_\-eval}}
+\index{rigid\-\_\-eval@{rigid\-\_\-eval}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{rigid\-\_\-eval}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D$>$H\-E\-A\-D), void $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::rigid\-\_\-eval (
+\begin{DoxyParamCaption}
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-Context \&}]{global\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-Context \&}]{group\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-Context \&}]{thread\-\_\-context, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Global\-State \&}]{global\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Group\-State \&}]{group\-\_\-state, }
+\item[{typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E\-::\-Thread\-State \&}]{thread\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_a1b189e55ba0146e43798c1003467430d}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_af60e0a5350bceaf62bb93074064dbada}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!rigid\-\_\-eval@{rigid\-\_\-eval}}
+\index{rigid\-\_\-eval@{rigid\-\_\-eval}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{rigid\-\_\-eval}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ template$<$typename P\-R\-O\-G\-\_\-\-T\-Y\-P\-E , Fn I\-D$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- std\-::enable\-\_\-if$<$ (I\-D$<$H\-E\-A\-D), void $>$\-::type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::rigid\-\_\-eval (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_af60e0a5350bceaf62bb93074064dbada}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ad16aa739f66e08aae6b96fb088a8bcce}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!head\-\_\-form@{head\-\_\-form}}
+\index{head\-\_\-form@{head\-\_\-form}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{head\-\_\-form}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ {\bf Promise\-Type}$<$H\-E\-A\-D$>$\-::Param\-Type {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::head\-\_\-form}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_ad16aa739f66e08aae6b96fb088a8bcce}
+\hypertarget{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa60a2e4583b3dd00b35cee4786b2858c}{\index{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}!tail\-\_\-form@{tail\-\_\-form}}
+\index{tail\-\_\-form@{tail\-\_\-form}!PromiseUnion< HEAD, TAIL...>@{Promise\-Union$<$ H\-E\-A\-D, T\-A\-I\-L...$>$}}
+\subsubsection[{tail\-\_\-form}]{\setlength{\rightskip}{0pt plus 5cm}template$<$Fn H\-E\-A\-D, Fn... T\-A\-I\-L$>$ {\bf Promise\-Union}$<$T\-A\-I\-L...$>$ {\bf Promise\-Union}$<$ H\-E\-A\-D, T\-A\-I\-L...$>$\-::tail\-\_\-form}}\label{unionPromiseUnion_3_01HEAD_00_01TAIL_8_8_8_4_aa60a2e4583b3dd00b35cee4786b2858c}
+
+
+The documentation for this union was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/\hyperlink{harmonize_8cpp}{harmonize.\-cpp}\end{DoxyCompactItemize}

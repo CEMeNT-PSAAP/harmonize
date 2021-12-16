@@ -1,0 +1,110 @@
+\hypertarget{structGroupArrayIter}{\section{Group\-Array\-Iter$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$ Struct Template Reference}
+\label{structGroupArrayIter}\index{Group\-Array\-Iter$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$@{Group\-Array\-Iter$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E \hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structGroupArrayIter_ac8bf3787eb0f5ee8981424deb3aef84e}{step\-\_\-val} (T \&val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structGroupArrayIter_a41b1fade93cc7041eea538417f9e77cb}{step\-\_\-idx\-\_\-val} (\hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} \&idx, T \&val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structGroupArrayIter_aaea42e3a6911cd4a34e3a181cb727656}{step\-\_\-ptr} (T $\ast$\&val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structGroupArrayIter_a12939c1fe4dca67dbd9719b3733760a7}{step\-\_\-idx\-\_\-ptr} (\hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} \&idx, T $\ast$\&val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structGroupArrayIter_aaf4b71fa789bdb964f4ca33d8c1dc330}{Group\-Array\-Iter} (T $\ast$adr, \hyperlink{structGroupIter}{Group\-Iter}$<$ \hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} $>$ itr)
+\item 
+\hyperlink{structGroupArrayIter_a503dd510321637227d0c2caacc052531}{Group\-Array\-Iter} ()=default
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structArrayIter}{Array\-Iter}$<$ T, \hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} $>$ \hyperlink{structGroupArrayIter_a925c28e7aea5446758798babf027590e}{leap} (\hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} length)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+T $\ast$ \hyperlink{structGroupArrayIter_a66da0a8097f1b86ab15ae9172610861c}{array}
+\item 
+\hyperlink{structGroupIter}{Group\-Iter}$<$ \hyperlink{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{Iter\-Type} $>$ \hyperlink{structGroupArrayIter_a19527413babf9e9aeb2f219c0551eb1e}{iter}
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!Iter\-Type@{Iter\-Type}}
+\index{Iter\-Type@{Iter\-Type}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{Iter\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Iter\-Type}}}\label{structGroupArrayIter_a61733327ff96821c9c80d63fa2c11337}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structGroupArrayIter_aaf4b71fa789bdb964f4ca33d8c1dc330}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!Group\-Array\-Iter@{Group\-Array\-Iter}}
+\index{Group\-Array\-Iter@{Group\-Array\-Iter}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{Group\-Array\-Iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Group\-Array\-Iter} (
+\begin{DoxyParamCaption}
+\item[{T $\ast$}]{adr, }
+\item[{{\bf Group\-Iter}$<$ {\bf Iter\-Type} $>$}]{itr}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_aaf4b71fa789bdb964f4ca33d8c1dc330}
+\hypertarget{structGroupArrayIter_a503dd510321637227d0c2caacc052531}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!Group\-Array\-Iter@{Group\-Array\-Iter}}
+\index{Group\-Array\-Iter@{Group\-Array\-Iter}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{Group\-Array\-Iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Group\-Array\-Iter} (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [default]}}}\label{structGroupArrayIter_a503dd510321637227d0c2caacc052531}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structGroupArrayIter_a925c28e7aea5446758798babf027590e}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!leap@{leap}}
+\index{leap@{leap}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{leap}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Array\-Iter}$<$T,{\bf Iter\-Type}$>$ {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::leap (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{length}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_a925c28e7aea5446758798babf027590e}
+\hypertarget{structGroupArrayIter_a12939c1fe4dca67dbd9719b3733760a7}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!step\-\_\-idx\-\_\-ptr@{step\-\_\-idx\-\_\-ptr}}
+\index{step\-\_\-idx\-\_\-ptr@{step\-\_\-idx\-\_\-ptr}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{step\-\_\-idx\-\_\-ptr}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::step\-\_\-idx\-\_\-ptr (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type} \&}]{idx, }
+\item[{T $\ast$\&}]{val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_a12939c1fe4dca67dbd9719b3733760a7}
+\hypertarget{structGroupArrayIter_a41b1fade93cc7041eea538417f9e77cb}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!step\-\_\-idx\-\_\-val@{step\-\_\-idx\-\_\-val}}
+\index{step\-\_\-idx\-\_\-val@{step\-\_\-idx\-\_\-val}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{step\-\_\-idx\-\_\-val}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::step\-\_\-idx\-\_\-val (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type} \&}]{idx, }
+\item[{T \&}]{val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_a41b1fade93cc7041eea538417f9e77cb}
+\hypertarget{structGroupArrayIter_aaea42e3a6911cd4a34e3a181cb727656}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!step\-\_\-ptr@{step\-\_\-ptr}}
+\index{step\-\_\-ptr@{step\-\_\-ptr}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{step\-\_\-ptr}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::step\-\_\-ptr (
+\begin{DoxyParamCaption}
+\item[{T $\ast$\&}]{val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_aaea42e3a6911cd4a34e3a181cb727656}
+\hypertarget{structGroupArrayIter_ac8bf3787eb0f5ee8981424deb3aef84e}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!step\-\_\-val@{step\-\_\-val}}
+\index{step\-\_\-val@{step\-\_\-val}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{step\-\_\-val}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::step\-\_\-val (
+\begin{DoxyParamCaption}
+\item[{T \&}]{val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structGroupArrayIter_ac8bf3787eb0f5ee8981424deb3aef84e}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structGroupArrayIter_a66da0a8097f1b86ab15ae9172610861c}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!array@{array}}
+\index{array@{array}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{array}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ T$\ast$ {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::array}}\label{structGroupArrayIter_a66da0a8097f1b86ab15ae9172610861c}
+\hypertarget{structGroupArrayIter_a19527413babf9e9aeb2f219c0551eb1e}{\index{Group\-Array\-Iter@{Group\-Array\-Iter}!iter@{iter}}
+\index{iter@{iter}!GroupArrayIter@{Group\-Array\-Iter}}
+\subsubsection[{iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ {\bf Group\-Iter}$<${\bf Iter\-Type}$>$ {\bf Group\-Array\-Iter}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::iter}}\label{structGroupArrayIter_a19527413babf9e9aeb2f219c0551eb1e}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{iter_8cpp}{iter.\-cpp}\end{DoxyCompactItemize}

@@ -1,0 +1,9 @@
+var searchData=
+[
+  ['hard_5fneighbor_5falloc',['hard_neighbor_alloc',['../structMemPoolBank.html#ac569e5e2130db7ccb771a7553f20c20d',1,'MemPoolBank::hard_neighbor_alloc()'],['../structutil_1_1MemPoolBank.html#ab34d2d8859b6519341dbccf4d6ad6ba4',1,'util::MemPoolBank::hard_neighbor_alloc()']]],
+  ['hardmalloc',['hardMalloc',['../host_8cpp.html#a5b447fcbcfb5249f7a7ca2a13bafb6ca',1,'hardMalloc():&#160;host.cpp'],['../namespaceutil.html#a771b035a2a95fc229f5a0744e32a8780',1,'util::hardMalloc()']]],
+  ['highest_5flevel',['highest_level',['../structHarmonizeProgram_3_01PromiseUnion_3_01FN__IDS_8_8_8_4_00	PROGRAM__STATE_00	ADR__TYPE_00	ST96305cc1a177b714bc64a5044f46c97c.html#a4d990bce598f5530e76c44a0ba3e1660',1,'HarmonizeProgram&lt; PromiseUnion&lt; FN_IDS...&gt;,	PROGRAM_STATE,	ADR_TYPE,	STASH_SIZE,	FRAME_SIZE,	POOL_SIZE,	GROUP_SIZE,	STACK_SIZE &gt;']]],
+  ['host_5fcopy',['host_copy',['../classDevObj.html#a3de12445871df1a977f50c4f6bb0bed3',1,'DevObj::host_copy()'],['../classutil_1_1DevObj.html#aa33c73fc492b19df5f8d123f952f5ac5',1,'util::DevObj::host_copy()']]],
+  ['host_5ffree',['host_free',['../structIOBuffer.html#adf7f2730843029e059fe74e12f8f6757',1,'IOBuffer::host_free()'],['../structMemPool.html#a3bb2fee529a330549aba7af05ad767c3',1,'MemPool::host_free()'],['../structutil_1_1MemPool.html#a855f983e0f3d6eac87cd8c11e9b3142d',1,'util::MemPool::host_free()'],['../structutil_1_1IOBuffer.html#a8cda3ee8af366c19f10883478e102b2f',1,'util::IOBuffer::host_free()']]],
+  ['host_5finit',['host_init',['../structIOBuffer.html#ac5cf7047ac3632e9bd49628177c5fc26',1,'IOBuffer::host_init()'],['../structMemPool.html#ac3ad49fa7037c1f7ee36c82e8c1ea965',1,'MemPool::host_init()'],['../structutil_1_1MemPool.html#ab13d5502d219c3381994e75dd4d84ce1',1,'util::MemPool::host_init()'],['../structutil_1_1IOBuffer.html#aba5351cf7791bd43f57f25d6a1461aa7',1,'util::IOBuffer::host_init()']]]
+];

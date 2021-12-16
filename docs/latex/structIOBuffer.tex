@@ -1,0 +1,248 @@
+\hypertarget{structIOBuffer}{\section{I\-O\-Buffer$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$ Struct Template Reference}
+\label{structIOBuffer}\index{I\-O\-Buffer$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$@{I\-O\-Buffer$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E \hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structIOBuffer_ad6e2ce28a80ed76835405972e2b288ad}{I\-O\-Buffer} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structIOBuffer_a72a56577b8e286889c9635a7065c6ff0}{I\-O\-Buffer} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} cap, T $\ast$a, T $\ast$b)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- \hyperlink{structIOBuffer_a452e4d3aeafb929c34d1bc7a17f2a83f}{I\-O\-Buffer} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} cap)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{structIOBuffer_ac5cf7047ac3632e9bd49628177c5fc26}{host\-\_\-init} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{structIOBuffer_adf7f2730843029e059fe74e12f8f6757}{host\-\_\-free} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- T $\ast$ \hyperlink{structIOBuffer_acb4cbf34f5e9a52f1dbe292d68ae7851}{input\-\_\-ptr} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- T $\ast$ \hyperlink{structIOBuffer_acfe37ec8792ee74282d550bcc1c44de7}{output\-\_\-ptr} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structArrayIter}{Array\-Iter}$<$ T, \hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_aa553c6ffc098d25dc6b2643bd5ebd20e}{pull\-\_\-span} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} pull\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structArrayIter}{Array\-Iter}$<$ T, \hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_a94066f72fe056544daa65fc2043332df}{push\-\_\-span} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} push\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structGroupArrayIter}{Group\-Array\-Iter}$<$ T, \\*
+\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_a3c3b55ddd33b094eddfd0b889b8d666c}{pull\-\_\-group\-\_\-span} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} pull\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structGroupArrayIter}{Group\-Array\-Iter}$<$ T, \\*
+\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_a8d17652830a1c99007270f2562a3b58b}{push\-\_\-group\-\_\-span} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} push\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_a6abd7ec2cc12a2cfef88977c2a07a64b}{pull} (T \&value)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_ae35188cb14fbef4f901a7d3acfa34cfc}{pull\-\_\-idx} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} \&index)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_acd8fa802e97bb4004092402a2353539b}{push} (T value)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_a7e5cc3a81b677fd0cc35281355dc54d0}{push\-\_\-idx} (\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} \&index)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structIOBuffer_a6aa60aed26ade2f70b3659a7e0c5859e}{flip} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_aa37ce7a0174b0f1b56e61e2f7e44440f}{input\-\_\-empty} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structIOBuffer_add5c1f0c7ab74e86e09892a049b9566c}{output\-\_\-full} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- float \hyperlink{structIOBuffer_a0c65e813f8217b5f71cbc550361e0c77}{output\-\_\-fill\-\_\-fraction} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- float \hyperlink{structIOBuffer_ad0de0a595424d38e1bfd3f769671c026}{output\-\_\-fill\-\_\-fraction\-\_\-sync} ()
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+bool \hyperlink{structIOBuffer_a31e25c6353b67da4d9e523de7e4f502b}{toggle}
+\item 
+T $\ast$ \hyperlink{structIOBuffer_a64e70fb67768e01a6620bc8ad7964ab0}{data\-\_\-a}
+\item 
+T $\ast$ \hyperlink{structIOBuffer_a3c49c40193c6906e051eb89b128ab00f}{data\-\_\-b}
+\item 
+\hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} \hyperlink{structIOBuffer_a185b9d6fdaa3f937f5b97d18ae813c08}{capacity}
+\item 
+\hyperlink{structAtomicIter}{Atomic\-Iter}$<$ \hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_a76c5930fc902839c06f6dc78b4ad9556}{input\-\_\-iter}
+\item 
+\hyperlink{structAtomicIter}{Atomic\-Iter}$<$ \hyperlink{structIOBuffer_ab4571677106318f7fd246c9536292354}{Iter\-Type} $>$ \hyperlink{structIOBuffer_aff9c8b064ee173136abd76ff4cbc1e50}{output\-\_\-iter}
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structIOBuffer_ab4571677106318f7fd246c9536292354}{\index{I\-O\-Buffer@{I\-O\-Buffer}!Iter\-Type@{Iter\-Type}}
+\index{Iter\-Type@{Iter\-Type}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{Iter\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Iter\-Type}}}\label{structIOBuffer_ab4571677106318f7fd246c9536292354}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structIOBuffer_ad6e2ce28a80ed76835405972e2b288ad}{\index{I\-O\-Buffer@{I\-O\-Buffer}!I\-O\-Buffer@{I\-O\-Buffer}}
+\index{I\-O\-Buffer@{I\-O\-Buffer}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{I\-O\-Buffer}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf I\-O\-Buffer} (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_ad6e2ce28a80ed76835405972e2b288ad}
+\hypertarget{structIOBuffer_a72a56577b8e286889c9635a7065c6ff0}{\index{I\-O\-Buffer@{I\-O\-Buffer}!I\-O\-Buffer@{I\-O\-Buffer}}
+\index{I\-O\-Buffer@{I\-O\-Buffer}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{I\-O\-Buffer}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf I\-O\-Buffer} (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{cap, }
+\item[{T $\ast$}]{a, }
+\item[{T $\ast$}]{b}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a72a56577b8e286889c9635a7065c6ff0}
+\hypertarget{structIOBuffer_a452e4d3aeafb929c34d1bc7a17f2a83f}{\index{I\-O\-Buffer@{I\-O\-Buffer}!I\-O\-Buffer@{I\-O\-Buffer}}
+\index{I\-O\-Buffer@{I\-O\-Buffer}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{I\-O\-Buffer}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-host\-\_\-\-\_\- {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf I\-O\-Buffer} (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{cap}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a452e4d3aeafb929c34d1bc7a17f2a83f}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structIOBuffer_a6aa60aed26ade2f70b3659a7e0c5859e}{\index{I\-O\-Buffer@{I\-O\-Buffer}!flip@{flip}}
+\index{flip@{flip}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{flip}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::flip (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a6aa60aed26ade2f70b3659a7e0c5859e}
+\hypertarget{structIOBuffer_adf7f2730843029e059fe74e12f8f6757}{\index{I\-O\-Buffer@{I\-O\-Buffer}!host\-\_\-free@{host\-\_\-free}}
+\index{host\-\_\-free@{host\-\_\-free}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{host\-\_\-free}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::host\-\_\-free (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_adf7f2730843029e059fe74e12f8f6757}
+\hypertarget{structIOBuffer_ac5cf7047ac3632e9bd49628177c5fc26}{\index{I\-O\-Buffer@{I\-O\-Buffer}!host\-\_\-init@{host\-\_\-init}}
+\index{host\-\_\-init@{host\-\_\-init}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{host\-\_\-init}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::host\-\_\-init (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_ac5cf7047ac3632e9bd49628177c5fc26}
+\hypertarget{structIOBuffer_aa37ce7a0174b0f1b56e61e2f7e44440f}{\index{I\-O\-Buffer@{I\-O\-Buffer}!input\-\_\-empty@{input\-\_\-empty}}
+\index{input\-\_\-empty@{input\-\_\-empty}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{input\-\_\-empty}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::input\-\_\-empty (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_aa37ce7a0174b0f1b56e61e2f7e44440f}
+\hypertarget{structIOBuffer_acb4cbf34f5e9a52f1dbe292d68ae7851}{\index{I\-O\-Buffer@{I\-O\-Buffer}!input\-\_\-ptr@{input\-\_\-ptr}}
+\index{input\-\_\-ptr@{input\-\_\-ptr}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{input\-\_\-ptr}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- T$\ast$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::input\-\_\-ptr (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_acb4cbf34f5e9a52f1dbe292d68ae7851}
+\hypertarget{structIOBuffer_a0c65e813f8217b5f71cbc550361e0c77}{\index{I\-O\-Buffer@{I\-O\-Buffer}!output\-\_\-fill\-\_\-fraction@{output\-\_\-fill\-\_\-fraction}}
+\index{output\-\_\-fill\-\_\-fraction@{output\-\_\-fill\-\_\-fraction}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{output\-\_\-fill\-\_\-fraction}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- float {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::output\-\_\-fill\-\_\-fraction (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a0c65e813f8217b5f71cbc550361e0c77}
+\hypertarget{structIOBuffer_ad0de0a595424d38e1bfd3f769671c026}{\index{I\-O\-Buffer@{I\-O\-Buffer}!output\-\_\-fill\-\_\-fraction\-\_\-sync@{output\-\_\-fill\-\_\-fraction\-\_\-sync}}
+\index{output\-\_\-fill\-\_\-fraction\-\_\-sync@{output\-\_\-fill\-\_\-fraction\-\_\-sync}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{output\-\_\-fill\-\_\-fraction\-\_\-sync}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- float {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::output\-\_\-fill\-\_\-fraction\-\_\-sync (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_ad0de0a595424d38e1bfd3f769671c026}
+\hypertarget{structIOBuffer_add5c1f0c7ab74e86e09892a049b9566c}{\index{I\-O\-Buffer@{I\-O\-Buffer}!output\-\_\-full@{output\-\_\-full}}
+\index{output\-\_\-full@{output\-\_\-full}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{output\-\_\-full}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::output\-\_\-full (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_add5c1f0c7ab74e86e09892a049b9566c}
+\hypertarget{structIOBuffer_acfe37ec8792ee74282d550bcc1c44de7}{\index{I\-O\-Buffer@{I\-O\-Buffer}!output\-\_\-ptr@{output\-\_\-ptr}}
+\index{output\-\_\-ptr@{output\-\_\-ptr}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{output\-\_\-ptr}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- T$\ast$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::output\-\_\-ptr (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_acfe37ec8792ee74282d550bcc1c44de7}
+\hypertarget{structIOBuffer_a6abd7ec2cc12a2cfef88977c2a07a64b}{\index{I\-O\-Buffer@{I\-O\-Buffer}!pull@{pull}}
+\index{pull@{pull}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{pull}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::pull (
+\begin{DoxyParamCaption}
+\item[{T \&}]{value}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a6abd7ec2cc12a2cfef88977c2a07a64b}
+\hypertarget{structIOBuffer_a3c3b55ddd33b094eddfd0b889b8d666c}{\index{I\-O\-Buffer@{I\-O\-Buffer}!pull\-\_\-group\-\_\-span@{pull\-\_\-group\-\_\-span}}
+\index{pull\-\_\-group\-\_\-span@{pull\-\_\-group\-\_\-span}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{pull\-\_\-group\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Group\-Array\-Iter}$<$T,{\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::pull\-\_\-group\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{pull\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a3c3b55ddd33b094eddfd0b889b8d666c}
+\hypertarget{structIOBuffer_ae35188cb14fbef4f901a7d3acfa34cfc}{\index{I\-O\-Buffer@{I\-O\-Buffer}!pull\-\_\-idx@{pull\-\_\-idx}}
+\index{pull\-\_\-idx@{pull\-\_\-idx}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{pull\-\_\-idx}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::pull\-\_\-idx (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type} \&}]{index}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_ae35188cb14fbef4f901a7d3acfa34cfc}
+\hypertarget{structIOBuffer_aa553c6ffc098d25dc6b2643bd5ebd20e}{\index{I\-O\-Buffer@{I\-O\-Buffer}!pull\-\_\-span@{pull\-\_\-span}}
+\index{pull\-\_\-span@{pull\-\_\-span}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{pull\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Array\-Iter}$<$T,{\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::pull\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{pull\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_aa553c6ffc098d25dc6b2643bd5ebd20e}
+\hypertarget{structIOBuffer_acd8fa802e97bb4004092402a2353539b}{\index{I\-O\-Buffer@{I\-O\-Buffer}!push@{push}}
+\index{push@{push}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{push}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::push (
+\begin{DoxyParamCaption}
+\item[{T}]{value}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_acd8fa802e97bb4004092402a2353539b}
+\hypertarget{structIOBuffer_a8d17652830a1c99007270f2562a3b58b}{\index{I\-O\-Buffer@{I\-O\-Buffer}!push\-\_\-group\-\_\-span@{push\-\_\-group\-\_\-span}}
+\index{push\-\_\-group\-\_\-span@{push\-\_\-group\-\_\-span}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{push\-\_\-group\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Group\-Array\-Iter}$<$T,{\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::push\-\_\-group\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{push\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a8d17652830a1c99007270f2562a3b58b}
+\hypertarget{structIOBuffer_a7e5cc3a81b677fd0cc35281355dc54d0}{\index{I\-O\-Buffer@{I\-O\-Buffer}!push\-\_\-idx@{push\-\_\-idx}}
+\index{push\-\_\-idx@{push\-\_\-idx}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{push\-\_\-idx}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::push\-\_\-idx (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type} \&}]{index}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a7e5cc3a81b677fd0cc35281355dc54d0}
+\hypertarget{structIOBuffer_a94066f72fe056544daa65fc2043332df}{\index{I\-O\-Buffer@{I\-O\-Buffer}!push\-\_\-span@{push\-\_\-span}}
+\index{push\-\_\-span@{push\-\_\-span}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{push\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Array\-Iter}$<$T,{\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::push\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{push\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structIOBuffer_a94066f72fe056544daa65fc2043332df}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structIOBuffer_a185b9d6fdaa3f937f5b97d18ae813c08}{\index{I\-O\-Buffer@{I\-O\-Buffer}!capacity@{capacity}}
+\index{capacity@{capacity}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{capacity}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ {\bf Iter\-Type} {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::capacity}}\label{structIOBuffer_a185b9d6fdaa3f937f5b97d18ae813c08}
+\hypertarget{structIOBuffer_a64e70fb67768e01a6620bc8ad7964ab0}{\index{I\-O\-Buffer@{I\-O\-Buffer}!data\-\_\-a@{data\-\_\-a}}
+\index{data\-\_\-a@{data\-\_\-a}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{data\-\_\-a}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ T$\ast$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::data\-\_\-a}}\label{structIOBuffer_a64e70fb67768e01a6620bc8ad7964ab0}
+\hypertarget{structIOBuffer_a3c49c40193c6906e051eb89b128ab00f}{\index{I\-O\-Buffer@{I\-O\-Buffer}!data\-\_\-b@{data\-\_\-b}}
+\index{data\-\_\-b@{data\-\_\-b}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{data\-\_\-b}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ T$\ast$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::data\-\_\-b}}\label{structIOBuffer_a3c49c40193c6906e051eb89b128ab00f}
+\hypertarget{structIOBuffer_a76c5930fc902839c06f6dc78b4ad9556}{\index{I\-O\-Buffer@{I\-O\-Buffer}!input\-\_\-iter@{input\-\_\-iter}}
+\index{input\-\_\-iter@{input\-\_\-iter}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{input\-\_\-iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ {\bf Atomic\-Iter}$<${\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::input\-\_\-iter}}\label{structIOBuffer_a76c5930fc902839c06f6dc78b4ad9556}
+\hypertarget{structIOBuffer_aff9c8b064ee173136abd76ff4cbc1e50}{\index{I\-O\-Buffer@{I\-O\-Buffer}!output\-\_\-iter@{output\-\_\-iter}}
+\index{output\-\_\-iter@{output\-\_\-iter}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{output\-\_\-iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ {\bf Atomic\-Iter}$<${\bf Iter\-Type}$>$ {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::output\-\_\-iter}}\label{structIOBuffer_aff9c8b064ee173136abd76ff4cbc1e50}
+\hypertarget{structIOBuffer_a31e25c6353b67da4d9e523de7e4f502b}{\index{I\-O\-Buffer@{I\-O\-Buffer}!toggle@{toggle}}
+\index{toggle@{toggle}!IOBuffer@{I\-O\-Buffer}}
+\subsubsection[{toggle}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E  = unsigned int$>$ bool {\bf I\-O\-Buffer}$<$ T, I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::toggle}}\label{structIOBuffer_a31e25c6353b67da4d9e523de7e4f502b}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{iter_8cpp}{iter.\-cpp}\end{DoxyCompactItemize}

@@ -1,0 +1,144 @@
+\hypertarget{structMemChunk}{\section{Mem\-Chunk$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$ Struct Template Reference}
+\label{structMemChunk}\index{Mem\-Chunk$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$@{Mem\-Chunk$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-N\-D\-E\-X \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index}
+\item 
+typedef M\-A\-S\-K \hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask}
+\item 
+typedef \hyperlink{structMemPool}{Mem\-Pool}$<$ \hyperlink{structMemChunk}{Mem\-Chunk}$<$ T, \\*
+\hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index}, \hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask} $>$, \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} $>$ \hyperlink{structMemChunk_a88683909c81aefbc29e3542d99482545}{Pool\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} \hyperlink{structMemChunk_a07c8fed688981d9968d30b6c91479945}{offset} (\hyperlink{structMemChunk_a88683909c81aefbc29e3542d99482545}{Pool\-Type} \&parent)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structMemChunk_a9a1150a5d3c783b743702508b1d9037a}{full} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structMemChunk_a0a593fae8e1f3ce24ebd4dfbd3fb3cdb}{empty} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structMemChunk_a076fe2699b64d5b5a8681d9dd983cb5c}{fill\-\_\-count} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemChunk_ad1dd808abece2dfbcf4d5b75fa708b28}{Mem\-Chunk} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} \hyperlink{structMemChunk_a7f9f54f94a4d8ee4b254b5dd6c4c8527}{alloc} (\hyperlink{structMemChunk_a88683909c81aefbc29e3542d99482545}{Pool\-Type} \&parent, \hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask} \&rand\-\_\-state)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structMemChunk_ab0bd7ee43d0aaca59fdbc69ad4e8c4e9}{free} (\hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} index, \hyperlink{structMemChunk_a88683909c81aefbc29e3542d99482545}{Pool\-Type} \&parent, \hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask} \&rand\-\_\-state)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask} \hyperlink{structMemChunk_a739baec0d83624ec803a185b16197a41}{fill\-\_\-mask}
+\item 
+T \hyperlink{structMemChunk_a09489aed8564c7ded0a29a029337073f}{data} \mbox{[}\hyperlink{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}{S\-I\-Z\-E}\mbox{]}
+\end{DoxyCompactItemize}
+\subsection*{Static Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+static const \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} \hyperlink{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}{S\-I\-Z\-E} = std\-::numeric\-\_\-limits$<$\hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask}$>$\-::digits
+\item 
+static const \hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask} \hyperlink{structMemChunk_a313702b7ec939b184863aabd61f7b714}{F\-U\-L\-L} = std\-::numeric\-\_\-limits$<$\hyperlink{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{Mask}$>$\-::max()
+\item 
+static const M\-A\-S\-K \hyperlink{structMemChunk_a73881b56059fddd1c7151c205d6d806c}{H\-I\-G\-H\-\_\-\-B\-I\-T} = 1$<$$<$(\hyperlink{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}{S\-I\-Z\-E}-\/1)
+\item 
+static const \hyperlink{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{Index} \hyperlink{structMemChunk_a242fdf6095dc196c2700db11c31cab91}{O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K} = $\sim$(\hyperlink{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}{S\-I\-Z\-E}-\/1)
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}{\index{Mem\-Chunk@{Mem\-Chunk}!Index@{Index}}
+\index{Index@{Index}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{Index}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ typedef I\-N\-D\-E\-X {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::{\bf Index}}}\label{structMemChunk_a8fd5e130634e3d9ea4084153b2a242c8}
+\hypertarget{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}{\index{Mem\-Chunk@{Mem\-Chunk}!Mask@{Mask}}
+\index{Mask@{Mask}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{Mask}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ typedef M\-A\-S\-K {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::{\bf Mask}}}\label{structMemChunk_aee69d5019f70b5b3b7196a60b80fb3ac}
+\hypertarget{structMemChunk_a88683909c81aefbc29e3542d99482545}{\index{Mem\-Chunk@{Mem\-Chunk}!Pool\-Type@{Pool\-Type}}
+\index{Pool\-Type@{Pool\-Type}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{Pool\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ typedef {\bf Mem\-Pool}$<${\bf Mem\-Chunk}$<$T,{\bf Index},{\bf Mask}$>$,{\bf Index}$>$ {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::{\bf Pool\-Type}}}\label{structMemChunk_a88683909c81aefbc29e3542d99482545}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structMemChunk_ad1dd808abece2dfbcf4d5b75fa708b28}{\index{Mem\-Chunk@{Mem\-Chunk}!Mem\-Chunk@{Mem\-Chunk}}
+\index{Mem\-Chunk@{Mem\-Chunk}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{Mem\-Chunk}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::{\bf Mem\-Chunk} (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_ad1dd808abece2dfbcf4d5b75fa708b28}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structMemChunk_a7f9f54f94a4d8ee4b254b5dd6c4c8527}{\index{Mem\-Chunk@{Mem\-Chunk}!alloc@{alloc}}
+\index{alloc@{alloc}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{alloc}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::alloc (
+\begin{DoxyParamCaption}
+\item[{{\bf Pool\-Type} \&}]{parent, }
+\item[{{\bf Mask} \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_a7f9f54f94a4d8ee4b254b5dd6c4c8527}
+\hypertarget{structMemChunk_a0a593fae8e1f3ce24ebd4dfbd3fb3cdb}{\index{Mem\-Chunk@{Mem\-Chunk}!empty@{empty}}
+\index{empty@{empty}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{empty}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::empty (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_a0a593fae8e1f3ce24ebd4dfbd3fb3cdb}
+\hypertarget{structMemChunk_a076fe2699b64d5b5a8681d9dd983cb5c}{\index{Mem\-Chunk@{Mem\-Chunk}!fill\-\_\-count@{fill\-\_\-count}}
+\index{fill\-\_\-count@{fill\-\_\-count}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{fill\-\_\-count}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::fill\-\_\-count (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_a076fe2699b64d5b5a8681d9dd983cb5c}
+\hypertarget{structMemChunk_ab0bd7ee43d0aaca59fdbc69ad4e8c4e9}{\index{Mem\-Chunk@{Mem\-Chunk}!free@{free}}
+\index{free@{free}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{free}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::free (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{index, }
+\item[{{\bf Pool\-Type} \&}]{parent, }
+\item[{{\bf Mask} \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_ab0bd7ee43d0aaca59fdbc69ad4e8c4e9}
+\hypertarget{structMemChunk_a9a1150a5d3c783b743702508b1d9037a}{\index{Mem\-Chunk@{Mem\-Chunk}!full@{full}}
+\index{full@{full}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{full}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::full (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_a9a1150a5d3c783b743702508b1d9037a}
+\hypertarget{structMemChunk_a07c8fed688981d9968d30b6c91479945}{\index{Mem\-Chunk@{Mem\-Chunk}!offset@{offset}}
+\index{offset@{offset}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{offset}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::offset (
+\begin{DoxyParamCaption}
+\item[{{\bf Pool\-Type} \&}]{parent}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemChunk_a07c8fed688981d9968d30b6c91479945}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structMemChunk_a09489aed8564c7ded0a29a029337073f}{\index{Mem\-Chunk@{Mem\-Chunk}!data@{data}}
+\index{data@{data}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{data}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ T {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::data\mbox{[}{\bf S\-I\-Z\-E}\mbox{]}}}\label{structMemChunk_a09489aed8564c7ded0a29a029337073f}
+\hypertarget{structMemChunk_a739baec0d83624ec803a185b16197a41}{\index{Mem\-Chunk@{Mem\-Chunk}!fill\-\_\-mask@{fill\-\_\-mask}}
+\index{fill\-\_\-mask@{fill\-\_\-mask}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{fill\-\_\-mask}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ {\bf Mask} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::fill\-\_\-mask}}\label{structMemChunk_a739baec0d83624ec803a185b16197a41}
+\hypertarget{structMemChunk_a313702b7ec939b184863aabd61f7b714}{\index{Mem\-Chunk@{Mem\-Chunk}!F\-U\-L\-L@{F\-U\-L\-L}}
+\index{F\-U\-L\-L@{F\-U\-L\-L}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{F\-U\-L\-L}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ const {\bf Mask} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::F\-U\-L\-L = std\-::numeric\-\_\-limits$<${\bf Mask}$>$\-::max()\hspace{0.3cm}{\ttfamily [static]}}}\label{structMemChunk_a313702b7ec939b184863aabd61f7b714}
+\hypertarget{structMemChunk_a73881b56059fddd1c7151c205d6d806c}{\index{Mem\-Chunk@{Mem\-Chunk}!H\-I\-G\-H\-\_\-\-B\-I\-T@{H\-I\-G\-H\-\_\-\-B\-I\-T}}
+\index{H\-I\-G\-H\-\_\-\-B\-I\-T@{H\-I\-G\-H\-\_\-\-B\-I\-T}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{H\-I\-G\-H\-\_\-\-B\-I\-T}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ const M\-A\-S\-K {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::H\-I\-G\-H\-\_\-\-B\-I\-T = 1$<$$<$({\bf S\-I\-Z\-E}-\/1)\hspace{0.3cm}{\ttfamily [static]}}}\label{structMemChunk_a73881b56059fddd1c7151c205d6d806c}
+\hypertarget{structMemChunk_a242fdf6095dc196c2700db11c31cab91}{\index{Mem\-Chunk@{Mem\-Chunk}!O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K@{O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K}}
+\index{O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K@{O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ const {\bf Index} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::O\-F\-F\-S\-E\-T\-\_\-\-M\-A\-S\-K = $\sim$({\bf S\-I\-Z\-E}-\/1)\hspace{0.3cm}{\ttfamily [static]}}}\label{structMemChunk_a242fdf6095dc196c2700db11c31cab91}
+\hypertarget{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}{\index{Mem\-Chunk@{Mem\-Chunk}!S\-I\-Z\-E@{S\-I\-Z\-E}}
+\index{S\-I\-Z\-E@{S\-I\-Z\-E}!MemChunk@{Mem\-Chunk}}
+\subsubsection[{S\-I\-Z\-E}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K  = unsigned int$>$ const {\bf Index} {\bf Mem\-Chunk}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K $>$\-::S\-I\-Z\-E = std\-::numeric\-\_\-limits$<${\bf Mask}$>$\-::digits\hspace{0.3cm}{\ttfamily [static]}}}\label{structMemChunk_a9f2b3f4f9c9d0b019f287be6796e2da3}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{mem_8cpp}{mem.\-cpp}\end{DoxyCompactItemize}

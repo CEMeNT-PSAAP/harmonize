@@ -1,0 +1,75 @@
+\hypertarget{structWorkLink}{\section{Work\-Link$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$ Struct Template Reference}
+\label{structWorkLink}\index{Work\-Link$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$@{Work\-Link$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef A\-D\-R\-\_\-\-T\-Y\-P\-E \hyperlink{structWorkLink_a62a19d1e475a79a2e21b751e4ee01f5c}{Adr\-Type}
+\item 
+typedef P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N \hyperlink{structWorkLink_ac1a9b55ec7f766327f5178b77fe9deeb}{Promise\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structWorkLink_a362758ce6793ce3e9656a8cdd9ef2834}{empty} (\hyperlink{structWorkLink_a62a19d1e475a79a2e21b751e4ee01f5c}{Adr\-Type} next\-\_\-adr)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\hyperlink{structWorkLink_ac1a9b55ec7f766327f5178b77fe9deeb}{Promise\-Type} \hyperlink{structWorkLink_a029f445c939f7a43774ccdab440ee5ee}{promises} \mbox{[}G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E\mbox{]}
+\item 
+\hyperlink{structWorkLink_a62a19d1e475a79a2e21b751e4ee01f5c}{Adr\-Type} \hyperlink{structWorkLink_a12cf1c876e6e92a05f0eeef007d5015a}{next}
+\item 
+unsigned int \hyperlink{structWorkLink_ae81eecf9eb40d41538ed2127ccddc5e4}{meta\-\_\-data}
+\item 
+Fn \hyperlink{structWorkLink_ac697b370e9710f8c2034eb2ba02f46a5}{id}
+\item 
+unsigned short \hyperlink{structWorkLink_a27d203a11b0a67752aad8b698345feae}{count}
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+\subsubsection*{template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$struct Work\-Link$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$}
+
+The {\ttfamily \hyperlink{structWorkLink}{Work\-Link}} template struct, given a {\ttfamily \hyperlink{unionPromiseUnion}{Promise\-Union}} union, an address type, and a group size, stores an array of {\ttfamily G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E} promise unions of the corresponding type and an address value of type {\ttfamily A\-D\-R\-\_\-\-T\-Y\-P\-E}. Instances of this template also contain a {\ttfamily Fn} value to identify what type of work is contained within the link, a {\ttfamily meta\-\_\-data} field, and a {\ttfamily count} field to indicate the number of contained promises. 
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structWorkLink_a62a19d1e475a79a2e21b751e4ee01f5c}{\index{Work\-Link@{Work\-Link}!Adr\-Type@{Adr\-Type}}
+\index{Adr\-Type@{Adr\-Type}!WorkLink@{Work\-Link}}
+\subsubsection[{Adr\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ typedef A\-D\-R\-\_\-\-T\-Y\-P\-E {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::{\bf Adr\-Type}}}\label{structWorkLink_a62a19d1e475a79a2e21b751e4ee01f5c}
+\hypertarget{structWorkLink_ac1a9b55ec7f766327f5178b77fe9deeb}{\index{Work\-Link@{Work\-Link}!Promise\-Type@{Promise\-Type}}
+\index{Promise\-Type@{Promise\-Type}!WorkLink@{Work\-Link}}
+\subsubsection[{Promise\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ typedef P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::{\bf Promise\-Type}}}\label{structWorkLink_ac1a9b55ec7f766327f5178b77fe9deeb}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structWorkLink_a362758ce6793ce3e9656a8cdd9ef2834}{\index{Work\-Link@{Work\-Link}!empty@{empty}}
+\index{empty@{empty}!WorkLink@{Work\-Link}}
+\subsubsection[{empty}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::empty (
+\begin{DoxyParamCaption}
+\item[{{\bf Adr\-Type}}]{next\-\_\-adr}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structWorkLink_a362758ce6793ce3e9656a8cdd9ef2834}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structWorkLink_a27d203a11b0a67752aad8b698345feae}{\index{Work\-Link@{Work\-Link}!count@{count}}
+\index{count@{count}!WorkLink@{Work\-Link}}
+\subsubsection[{count}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ unsigned short {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::count}}\label{structWorkLink_a27d203a11b0a67752aad8b698345feae}
+\hypertarget{structWorkLink_ac697b370e9710f8c2034eb2ba02f46a5}{\index{Work\-Link@{Work\-Link}!id@{id}}
+\index{id@{id}!WorkLink@{Work\-Link}}
+\subsubsection[{id}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ Fn {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::id}}\label{structWorkLink_ac697b370e9710f8c2034eb2ba02f46a5}
+\hypertarget{structWorkLink_ae81eecf9eb40d41538ed2127ccddc5e4}{\index{Work\-Link@{Work\-Link}!meta\-\_\-data@{meta\-\_\-data}}
+\index{meta\-\_\-data@{meta\-\_\-data}!WorkLink@{Work\-Link}}
+\subsubsection[{meta\-\_\-data}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ unsigned int {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::meta\-\_\-data}}\label{structWorkLink_ae81eecf9eb40d41538ed2127ccddc5e4}
+\hypertarget{structWorkLink_a12cf1c876e6e92a05f0eeef007d5015a}{\index{Work\-Link@{Work\-Link}!next@{next}}
+\index{next@{next}!WorkLink@{Work\-Link}}
+\subsubsection[{next}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ {\bf Adr\-Type} {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::next}}\label{structWorkLink_a12cf1c876e6e92a05f0eeef007d5015a}
+\hypertarget{structWorkLink_a029f445c939f7a43774ccdab440ee5ee}{\index{Work\-Link@{Work\-Link}!promises@{promises}}
+\index{promises@{promises}!WorkLink@{Work\-Link}}
+\subsubsection[{promises}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, typename A\-D\-R\-\_\-\-T\-Y\-P\-E, size\-\_\-t G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E$>$ {\bf Promise\-Type} {\bf Work\-Link}$<$ P\-R\-O\-M\-I\-S\-E\-\_\-\-U\-N\-I\-O\-N, A\-D\-R\-\_\-\-T\-Y\-P\-E, G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E $>$\-::promises\mbox{[}G\-R\-O\-U\-P\-\_\-\-S\-I\-Z\-E\mbox{]}}}\label{structWorkLink_a029f445c939f7a43774ccdab440ee5ee}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/\hyperlink{harmonize_8cpp}{harmonize.\-cpp}\end{DoxyCompactItemize}

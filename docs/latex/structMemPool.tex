@@ -1,0 +1,199 @@
+\hypertarget{structMemPool}{\section{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$ Struct Template Reference}
+\label{structMemPool}\index{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$@{Mem\-Pool$<$ T, I\-N\-D\-E\-X $>$}}
+}
+\subsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+union \hyperlink{unionMemPool_1_1Link}{Link}
+\end{DoxyCompactItemize}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-N\-D\-E\-X \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index}
+\item 
+typedef \hyperlink{structAdr}{Adr}$<$ \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} $>$ \hyperlink{structMemPool_a62addfe04ad9f092442cf86863f52fcc}{Adr\-Type}
+\item 
+typedef \hyperlink{structPoolQueue}{Pool\-Queue}$<$ \hyperlink{structMemPool_a62addfe04ad9f092442cf86863f52fcc}{Adr\-Type} $>$ \hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{structMemPool_ac3ad49fa7037c1f7ee36c82e8c1ea965}{host\-\_\-init} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{structMemPool_a3bb2fee529a330549aba7af05ad767c3}{host\-\_\-free} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{structMemPool_a470b68b4976333111773be8751b24a9a}{next\-\_\-print} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- \hyperlink{structMemPool_a7ec40c2406b040e7c1488ea0eb176a17}{Mem\-Pool} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} as, \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} ps)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- T \& \hyperlink{structMemPool_aa2b0b8b9ed86056d49fa8de145e3d27f}{operator\mbox{[}$\,$\mbox{]}} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} index)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} \hyperlink{structMemPool_a49ae0d6199a1e435e06136c61a88e155}{pop\-\_\-front} (\hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} \&queue)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} \hyperlink{structMemPool_a8a7089a4cb741cb6244d1192a90e3fc9}{join} (\hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} dst, \hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} src)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} \hyperlink{structMemPool_a8659b0901774035def7caca7b0032546}{pull\-\_\-queue} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} \&pull\-\_\-idx)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structMemPool_a8a233b3a03a286ecc7a7b1f5dc4dedcd}{push\-\_\-queue} (\hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} queue, \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} push\-\_\-idx)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} \hyperlink{structMemPool_ac8e3fca0c4657642e06cba7e393c7be7}{pull\-\_\-span} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} $\ast$dst, \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} count, unsigned int \&rand\-\_\-state)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structMemPool_acf1f6f80c1f7ebb2b50bb9d4af619abb}{push\-\_\-span} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} $\ast$src, \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} count, unsigned int \&rand\-\_\-state)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} \hyperlink{structMemPool_a1f02b879780bf1dff7ab3b86263824d4}{alloc} (unsigned int \&rand\-\_\-state)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structMemPool_aca9a7fd23bcb95c111267683ffb17b35}{free} (\hyperlink{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{Index} index, unsigned int \&rand\-\_\-state)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+const unsigned int \hyperlink{structMemPool_a9f0113977dc6ebc1f99aeac36455d49d}{R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T} = 32
+\item 
+\hyperlink{unionMemPool_1_1Link}{Link} $\ast$ \hyperlink{structMemPool_affe7fe7c80536562358f79d4ff41a92b}{arena}
+\item 
+\hyperlink{structMemPool_a62addfe04ad9f092442cf86863f52fcc}{Adr\-Type} \hyperlink{structMemPool_a3bfcf6da58b80b102be1ec4f4f5b424a}{arena\-\_\-size}
+\item 
+\hyperlink{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{Queue\-Type} $\ast$ \hyperlink{structMemPool_a50e7e330c2733a1ed0fc48d090c8d7e7}{pool}
+\item 
+\hyperlink{structMemPool_a62addfe04ad9f092442cf86863f52fcc}{Adr\-Type} \hyperlink{structMemPool_a7d96890dc6b226996b58974a633cea75}{pool\-\_\-size}
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structMemPool_a62addfe04ad9f092442cf86863f52fcc}{\index{Mem\-Pool@{Mem\-Pool}!Adr\-Type@{Adr\-Type}}
+\index{Adr\-Type@{Adr\-Type}!MemPool@{Mem\-Pool}}
+\subsubsection[{Adr\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ typedef {\bf Adr}$<${\bf Index}$>$ {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::{\bf Adr\-Type}}}\label{structMemPool_a62addfe04ad9f092442cf86863f52fcc}
+\hypertarget{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}{\index{Mem\-Pool@{Mem\-Pool}!Index@{Index}}
+\index{Index@{Index}!MemPool@{Mem\-Pool}}
+\subsubsection[{Index}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ typedef I\-N\-D\-E\-X {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::{\bf Index}}}\label{structMemPool_adf9fcd1cb44028899c45761a29b7d43f}
+\hypertarget{structMemPool_a6044c1fc80a16b30462127a56e47ab98}{\index{Mem\-Pool@{Mem\-Pool}!Queue\-Type@{Queue\-Type}}
+\index{Queue\-Type@{Queue\-Type}!MemPool@{Mem\-Pool}}
+\subsubsection[{Queue\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ typedef {\bf Pool\-Queue}$<${\bf Adr\-Type}$>$ {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::{\bf Queue\-Type}}}\label{structMemPool_a6044c1fc80a16b30462127a56e47ab98}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structMemPool_a7ec40c2406b040e7c1488ea0eb176a17}{\index{Mem\-Pool@{Mem\-Pool}!Mem\-Pool@{Mem\-Pool}}
+\index{Mem\-Pool@{Mem\-Pool}!MemPool@{Mem\-Pool}}
+\subsubsection[{Mem\-Pool}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-host\-\_\-\-\_\- {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::{\bf Mem\-Pool} (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{as, }
+\item[{{\bf Index}}]{ps}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a7ec40c2406b040e7c1488ea0eb176a17}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structMemPool_a1f02b879780bf1dff7ab3b86263824d4}{\index{Mem\-Pool@{Mem\-Pool}!alloc@{alloc}}
+\index{alloc@{alloc}!MemPool@{Mem\-Pool}}
+\subsubsection[{alloc}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::alloc (
+\begin{DoxyParamCaption}
+\item[{unsigned int \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a1f02b879780bf1dff7ab3b86263824d4}
+\hypertarget{structMemPool_aca9a7fd23bcb95c111267683ffb17b35}{\index{Mem\-Pool@{Mem\-Pool}!free@{free}}
+\index{free@{free}!MemPool@{Mem\-Pool}}
+\subsubsection[{free}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::free (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{index, }
+\item[{unsigned int \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_aca9a7fd23bcb95c111267683ffb17b35}
+\hypertarget{structMemPool_a3bb2fee529a330549aba7af05ad767c3}{\index{Mem\-Pool@{Mem\-Pool}!host\-\_\-free@{host\-\_\-free}}
+\index{host\-\_\-free@{host\-\_\-free}!MemPool@{Mem\-Pool}}
+\subsubsection[{host\-\_\-free}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::host\-\_\-free (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a3bb2fee529a330549aba7af05ad767c3}
+\hypertarget{structMemPool_ac3ad49fa7037c1f7ee36c82e8c1ea965}{\index{Mem\-Pool@{Mem\-Pool}!host\-\_\-init@{host\-\_\-init}}
+\index{host\-\_\-init@{host\-\_\-init}!MemPool@{Mem\-Pool}}
+\subsubsection[{host\-\_\-init}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::host\-\_\-init (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_ac3ad49fa7037c1f7ee36c82e8c1ea965}
+\hypertarget{structMemPool_a8a7089a4cb741cb6244d1192a90e3fc9}{\index{Mem\-Pool@{Mem\-Pool}!join@{join}}
+\index{join@{join}!MemPool@{Mem\-Pool}}
+\subsubsection[{join}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Queue\-Type} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::join (
+\begin{DoxyParamCaption}
+\item[{{\bf Queue\-Type}}]{dst, }
+\item[{{\bf Queue\-Type}}]{src}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a8a7089a4cb741cb6244d1192a90e3fc9}
+\hypertarget{structMemPool_a470b68b4976333111773be8751b24a9a}{\index{Mem\-Pool@{Mem\-Pool}!next\-\_\-print@{next\-\_\-print}}
+\index{next\-\_\-print@{next\-\_\-print}!MemPool@{Mem\-Pool}}
+\subsubsection[{next\-\_\-print}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::next\-\_\-print (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a470b68b4976333111773be8751b24a9a}
+\hypertarget{structMemPool_aa2b0b8b9ed86056d49fa8de145e3d27f}{\index{Mem\-Pool@{Mem\-Pool}!operator\mbox{[}$\,$\mbox{]}@{operator[]}}
+\index{operator\mbox{[}$\,$\mbox{]}@{operator[]}!MemPool@{Mem\-Pool}}
+\subsubsection[{operator[]}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- T\& {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::operator\mbox{[}$\,$\mbox{]} (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{index}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_aa2b0b8b9ed86056d49fa8de145e3d27f}
+\hypertarget{structMemPool_a49ae0d6199a1e435e06136c61a88e155}{\index{Mem\-Pool@{Mem\-Pool}!pop\-\_\-front@{pop\-\_\-front}}
+\index{pop\-\_\-front@{pop\-\_\-front}!MemPool@{Mem\-Pool}}
+\subsubsection[{pop\-\_\-front}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::pop\-\_\-front (
+\begin{DoxyParamCaption}
+\item[{{\bf Queue\-Type} \&}]{queue}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a49ae0d6199a1e435e06136c61a88e155}
+\hypertarget{structMemPool_a8659b0901774035def7caca7b0032546}{\index{Mem\-Pool@{Mem\-Pool}!pull\-\_\-queue@{pull\-\_\-queue}}
+\index{pull\-\_\-queue@{pull\-\_\-queue}!MemPool@{Mem\-Pool}}
+\subsubsection[{pull\-\_\-queue}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Queue\-Type} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::pull\-\_\-queue (
+\begin{DoxyParamCaption}
+\item[{{\bf Index} \&}]{pull\-\_\-idx}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a8659b0901774035def7caca7b0032546}
+\hypertarget{structMemPool_ac8e3fca0c4657642e06cba7e393c7be7}{\index{Mem\-Pool@{Mem\-Pool}!pull\-\_\-span@{pull\-\_\-span}}
+\index{pull\-\_\-span@{pull\-\_\-span}!MemPool@{Mem\-Pool}}
+\subsubsection[{pull\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::pull\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Index} $\ast$}]{dst, }
+\item[{{\bf Index}}]{count, }
+\item[{unsigned int \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_ac8e3fca0c4657642e06cba7e393c7be7}
+\hypertarget{structMemPool_a8a233b3a03a286ecc7a7b1f5dc4dedcd}{\index{Mem\-Pool@{Mem\-Pool}!push\-\_\-queue@{push\-\_\-queue}}
+\index{push\-\_\-queue@{push\-\_\-queue}!MemPool@{Mem\-Pool}}
+\subsubsection[{push\-\_\-queue}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::push\-\_\-queue (
+\begin{DoxyParamCaption}
+\item[{{\bf Queue\-Type}}]{queue, }
+\item[{{\bf Index}}]{push\-\_\-idx}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_a8a233b3a03a286ecc7a7b1f5dc4dedcd}
+\hypertarget{structMemPool_acf1f6f80c1f7ebb2b50bb9d4af619abb}{\index{Mem\-Pool@{Mem\-Pool}!push\-\_\-span@{push\-\_\-span}}
+\index{push\-\_\-span@{push\-\_\-span}!MemPool@{Mem\-Pool}}
+\subsubsection[{push\-\_\-span}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::push\-\_\-span (
+\begin{DoxyParamCaption}
+\item[{{\bf Index} $\ast$}]{src, }
+\item[{{\bf Index}}]{count, }
+\item[{unsigned int \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPool_acf1f6f80c1f7ebb2b50bb9d4af619abb}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structMemPool_affe7fe7c80536562358f79d4ff41a92b}{\index{Mem\-Pool@{Mem\-Pool}!arena@{arena}}
+\index{arena@{arena}!MemPool@{Mem\-Pool}}
+\subsubsection[{arena}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ {\bf Link}$\ast$ {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::arena}}\label{structMemPool_affe7fe7c80536562358f79d4ff41a92b}
+\hypertarget{structMemPool_a3bfcf6da58b80b102be1ec4f4f5b424a}{\index{Mem\-Pool@{Mem\-Pool}!arena\-\_\-size@{arena\-\_\-size}}
+\index{arena\-\_\-size@{arena\-\_\-size}!MemPool@{Mem\-Pool}}
+\subsubsection[{arena\-\_\-size}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ {\bf Adr\-Type} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::arena\-\_\-size}}\label{structMemPool_a3bfcf6da58b80b102be1ec4f4f5b424a}
+\hypertarget{structMemPool_a50e7e330c2733a1ed0fc48d090c8d7e7}{\index{Mem\-Pool@{Mem\-Pool}!pool@{pool}}
+\index{pool@{pool}!MemPool@{Mem\-Pool}}
+\subsubsection[{pool}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ {\bf Queue\-Type}$\ast$ {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::pool}}\label{structMemPool_a50e7e330c2733a1ed0fc48d090c8d7e7}
+\hypertarget{structMemPool_a7d96890dc6b226996b58974a633cea75}{\index{Mem\-Pool@{Mem\-Pool}!pool\-\_\-size@{pool\-\_\-size}}
+\index{pool\-\_\-size@{pool\-\_\-size}!MemPool@{Mem\-Pool}}
+\subsubsection[{pool\-\_\-size}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ {\bf Adr\-Type} {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::pool\-\_\-size}}\label{structMemPool_a7d96890dc6b226996b58974a633cea75}
+\hypertarget{structMemPool_a9f0113977dc6ebc1f99aeac36455d49d}{\index{Mem\-Pool@{Mem\-Pool}!R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T@{R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T}}
+\index{R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T@{R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T}!MemPool@{Mem\-Pool}}
+\subsubsection[{R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X $>$ const unsigned int {\bf Mem\-Pool}$<$ T, I\-N\-D\-E\-X $>$\-::R\-E\-T\-R\-Y\-\_\-\-C\-O\-U\-N\-T = 32}}\label{structMemPool_a9f0113977dc6ebc1f99aeac36455d49d}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{mem_8cpp}{mem.\-cpp}\end{DoxyCompactItemize}

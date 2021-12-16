@@ -1,0 +1,145 @@
+\hypertarget{classutil_1_1DevBuf}{\section{util\-:\-:Dev\-Buf$<$ T $>$ Class Template Reference}
+\label{classutil_1_1DevBuf}\index{util\-::\-Dev\-Buf$<$ T $>$@{util\-::\-Dev\-Buf$<$ T $>$}}
+}
+\subsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+struct \hyperlink{structutil_1_1DevBuf_1_1Inner}{Inner}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\hyperlink{classutil_1_1DevBuf_af6065c6e44f96318738890a660629aba}{operator T $\ast$\&} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{classutil_1_1DevBuf_a32a463d0fae541627b603a4b92ebf5aa}{resize} (size\-\_\-t s)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{classutil_1_1DevBuf_a5d59088bf48ff1d70f726e7d936fbdf5}{operator$<$$<$} (std\-::vector$<$ T $>$ \&other)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{classutil_1_1DevBuf_aa23e050c8ad6879a1d416f87b9753cf8}{operator$>$$>$} (std\-::vector$<$ T $>$ \&other)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{classutil_1_1DevBuf_a2c49ae40b17a9d77e70573e4693eb833}{operator$<$$<$} (T \&other)
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- void \hyperlink{classutil_1_1DevBuf_a6c12d838fcb51c93d74333dc5a252d95}{operator$<$$<$} (T \&\&other)
+\item 
+\hyperlink{classutil_1_1DevBuf_a0e3bb1f1e48a6b4c89e965fe1010577c}{Dev\-Buf} (T $\ast$adr, size\-\_\-t size)
+\item 
+\hyperlink{classutil_1_1DevBuf_ab238acdc3b2950e64b8a52714396fd7c}{Dev\-Buf} ()
+\item 
+\hyperlink{classutil_1_1DevBuf_abf7280b28a217b83c303f2a8d6bb32c6}{Dev\-Buf} (size\-\_\-t size)
+\item 
+\hyperlink{classutil_1_1DevBuf_a73af621d5394f284681cb6c3d2475d98}{Dev\-Buf} (T \&value)
+\item 
+\hyperlink{classutil_1_1DevBuf_a793ec131bd4cc678d0c29b269053ca2c}{Dev\-Buf} (T \&\&value)
+\end{DoxyCompactItemize}
+\subsection*{Static Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$typename... A\-R\-G\-S$>$ }\\static \hyperlink{classutil_1_1DevBuf}{Dev\-Buf}$<$ T $>$ \hyperlink{classutil_1_1DevBuf_a40e4485296d3d8c5d998458a5028dacb}{make} (A\-R\-G\-S...\-args)
+\end{DoxyCompactItemize}
+\subsection*{Protected Attributes}
+\begin{DoxyCompactItemize}
+\item 
+std\-::shared\-\_\-ptr$<$ \hyperlink{structutil_1_1DevBuf_1_1Inner}{Inner} $>$ \hyperlink{classutil_1_1DevBuf_a66d9570dd95c6000ba401a2e4a17fcb7}{inner}
+\end{DoxyCompactItemize}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{classutil_1_1DevBuf_a0e3bb1f1e48a6b4c89e965fe1010577c}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!Dev\-Buf@{Dev\-Buf}}
+\index{Dev\-Buf@{Dev\-Buf}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{Dev\-Buf}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::{\bf Dev\-Buf} (
+\begin{DoxyParamCaption}
+\item[{T $\ast$}]{adr, }
+\item[{size\-\_\-t}]{size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a0e3bb1f1e48a6b4c89e965fe1010577c}
+\hypertarget{classutil_1_1DevBuf_ab238acdc3b2950e64b8a52714396fd7c}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!Dev\-Buf@{Dev\-Buf}}
+\index{Dev\-Buf@{Dev\-Buf}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{Dev\-Buf}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::{\bf Dev\-Buf} (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_ab238acdc3b2950e64b8a52714396fd7c}
+\hypertarget{classutil_1_1DevBuf_abf7280b28a217b83c303f2a8d6bb32c6}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!Dev\-Buf@{Dev\-Buf}}
+\index{Dev\-Buf@{Dev\-Buf}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{Dev\-Buf}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::{\bf Dev\-Buf} (
+\begin{DoxyParamCaption}
+\item[{size\-\_\-t}]{size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_abf7280b28a217b83c303f2a8d6bb32c6}
+\hypertarget{classutil_1_1DevBuf_a73af621d5394f284681cb6c3d2475d98}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!Dev\-Buf@{Dev\-Buf}}
+\index{Dev\-Buf@{Dev\-Buf}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{Dev\-Buf}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::{\bf Dev\-Buf} (
+\begin{DoxyParamCaption}
+\item[{T \&}]{value}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a73af621d5394f284681cb6c3d2475d98}
+\hypertarget{classutil_1_1DevBuf_a793ec131bd4cc678d0c29b269053ca2c}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!Dev\-Buf@{Dev\-Buf}}
+\index{Dev\-Buf@{Dev\-Buf}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{Dev\-Buf}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::{\bf Dev\-Buf} (
+\begin{DoxyParamCaption}
+\item[{T \&\&}]{value}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a793ec131bd4cc678d0c29b269053ca2c}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{classutil_1_1DevBuf_a40e4485296d3d8c5d998458a5028dacb}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!make@{make}}
+\index{make@{make}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{make}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ template$<$typename... A\-R\-G\-S$>$ static {\bf Dev\-Buf}$<$T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::make (
+\begin{DoxyParamCaption}
+\item[{A\-R\-G\-S...}]{args}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [static]}}}\label{classutil_1_1DevBuf_a40e4485296d3d8c5d998458a5028dacb}
+\hypertarget{classutil_1_1DevBuf_af6065c6e44f96318738890a660629aba}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!operator T $\ast$\&@{operator T $\ast$\&}}
+\index{operator T $\ast$\&@{operator T $\ast$\&}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{operator T $\ast$\&}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::operator T $\ast$\& (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_af6065c6e44f96318738890a660629aba}
+\hypertarget{classutil_1_1DevBuf_a5d59088bf48ff1d70f726e7d936fbdf5}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!operator$<$$<$@{operator$<$$<$}}
+\index{operator$<$$<$@{operator$<$$<$}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{operator$<$$<$}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::operator$<$$<$ (
+\begin{DoxyParamCaption}
+\item[{std\-::vector$<$ T $>$ \&}]{other}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a5d59088bf48ff1d70f726e7d936fbdf5}
+\hypertarget{classutil_1_1DevBuf_a2c49ae40b17a9d77e70573e4693eb833}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!operator$<$$<$@{operator$<$$<$}}
+\index{operator$<$$<$@{operator$<$$<$}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{operator$<$$<$}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::operator$<$$<$ (
+\begin{DoxyParamCaption}
+\item[{T \&}]{other}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a2c49ae40b17a9d77e70573e4693eb833}
+\hypertarget{classutil_1_1DevBuf_a6c12d838fcb51c93d74333dc5a252d95}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!operator$<$$<$@{operator$<$$<$}}
+\index{operator$<$$<$@{operator$<$$<$}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{operator$<$$<$}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::operator$<$$<$ (
+\begin{DoxyParamCaption}
+\item[{T \&\&}]{other}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a6c12d838fcb51c93d74333dc5a252d95}
+\hypertarget{classutil_1_1DevBuf_aa23e050c8ad6879a1d416f87b9753cf8}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!operator$>$$>$@{operator$>$$>$}}
+\index{operator$>$$>$@{operator$>$$>$}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{operator$>$$>$}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::operator$>$$>$ (
+\begin{DoxyParamCaption}
+\item[{std\-::vector$<$ T $>$ \&}]{other}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_aa23e050c8ad6879a1d416f87b9753cf8}
+\hypertarget{classutil_1_1DevBuf_a32a463d0fae541627b603a4b92ebf5aa}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!resize@{resize}}
+\index{resize@{resize}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{resize}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ \-\_\-\-\_\-host\-\_\-\-\_\- void {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::resize (
+\begin{DoxyParamCaption}
+\item[{size\-\_\-t}]{s}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{classutil_1_1DevBuf_a32a463d0fae541627b603a4b92ebf5aa}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{classutil_1_1DevBuf_a66d9570dd95c6000ba401a2e4a17fcb7}{\index{util\-::\-Dev\-Buf@{util\-::\-Dev\-Buf}!inner@{inner}}
+\index{inner@{inner}!util::DevBuf@{util\-::\-Dev\-Buf}}
+\subsubsection[{inner}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T$>$ std\-::shared\-\_\-ptr$<${\bf Inner}$>$ {\bf util\-::\-Dev\-Buf}$<$ T $>$\-::inner\hspace{0.3cm}{\ttfamily [protected]}}}\label{classutil_1_1DevBuf_a66d9570dd95c6000ba401a2e4a17fcb7}
+
+
+The documentation for this class was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{host_8cpp}{host.\-cpp}\end{DoxyCompactItemize}

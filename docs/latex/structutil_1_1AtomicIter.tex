@@ -1,0 +1,109 @@
+\hypertarget{structutil_1_1AtomicIter}{\section{util\-:\-:Atomic\-Iter$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$ Struct Template Reference}
+\label{structutil_1_1AtomicIter}\index{util\-::\-Atomic\-Iter$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$@{util\-::\-Atomic\-Iter$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E \hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structutil_1_1AtomicIter_ae164e1cc98ab2757a20a15b5de55be1c}{reset} (\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} start\-\_\-val, \hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} limit\-\_\-val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structutil_1_1GroupIter}{Group\-Iter}$<$ \hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} $>$ \hyperlink{structutil_1_1AtomicIter_a3a83058a5cc2e21a3ab4e0bf405a8c40}{group\-\_\-leap} (\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} leap\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structutil_1_1Iter}{Iter}$<$ \hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} $>$ \hyperlink{structutil_1_1AtomicIter_abf686270fbc4270b2ab075ad996c8444}{leap} (\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} leap\-\_\-size)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structutil_1_1AtomicIter_a28f37a53706b452867b492858031acf7}{step} (\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} \&iter\-\_\-val)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- bool \hyperlink{structutil_1_1AtomicIter_a4bb7226bbe3bd53ba97a03d301cd3822}{done} () const 
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structutil_1_1AtomicIter_ace0bc96d7b0193019f054f5ab44b6081}{Atomic\-Iter} ()
+\item 
+\-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structutil_1_1AtomicIter_ae03206bbcce799972e6fc2b3583d7047}{Atomic\-Iter} (\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} start\-\_\-val, \hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} limit\-\_\-val)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} \hyperlink{structutil_1_1AtomicIter_a774c1053e1735c852e7bdcf008ca403b}{value}
+\item 
+\hyperlink{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{Iter\-Type} \hyperlink{structutil_1_1AtomicIter_aa793192cf4d1a784e36512ab58d366e7}{limit}
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!Iter\-Type@{Iter\-Type}}
+\index{Iter\-Type@{Iter\-Type}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{Iter\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ typedef I\-T\-E\-R\-\_\-\-T\-Y\-P\-E {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Iter\-Type}}}\label{structutil_1_1AtomicIter_acc67d8bb75f4998782b2f8643ff5abc4}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structutil_1_1AtomicIter_ace0bc96d7b0193019f054f5ab44b6081}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!Atomic\-Iter@{Atomic\-Iter}}
+\index{Atomic\-Iter@{Atomic\-Iter}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{Atomic\-Iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Atomic\-Iter} (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_ace0bc96d7b0193019f054f5ab44b6081}
+\hypertarget{structutil_1_1AtomicIter_ae03206bbcce799972e6fc2b3583d7047}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!Atomic\-Iter@{Atomic\-Iter}}
+\index{Atomic\-Iter@{Atomic\-Iter}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{Atomic\-Iter}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-host\-\_\-\-\_\- \-\_\-\-\_\-device\-\_\-\-\_\- {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Atomic\-Iter} (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{start\-\_\-val, }
+\item[{{\bf Iter\-Type}}]{limit\-\_\-val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_ae03206bbcce799972e6fc2b3583d7047}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structutil_1_1AtomicIter_a4bb7226bbe3bd53ba97a03d301cd3822}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!done@{done}}
+\index{done@{done}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{done}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::done (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+) const\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_a4bb7226bbe3bd53ba97a03d301cd3822}
+\hypertarget{structutil_1_1AtomicIter_a3a83058a5cc2e21a3ab4e0bf405a8c40}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!group\-\_\-leap@{group\-\_\-leap}}
+\index{group\-\_\-leap@{group\-\_\-leap}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{group\-\_\-leap}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Group\-Iter}$<${\bf Iter\-Type}$>$ {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::group\-\_\-leap (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{leap\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_a3a83058a5cc2e21a3ab4e0bf405a8c40}
+\hypertarget{structutil_1_1AtomicIter_abf686270fbc4270b2ab075ad996c8444}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!leap@{leap}}
+\index{leap@{leap}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{leap}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Iter}$<${\bf Iter\-Type}$>$ {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::leap (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{leap\-\_\-size}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_abf686270fbc4270b2ab075ad996c8444}
+\hypertarget{structutil_1_1AtomicIter_ae164e1cc98ab2757a20a15b5de55be1c}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!reset@{reset}}
+\index{reset@{reset}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{reset}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::reset (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type}}]{start\-\_\-val, }
+\item[{{\bf Iter\-Type}}]{limit\-\_\-val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_ae164e1cc98ab2757a20a15b5de55be1c}
+\hypertarget{structutil_1_1AtomicIter_a28f37a53706b452867b492858031acf7}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!step@{step}}
+\index{step@{step}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{step}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- bool {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::step (
+\begin{DoxyParamCaption}
+\item[{{\bf Iter\-Type} \&}]{iter\-\_\-val}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structutil_1_1AtomicIter_a28f37a53706b452867b492858031acf7}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structutil_1_1AtomicIter_aa793192cf4d1a784e36512ab58d366e7}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!limit@{limit}}
+\index{limit@{limit}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{limit}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ {\bf Iter\-Type} {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::limit}}\label{structutil_1_1AtomicIter_aa793192cf4d1a784e36512ab58d366e7}
+\hypertarget{structutil_1_1AtomicIter_a774c1053e1735c852e7bdcf008ca403b}{\index{util\-::\-Atomic\-Iter@{util\-::\-Atomic\-Iter}!value@{value}}
+\index{value@{value}!util::AtomicIter@{util\-::\-Atomic\-Iter}}
+\subsubsection[{value}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename I\-T\-E\-R\-\_\-\-T\-Y\-P\-E$>$ {\bf Iter\-Type} {\bf util\-::\-Atomic\-Iter}$<$ I\-T\-E\-R\-\_\-\-T\-Y\-P\-E $>$\-::value}}\label{structutil_1_1AtomicIter_a774c1053e1735c852e7bdcf008ca403b}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{iter_8cpp}{iter.\-cpp}\end{DoxyCompactItemize}

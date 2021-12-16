@@ -1,0 +1,145 @@
+\hypertarget{structMemPoolBank}{\section{Mem\-Pool\-Bank$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$ Struct Template Reference}
+\label{structMemPoolBank}\index{Mem\-Pool\-Bank$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$@{Mem\-Pool\-Bank$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef I\-N\-D\-E\-X \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index}
+\item 
+typedef M\-A\-S\-K \hyperlink{structMemPoolBank_a35d618e084e7be124feef368925d46d5}{Mask\-Type}
+\item 
+typedef \hyperlink{structMemChunk}{Mem\-Chunk}$<$ T, \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index}, \\*
+\hyperlink{structMemPoolBank_a35d618e084e7be124feef368925d46d5}{Mask\-Type} $>$ \hyperlink{structMemPoolBank_a5fa9a36b46ad0ecb5dbbfa0bd105dcb6}{Chunk\-Type}
+\item 
+typedef \hyperlink{structMemPool}{Mem\-Pool}$<$ \hyperlink{structMemPoolBank_a5fa9a36b46ad0ecb5dbbfa0bd105dcb6}{Chunk\-Type}, \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} $>$ \hyperlink{structMemPoolBank_afae3596e9bd9f9245bc55fbe47356e96}{Pool\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_abd671fc817e1dc55540b282f29ba30c7}{containing\-\_\-chunk} (\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} target)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a220229124f7046fdd4ff1d895786cddb}{Mem\-Pool\-Bank} (\hyperlink{structMemPoolBank_afae3596e9bd9f9245bc55fbe47356e96}{Pool\-Type} \&parent\-\_\-ref, unsigned int seed, bool \&err)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_aaec17b865ca8ea6a01991cede82db0e4}{alloc} ()
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_ac569e5e2130db7ccb771a7553f20c20d}{hard\-\_\-neighbor\-\_\-alloc} (\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} target, \hyperlink{structMemPoolBank_a35d618e084e7be124feef368925d46d5}{Mask\-Type} \&\hyperlink{structMemPoolBank_af9787855d48c00526151a602cb890f10}{rand\-\_\-state})
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_a9b0e449e66be305417d76d036462b20a}{neighbor\-\_\-alloc} (\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} target, \hyperlink{structMemPoolBank_a35d618e084e7be124feef368925d46d5}{Mask\-Type} \&\hyperlink{structMemPoolBank_af9787855d48c00526151a602cb890f10}{rand\-\_\-state})
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_ade00e00d2225f23cc4ace6fa15ea9efc}{coalesce} (\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} original)
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- void \hyperlink{structMemPoolBank_aedee77671212371f77e63a5336836e4b}{free} (\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} index)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+unsigned int \hyperlink{structMemPoolBank_af9787855d48c00526151a602cb890f10}{rand\-\_\-state}
+\item 
+\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_ad34b898caec6f8150db61db5da563683}{full\-\_\-count}
+\item 
+\hyperlink{structMemPoolBank_afae3596e9bd9f9245bc55fbe47356e96}{Pool\-Type} \& \hyperlink{structMemPoolBank_a2333639e39620bbefb2148cf4cee3c4a}{parent}
+\item 
+\hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_a85a00715ded7421c4be8ca40ea015865}{chunks} \mbox{[}\hyperlink{structMemPoolBank_afdb50a6709dbca571d8e3fee281ebb12}{S\-I\-Z\-E}\mbox{]}
+\end{DoxyCompactItemize}
+\subsection*{Static Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+static const \hyperlink{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{Index} \hyperlink{structMemPoolBank_afdb50a6709dbca571d8e3fee281ebb12}{S\-I\-Z\-E} = S\-I\-Z\-E\-\_\-\-V\-A\-L
+\end{DoxyCompactItemize}
+
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structMemPoolBank_a5fa9a36b46ad0ecb5dbbfa0bd105dcb6}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!Chunk\-Type@{Chunk\-Type}}
+\index{Chunk\-Type@{Chunk\-Type}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{Chunk\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ typedef {\bf Mem\-Chunk}$<$T,{\bf Index},{\bf Mask\-Type}$>$ {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::{\bf Chunk\-Type}}}\label{structMemPoolBank_a5fa9a36b46ad0ecb5dbbfa0bd105dcb6}
+\hypertarget{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!Index@{Index}}
+\index{Index@{Index}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{Index}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ typedef I\-N\-D\-E\-X {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::{\bf Index}}}\label{structMemPoolBank_a5f3e0490f2f4fe5dbf321cc00eb35007}
+\hypertarget{structMemPoolBank_a35d618e084e7be124feef368925d46d5}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!Mask\-Type@{Mask\-Type}}
+\index{Mask\-Type@{Mask\-Type}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{Mask\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ typedef M\-A\-S\-K {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::{\bf Mask\-Type}}}\label{structMemPoolBank_a35d618e084e7be124feef368925d46d5}
+\hypertarget{structMemPoolBank_afae3596e9bd9f9245bc55fbe47356e96}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!Pool\-Type@{Pool\-Type}}
+\index{Pool\-Type@{Pool\-Type}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{Pool\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ typedef {\bf Mem\-Pool}$<${\bf Chunk\-Type},{\bf Index}$>$ {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::{\bf Pool\-Type}}}\label{structMemPoolBank_afae3596e9bd9f9245bc55fbe47356e96}
+
+
+\subsection{Constructor \& Destructor Documentation}
+\hypertarget{structMemPoolBank_a220229124f7046fdd4ff1d895786cddb}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!Mem\-Pool\-Bank@{Mem\-Pool\-Bank}}
+\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{Mem\-Pool\-Bank}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::{\bf Mem\-Pool\-Bank} (
+\begin{DoxyParamCaption}
+\item[{{\bf Pool\-Type} \&}]{parent\-\_\-ref, }
+\item[{unsigned int}]{seed, }
+\item[{bool \&}]{err}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_a220229124f7046fdd4ff1d895786cddb}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structMemPoolBank_aaec17b865ca8ea6a01991cede82db0e4}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!alloc@{alloc}}
+\index{alloc@{alloc}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{alloc}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::alloc (
+\begin{DoxyParamCaption}
+{}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_aaec17b865ca8ea6a01991cede82db0e4}
+\hypertarget{structMemPoolBank_ade00e00d2225f23cc4ace6fa15ea9efc}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!coalesce@{coalesce}}
+\index{coalesce@{coalesce}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{coalesce}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::coalesce (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{original}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_ade00e00d2225f23cc4ace6fa15ea9efc}
+\hypertarget{structMemPoolBank_abd671fc817e1dc55540b282f29ba30c7}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!containing\-\_\-chunk@{containing\-\_\-chunk}}
+\index{containing\-\_\-chunk@{containing\-\_\-chunk}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{containing\-\_\-chunk}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::containing\-\_\-chunk (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{target}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_abd671fc817e1dc55540b282f29ba30c7}
+\hypertarget{structMemPoolBank_aedee77671212371f77e63a5336836e4b}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!free@{free}}
+\index{free@{free}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{free}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- void {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::free (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{index}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_aedee77671212371f77e63a5336836e4b}
+\hypertarget{structMemPoolBank_ac569e5e2130db7ccb771a7553f20c20d}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!hard\-\_\-neighbor\-\_\-alloc@{hard\-\_\-neighbor\-\_\-alloc}}
+\index{hard\-\_\-neighbor\-\_\-alloc@{hard\-\_\-neighbor\-\_\-alloc}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{hard\-\_\-neighbor\-\_\-alloc}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::hard\-\_\-neighbor\-\_\-alloc (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{target, }
+\item[{{\bf Mask\-Type} \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_ac569e5e2130db7ccb771a7553f20c20d}
+\hypertarget{structMemPoolBank_a9b0e449e66be305417d76d036462b20a}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!neighbor\-\_\-alloc@{neighbor\-\_\-alloc}}
+\index{neighbor\-\_\-alloc@{neighbor\-\_\-alloc}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{neighbor\-\_\-alloc}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::neighbor\-\_\-alloc (
+\begin{DoxyParamCaption}
+\item[{{\bf Index}}]{target, }
+\item[{{\bf Mask\-Type} \&}]{rand\-\_\-state}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structMemPoolBank_a9b0e449e66be305417d76d036462b20a}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structMemPoolBank_a85a00715ded7421c4be8ca40ea015865}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!chunks@{chunks}}
+\index{chunks@{chunks}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{chunks}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::chunks\mbox{[}{\bf S\-I\-Z\-E}\mbox{]}}}\label{structMemPoolBank_a85a00715ded7421c4be8ca40ea015865}
+\hypertarget{structMemPoolBank_ad34b898caec6f8150db61db5da563683}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!full\-\_\-count@{full\-\_\-count}}
+\index{full\-\_\-count@{full\-\_\-count}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{full\-\_\-count}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::full\-\_\-count}}\label{structMemPoolBank_ad34b898caec6f8150db61db5da563683}
+\hypertarget{structMemPoolBank_a2333639e39620bbefb2148cf4cee3c4a}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!parent@{parent}}
+\index{parent@{parent}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{parent}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ {\bf Pool\-Type}\& {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::parent}}\label{structMemPoolBank_a2333639e39620bbefb2148cf4cee3c4a}
+\hypertarget{structMemPoolBank_af9787855d48c00526151a602cb890f10}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!rand\-\_\-state@{rand\-\_\-state}}
+\index{rand\-\_\-state@{rand\-\_\-state}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{rand\-\_\-state}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ unsigned int {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::rand\-\_\-state}}\label{structMemPoolBank_af9787855d48c00526151a602cb890f10}
+\hypertarget{structMemPoolBank_afdb50a6709dbca571d8e3fee281ebb12}{\index{Mem\-Pool\-Bank@{Mem\-Pool\-Bank}!S\-I\-Z\-E@{S\-I\-Z\-E}}
+\index{S\-I\-Z\-E@{S\-I\-Z\-E}!MemPoolBank@{Mem\-Pool\-Bank}}
+\subsubsection[{S\-I\-Z\-E}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename T , typename I\-N\-D\-E\-X , typename M\-A\-S\-K , I\-N\-D\-E\-X S\-I\-Z\-E\-\_\-\-V\-A\-L$>$ const {\bf Index} {\bf Mem\-Pool\-Bank}$<$ T, I\-N\-D\-E\-X, M\-A\-S\-K, S\-I\-Z\-E\-\_\-\-V\-A\-L $>$\-::S\-I\-Z\-E = S\-I\-Z\-E\-\_\-\-V\-A\-L\hspace{0.3cm}{\ttfamily [static]}}}\label{structMemPoolBank_afdb50a6709dbca571d8e3fee281ebb12}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/util/\hyperlink{mem_8cpp}{mem.\-cpp}\end{DoxyCompactItemize}

@@ -1,0 +1,68 @@
+\hypertarget{structWorkArena}{\section{Work\-Arena$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$ Struct Template Reference}
+\label{structWorkArena}\index{Work\-Arena$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$@{Work\-Arena$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$}}
+}
+\subsection*{Public Types}
+\begin{DoxyCompactItemize}
+\item 
+typedef L\-I\-N\-K\-\_\-\-T\-Y\-P\-E \hyperlink{structWorkArena_a2bf1c203f8a046339cd73be8b3136c28}{Link\-Type}
+\item 
+typedef A\-D\-R\-\_\-\-T\-Y\-P\-E \hyperlink{structWorkArena_a1ad8a6c99cd108b5bb80df40d468637b}{Link\-Adr\-Type}
+\end{DoxyCompactItemize}
+\subsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\-\_\-\-\_\-device\-\_\-\-\_\- \hyperlink{structWorkArena_a2bf1c203f8a046339cd73be8b3136c28}{Link\-Type} \& \hyperlink{structWorkArena_ae06bc5769201f321876c12c9db43cf00}{operator\mbox{[}$\,$\mbox{]}} (\hyperlink{structWorkArena_a1ad8a6c99cd108b5bb80df40d468637b}{Link\-Adr\-Type} adr)
+\end{DoxyCompactItemize}
+\subsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+size\-\_\-t \hyperlink{structWorkArena_a81695ccf6b50e8b81091fea89855a92a}{size}
+\item 
+\hyperlink{structWorkArena_a2bf1c203f8a046339cd73be8b3136c28}{Link\-Type} $\ast$ \hyperlink{structWorkArena_ab1707583be64a275e61cdb20a4806545}{links}
+\end{DoxyCompactItemize}
+\subsection*{Static Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+static const size\-\_\-t \hyperlink{structWorkArena_ab715ef7888d28790b140f743aaafd460}{max\-\_\-size} = A\-D\-R\-\_\-\-T\-Y\-P\-E\-::null
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+\subsubsection*{template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$struct Work\-Arena$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$}
+
+The {\ttfamily \hyperlink{structWorkArena}{Work\-Arena}} template struct accepts an address type and a {\ttfamily \hyperlink{structWorkLink}{Work\-Link}} struct type and represents a buffer of work links of the given class indexable by the given address type. 
+
+\subsection{Member Typedef Documentation}
+\hypertarget{structWorkArena_a1ad8a6c99cd108b5bb80df40d468637b}{\index{Work\-Arena@{Work\-Arena}!Link\-Adr\-Type@{Link\-Adr\-Type}}
+\index{Link\-Adr\-Type@{Link\-Adr\-Type}!WorkArena@{Work\-Arena}}
+\subsubsection[{Link\-Adr\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ typedef A\-D\-R\-\_\-\-T\-Y\-P\-E {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Link\-Adr\-Type}}}\label{structWorkArena_a1ad8a6c99cd108b5bb80df40d468637b}
+\hypertarget{structWorkArena_a2bf1c203f8a046339cd73be8b3136c28}{\index{Work\-Arena@{Work\-Arena}!Link\-Type@{Link\-Type}}
+\index{Link\-Type@{Link\-Type}!WorkArena@{Work\-Arena}}
+\subsubsection[{Link\-Type}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ typedef L\-I\-N\-K\-\_\-\-T\-Y\-P\-E {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::{\bf Link\-Type}}}\label{structWorkArena_a2bf1c203f8a046339cd73be8b3136c28}
+
+
+\subsection{Member Function Documentation}
+\hypertarget{structWorkArena_ae06bc5769201f321876c12c9db43cf00}{\index{Work\-Arena@{Work\-Arena}!operator\mbox{[}$\,$\mbox{]}@{operator[]}}
+\index{operator\mbox{[}$\,$\mbox{]}@{operator[]}!WorkArena@{Work\-Arena}}
+\subsubsection[{operator[]}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ \-\_\-\-\_\-device\-\_\-\-\_\- {\bf Link\-Type}\& {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::operator\mbox{[}$\,$\mbox{]} (
+\begin{DoxyParamCaption}
+\item[{{\bf Link\-Adr\-Type}}]{adr}
+\end{DoxyParamCaption}
+)\hspace{0.3cm}{\ttfamily [inline]}}}\label{structWorkArena_ae06bc5769201f321876c12c9db43cf00}
+
+
+\subsection{Member Data Documentation}
+\hypertarget{structWorkArena_ab1707583be64a275e61cdb20a4806545}{\index{Work\-Arena@{Work\-Arena}!links@{links}}
+\index{links@{links}!WorkArena@{Work\-Arena}}
+\subsubsection[{links}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ {\bf Link\-Type}$\ast$ {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::links}}\label{structWorkArena_ab1707583be64a275e61cdb20a4806545}
+\hypertarget{structWorkArena_ab715ef7888d28790b140f743aaafd460}{\index{Work\-Arena@{Work\-Arena}!max\-\_\-size@{max\-\_\-size}}
+\index{max\-\_\-size@{max\-\_\-size}!WorkArena@{Work\-Arena}}
+\subsubsection[{max\-\_\-size}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ const size\-\_\-t {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::max\-\_\-size = A\-D\-R\-\_\-\-T\-Y\-P\-E\-::null\hspace{0.3cm}{\ttfamily [static]}}}\label{structWorkArena_ab715ef7888d28790b140f743aaafd460}
+\hypertarget{structWorkArena_a81695ccf6b50e8b81091fea89855a92a}{\index{Work\-Arena@{Work\-Arena}!size@{size}}
+\index{size@{size}!WorkArena@{Work\-Arena}}
+\subsubsection[{size}]{\setlength{\rightskip}{0pt plus 5cm}template$<$typename A\-D\-R\-\_\-\-T\-Y\-P\-E, typename L\-I\-N\-K\-\_\-\-T\-Y\-P\-E$>$ size\-\_\-t {\bf Work\-Arena}$<$ A\-D\-R\-\_\-\-T\-Y\-P\-E, L\-I\-N\-K\-\_\-\-T\-Y\-P\-E $>$\-::size}}\label{structWorkArena_a81695ccf6b50e8b81091fea89855a92a}
+
+
+The documentation for this struct was generated from the following file\-:\begin{DoxyCompactItemize}
+\item 
+/nfs/stak/users/cuneob/harmonize/code/\hyperlink{harmonize_8cpp}{harmonize.\-cpp}\end{DoxyCompactItemize}
