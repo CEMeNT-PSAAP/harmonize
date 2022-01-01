@@ -314,7 +314,7 @@ struct GroupArrayIter {
 	}
 
 
-	__device__ bool step_idx_val(IterType& idx, T  &val){
+	__device__ bool step_val_idx(T& val, IterType& idx){
 		IterType index;
 		if( iter.step(index) ){
 			idx = index;
@@ -334,7 +334,7 @@ struct GroupArrayIter {
 		return false;
 	}
 	
-	__device__ bool step_idx_ptr(IterType& idx, T *&val){
+	__device__ bool step_ptr_idx(T *&val, IterType& idx){
 		IterType index;
 		if( iter.step(index) ){
 			idx = index;
@@ -518,9 +518,81 @@ struct IOBuffer
 
 
 
+#if 0
+template<typename T> bool tie_breaker (T& A, T& B);
 
 
+// Experimental population control mechanism
+template<typename T, typename ITER_TYPE = unsigned int, typename HASH_TYPE = unsigned int>
+struct TitanicIOBuffer {
 
+	typedef ITER_TYPE IterType;
+	typedef HASH_TYPE HashType;
+
+	struct LinkType {
+		HashType hash;
+		IterType next;
+		T        data;
+	};
+
+	struct LinkJump {
+		HashType hash;
+		IterType index;
+	};
+
+	IterType capacity;
+	IterType overflow;
+
+
+	IOBuffer<LinkType,IterType> link_buffer;
+
+	IOBuffer<LinkJump,IterType> jump_buffer;
+
+
+	__device__ bool pull(T& dest){
+		while ( ! jump_buffer.input_empty() ) {
+			IterType idx;
+			if ( jump_buffer.pull_idx(idx) ){
+				LinkJump& jump = jump_buffer.input_ptr[idx];
+				if( jump.next == Adr<IterType>::null ){
+					continue;
+				}
+				T best = link_buffer[];
+				while () {
+
+				}
+				jump.hash  = 0;
+				jump.index = Adr<IterType>::null;
+			}
+		}
+		return false;
+	}
+
+	__device__ void push(T value, IndexType index, HashType hash){
+		HashType atom_max = atomicMax(&(LinkJump[index].hash),hash);
+		if ( atom_max <= hash ) {
+			
+		} else if ( atom_max == hash ) {
+			
+		}
+
+		
+	}
+
+	__device__ void flip(){
+		link_buffer.flip();
+	}
+
+	__device__ bool input_empty() {
+		return link_buffer.input_empty();
+	}
+	
+	__device__ bool output_full() {
+		return link_buffer.output_full();
+	}
+	
+};
+#endif
 
 
 

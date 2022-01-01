@@ -205,6 +205,7 @@ __global__ void mempool_init(MemPool<T,INDEX> mempool);
 template<typename T, typename INDEX>
 struct MemPool {
 
+	typedef T     DataType;
 	typedef INDEX Index;
 	typedef Adr<Index> AdrType;
 	typedef PoolQueue<AdrType> QueueType;
@@ -212,8 +213,8 @@ struct MemPool {
 	const unsigned int RETRY_COUNT = 32;
 
 	union Link {
-		T       data;
-		AdrType next;
+		DataType data;
+		AdrType  next;
 	};
 
 
@@ -249,12 +250,12 @@ struct MemPool {
 	}
 
 
-	__host__ MemPool<T,Index>( Index as, Index ps )
+	__host__ MemPool<DataType,Index>( Index as, Index ps )
 		: arena_size(as)
 		, pool_size (ps)
 	{}
 
-	__device__ T& operator[] (Index index){
+	__device__ DataType& operator[] (Index index){
 		return arena[index].data;
 	}
 
@@ -409,8 +410,7 @@ struct MemPool {
 	}
 
 
-	__device__ Index alloc(unsigned int& rand_state){
-
+	__device__ Index alloc_index(unsigned int& rand_state){
 		for( unsigned int t=0; t<RETRY_COUNT; t++){
 			Index queue_index = random_uint(rand_state) % pool_size.adr;
 			QueueType queue = pull_queue(queue_index);
@@ -423,6 +423,16 @@ struct MemPool {
 		return AdrType::null;
 	}
 
+
+	__device__ DataType* alloc(unsigned int& rand_state){
+		Index result_index = alloc_index(rand_state);
+		if( result_index != Adr<Index>::null ){
+			return &(arena[result_index].data);
+		}
+		return NULL;
+	}
+
+
 	__device__ void free(Index index, unsigned int& rand_state){
 		if( index == AdrType::null ){
 			return;
@@ -433,6 +443,20 @@ struct MemPool {
 		QueueType queue = QueueType(AdrType(index),AdrType(index));
 		push_queue(queue,queue_index);
 	}
+
+
+
+	__device__ void free(DataType* address, unsigned int& rand_state){
+		if( address == NULL ) {
+			return;
+		}
+		Index index = address - arena;
+		if( index == AdrType::null ){
+			return;
+		}
+		free(index,rand_state);
+	}
+
 
 };
 
@@ -479,12 +503,13 @@ __global__ void mempool_init(MemPool<T,INDEX> mempool){
 
 
 
-template<typename T, typename INDEX, INDEX SIZE>
+template<typename T, size_t SIZE>
 struct MemCache {
 
-	typedef INDEX Index;
+	typedef typename T::DataType DataType;
+	typedef typename T::Index    Index;
 	typedef Adr<Index> AdrType;
-	typedef MemPool<T,Index> PoolType;
+	typedef MemPool<DataType,Index> PoolType;
 
 
 	PoolType* parent;
@@ -516,8 +541,9 @@ struct MemCache {
 		}
 	}
 
-	
-	__device__ Index alloc(unsigned int& rand_state){
+
+
+	__device__ Index alloc_index(unsigned int& rand_state){
 		for ( unsigned int i=threadIdx.x; i<SIZE; i++ ) {
 			Index swap = atomicExch_block(&(indexes[i]),AdrType::null);
 			if( swap != AdrType::null ){
@@ -530,8 +556,18 @@ struct MemCache {
 				return swap;
 			}
 		}
-		return parent->alloc(rand_state);
+		return parent->alloc_index(rand_state);
 	}
+
+
+	__device__ DataType* alloc(unsigned int& rand_state){
+		Index result_index = alloc_index(rand_state);
+		if ( result_index != Adr<Index>::null ) {
+			return (parent->arena[result_index].data);
+		}
+		return NULL;
+	}
+
 
 	__device__ void free(Index index, unsigned int& rand_state){
 		for ( unsigned int i=threadIdx.x; i<SIZE; i++ ) {
@@ -550,6 +586,14 @@ struct MemCache {
 	}
 
 
+	__device__ void free(DataType* address, unsigned int& rand_state){
+		if( address == NULL ){
+			return;
+		}
+		Index index = address - (parent->arena);
+		free(index,rand_state);
+	}
+
 	#if    __CUDA_ARCH__ < 600
 		#undef atomicExch_block
 		#undef atomicCAS_block
@@ -557,6 +601,11 @@ struct MemCache {
 
 
 };
+
+
+
+
+
 
 
 
@@ -702,72 +751,6 @@ struct MemPoolBank {
 
 
 
-
-
-
-// Experimental population control mechanism
-#if 0
-template<typename T, typename ID>
-struct TitanicValue {
-
-	PairPack<ID>
-
-};
-
-
-
-
-template<typename T, typename ITER_TYPE = unsigned int, typename HASH_TYPE = unsigned long long int>
-struct TitanicIOBuffer {
-
-	typedef ITER_TYPE IterType;
-	typedef HASH_TYPE HashType;
-
-	bool  mode;
-
-	struct TitanicLink {
-		IterType next;
-		HashType hash;
-		T        data;
-	};
-
-	IterType capacity;
-	IterType overflow;
-
-	AtomicIter<IterType> pull_exit_iter;
-
-
-	__device__ ArrayIter<T,IterType> pull_span(IterType pull_size){
-		Iter<IterType> pull_iter(0,0,0);
-		if( mode ){
-			pull_iter = iter.leap(pull_size);
-		}
-		return ArrayIter<T,IterType>(data,pull_iter);
-	}
-
-	__device__ ArrayIter<T,IterType> push(T value, unsigned int index, unsigned int priority){
-		Iter<IterType> push_iter(0,0,0);
-		if( !mode ){
-			push_iter = iter.leap(push_size);
-		}
-		return ArrayIter<T,IterType>(data,push_iter);
-	}
-
-	__device__ void flip(){
-		mode = !mode;	
-		if(mode){
-			iter = AtomicIter<IterType>(0,iter.value);
-		} else {
-			iter = AtomicIter<IterType>(0,0);
-		}
-	}
-
-	__device__ bool empty() {
-		return iter.done();
-	}
-	
-};
-#endif
 
 
 

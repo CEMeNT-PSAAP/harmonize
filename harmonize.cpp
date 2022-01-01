@@ -318,10 +318,10 @@ struct WorkLink
 
 
 	/*
-	// Zeros out a link, giving it a thunk count of zero, a null function ID, a null pointer for
-	// the next link and a depth of zero.
+	// Zeros out a link, giving it a promise count of zero, a null function ID, and sets next
+	// to the given input.
 	*/
-	 __host__ __device__ void empty(AdrType next_adr){
+	__host__ __device__ void empty(AdrType next_adr){
 
 		next	= next_adr;
 		id	= static_cast<Fn>(PromiseType::Count::value);
@@ -329,6 +329,53 @@ struct WorkLink
 
 	}
 
+
+};
+
+
+
+
+template <typename PROMISE_UNION, typename ADR_TYPE>
+struct SingletonWorkLink
+{
+	
+	typedef ADR_TYPE      AdrType;
+	typedef PROMISE_UNION PromiseType;
+
+	PromiseType promise;
+	Fn          id;
+	AdrType     next;
+
+	/*
+	// Zeros out a link, giving it a null function ID and sets next to the given input.
+	*/
+	__host__ __device__ void empty(AdrType next_adr){
+
+		next	= next_adr;
+		id	= static_cast<Fn>(PromiseType::Count::value);
+
+	}
+
+};
+
+
+template <typename PROMISE_UNION, typename ADR_TYPE, typename COUNTER_TYPE=unsigned int>
+struct SingletonWorkBarrier {
+		
+	typedef ADR_TYPE      AdrType;
+	typedef PROMISE_UNION PromiseType;
+	typedef COUNTER_TYPE  CounterType;
+
+	CounterType counter;
+	AdrType     work;
+
+	SingletonWorkBarrier<PromiseType,AdrType,CounterType>() = default;
+	
+	__host__ __device__ SingletonWorkBarrier<PromiseType,AdrType,CounterType>(
+		CounterType dependency_count
+	) {
+		counter = dependency_count;
+	}
 
 };
 

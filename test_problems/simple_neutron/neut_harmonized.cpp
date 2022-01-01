@@ -5,20 +5,27 @@
 using namespace util;
 
 
+typedef mem::MemPool<Neutron,unsigned int> PoolType;
+typedef mem::MemCache<PoolType,128>        CacheType;
+
+
+struct ThreadState {
+
+	unsigned int rand_state;
+
+};
 
 
 struct GroupState {
 
 	#ifdef CACHE
-	
-	mem::MemCache<Neutron,unsigned int, 128> cache;
-	
+	CacheType cache;
 	#endif
 
 };
 
 
-typedef ProgramStateDef<SimParams,GroupState,VoidState> ProgState;
+typedef ProgramStateDef<SimParams,GroupState,ThreadState> ProgState;
 
 enum class Fn { Neutron };
 
@@ -30,6 +37,8 @@ typedef  EventProgram     < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 #else
 typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 #endif
+
+
 
 
 
@@ -67,9 +76,9 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 		#endif
 
 		#ifdef CACHE
-		unsigned int index = group.cache.alloc(_thread_context.rand_state);
+		unsigned int index = group.cache.alloc_index(thread.rand_state);
 		#else
-		unsigned int index = device.neutron_pool->alloc(_thread_context.rand_state);
+		unsigned int index = device.neutron_pool->alloc_index(thread.rand_state);
 		#endif
 
 		if( index != mem::Adr<unsigned int>::null ){
@@ -124,9 +133,9 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 		#endif
 
 		#ifdef CACHE
-		group.cache.free(arg,_thread_context.rand_state);
+		group.cache.free(arg,thread.rand_state);
 		#else
-		device.neutron_pool->free(arg,_thread_context.rand_state);
+		device.neutron_pool->free(arg,thread.rand_state);
 		#endif
 
 	}
@@ -136,9 +145,12 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
 DEF_INITIALIZE(ProgType) {
 
+
 	#ifdef CACHE
 	group.cache.initialize(*device.neutron_pool);
 	#endif
+
+	thread.rand_state = blockDim.x * blockIdx.x + threadIdx.x;
 
 }
 
@@ -146,7 +158,7 @@ DEF_INITIALIZE(ProgType) {
 DEF_FINALIZE(ProgType) {
 
 	#ifdef CACHE
-	group.cache.finalize(_thread_context.rand_state);
+	group.cache.finalize(thread.rand_state);
 	#endif
 
 }
@@ -180,13 +192,17 @@ DEF_MAKE_WORK(ProgType) {
 		#endif
 
 		#ifdef CACHE
-		unsigned int index = group.cache.alloc(_thread_context.rand_state);
+		unsigned int index = group.cache.alloc_index(thread.rand_state);
 		#else
-		unsigned int index = device.neutron_pool->alloc(_thread_context.rand_state);
+		unsigned int index = device.neutron_pool->alloc_index(thread.rand_state);
 		#endif
 		while(index == mem::Adr<unsigned int>::null){
 			printf("{failed to allocate}");
-			index = device.neutron_pool->alloc(_thread_context.rand_state);
+			#ifdef CACHE
+			index = group.cache.alloc_index(thread.rand_state);
+			#else
+			index = device.neutron_pool->alloc_index(thread.rand_state);
+			#endif
 		}
 		
 		if( (index != mem::Adr<unsigned int>::null) ) {

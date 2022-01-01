@@ -1,9 +1,9 @@
 
 #use if on DGX or other OSU GPU systems
-#CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
+CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
 
 #otherwise, use this
-CUDA_NVCC	=	nvcc
+#CUDA_NVCC	=	nvcc
 
 STD		=	-std=c++11
 
@@ -12,7 +12,12 @@ UTIL_PATH       =       ../../util/util.cpp
 UTIL_SOURCE     =       $(shell find ../../util -type f -name '*.cpp' )
 
 
-ARCH=sm_50
+ifndef ARCH
+ARCH_DEF=
+else
+ARCH_DEF=-arch=$(ARCH)
+endif
+
 
 all: neut_hrm neut_std neut_evt
 
@@ -24,13 +29,13 @@ clean:
 	rm -f neuttest.out
 
 neut_hrm:      Makefile $(HARMONIZE_PATH) neut_harmonized.cpp neut_common.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu -arch=$(ARCH) -DCACHE $(STD) -o neut_hrm neut_harmonized.cpp --restrict -include $(HARMONIZE_PATH)
+	$(CUDA_NVCC) -x cu $(ARCH_DEF) -DCACHE $(STD) -o neut_hrm neut_harmonized.cpp --restrict -include $(HARMONIZE_PATH)
 
 
 neut_std:      Makefile neut_standard.cpp neut_common.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu -arch=$(ARCH) $(STD) -o neut_std neut_standard.cpp --restrict -include $(UTIL_PATH)
+	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(STD) -o neut_std neut_standard.cpp --restrict -include $(UTIL_PATH)
 
 
 neut_evt:      Makefile $(HARMONIZE_PATH) neut_harmonized.cpp neut_common.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu -arch=$(ARCH) $(STD) -o neut_evt neut_harmonized.cpp -DEVENT --restrict -include $(HARMONIZE_PATH)
+	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(STD) -o neut_evt neut_harmonized.cpp -DEVENT --restrict -include $(HARMONIZE_PATH)
 
