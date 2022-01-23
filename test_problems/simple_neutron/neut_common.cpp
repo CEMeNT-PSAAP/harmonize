@@ -2,7 +2,9 @@
 #include <cstdint>
 #include <vector>
 
+
 #define FILO
+
 //#define ALLOC_CHECK
 
 
@@ -23,6 +25,9 @@ struct Neutron {
 	float m_z;
 	float time;
 	unsigned int seed;
+	
+	float weight;
+
 
 	#ifdef HARMONIZE
 	#ifdef FILO
@@ -33,19 +38,23 @@ struct Neutron {
 	#endif
 	#endif
 
+
 	Neutron() = default;
 	
-	__device__ Neutron(unsigned int s, float t, float x, float y, float z)
+	__device__ Neutron(unsigned int s, float t, float x, float y, float z, float w)
 		: seed(s)
 		, time(t)
 		, p_x(x)
 		, p_y(y)
 		, p_z(z)
+		, weight(w)
+
 		#ifdef HARMONIZE
 		#ifdef FILO
 		, next(mem::Adr<unsigned int>::null)
 		#endif
 		#endif
+
 	{
 		random_3D_iso_mom(*this);
 	}
@@ -57,11 +66,14 @@ struct Neutron {
 		, p_x(parent.p_x)
 		, p_y(parent.p_y)
 		, p_z(parent.p_z)
+		, weight(parent.weight)
+
 		#ifdef HARMONIZE
 		#ifdef FILO
 		, next(mem::Adr<unsigned int>::null)
 		#endif
 		#endif
+
 	{
 		seed ^= __float_as_uint(time);
 		random_uint(seed);
@@ -88,9 +100,7 @@ struct SimParams {
 
 	iter::IOBuffer<unsigned int> *neutron_io;
 
-	unsigned long long int* halted;
-
-	unsigned long long int* sim_total;
+	float* halted;
 
 	float	div_width;
 	float	pos_limit;
@@ -102,6 +112,9 @@ struct SimParams {
 	float	combine_x;
 
 	float   time_limit;
+
+	bool    implicit_capture;
+	float   weight_limit;
 
 	int     fiss_mult;
 
@@ -205,6 +218,10 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 	n.p_y += n.m_y * step;
 	n.p_z += n.m_z * step;
 
+	if ( params.implicit_capture ) {
+		n.weight *= expf(-step*params.capture_x);
+	}
+
 	float dist = n.p_x;
 
 	int index = pos_to_idx(params,dist);
@@ -219,15 +236,23 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 
 	
 	if ( halt ){
-		atomicAdd(&params.halted[index],1);
+		atomicAdd(&params.halted[index],n.weight);
 		return -1;
 	} else if( samp <= (params.scatter_x/params.combine_x) ){
 		random_3D_iso_mom(n);
 		return 0;
-	} else if ( samp <= ((params.scatter_x + params.capture_x) / params.combine_x) ) {
-		return -1;
-	} else if ( samp <= ((params.scatter_x + params.capture_x + params.fission_x) / params.combine_x) ) {
+	} else if ( samp <= ((params.scatter_x + params.fission_x) / params.combine_x) ) {
 		return params.fiss_mult;
+	} else if ( samp <= ((params.scatter_x + params.fission_x + params.capture_x) / params.combine_x) ) {
+		if ( params.implicit_capture ) {
+			if( n.weight < params.weight_limit ){
+				return -1;
+			} else {
+				return 0;
+			}
+		} else {
+			return -1;
+		}
 	} else {
 		return -1;
 	}
@@ -245,9 +270,7 @@ struct CommonContext{
 	bool	    csv;
 
 	host::DevBuf<iter::AtomicIter<unsigned int>> source_id_iter;
-	host::DevBuf<unsigned long long int> halted;
-	host::DevBuf<unsigned long long int> sim_total;
-
+	host::DevBuf<float> halted;
 
 	host::DevObj<mem::MemPool<Neutron,unsigned int>> neutron_pool;
 
@@ -259,9 +282,9 @@ struct CommonContext{
 	CommonContext(cli::ArgSet& args)
 		: neutron_io( args["io_cap"] | args["num"] | 1000u )
 		#if EVENT
-		, neutron_pool(0x400000,8191)
+		, neutron_pool(0x8000000,8191)
 		#else
-		, neutron_pool(0x100000,8191)
+		, neutron_pool(0x8000000,8191)
 		#endif
 	{
 
@@ -279,9 +302,13 @@ struct CommonContext{
 		params.fission_x  = args["fx"]   | 0.0f;
 		params.capture_x  = args["cx"]   | 0.0f;
 		params.scatter_x  = args["sx"]   | 0.0f;
+
 		params.combine_x  = params.fission_x + params.capture_x + params.scatter_x;
 
 		params.fiss_mult  = args["mult"] | 2;
+
+		params.implicit_capture  = args["imp_cap"];
+		params.weight_limit      = args["wlim"] | 0.0001f;
 
 		show = args["show"];
 		csv  = args["csv"];
@@ -294,10 +321,8 @@ struct CommonContext{
 		int elem_count = params.div_count*2;
 		halted.resize(elem_count);
 		params.halted = halted;
-		cudaMemset( halted, 0, sizeof(unsigned long long int) * elem_count );
+		cudaMemset( halted, 0, sizeof(float) * elem_count );
 
-		sim_total<<0ul;
-		params.sim_total = sim_total;
 		
 		//cudaMemset( neutron_pool->arena, 0, sizeof(Neutron) * neutron_pool->arena_size.adr );
 
@@ -321,40 +346,28 @@ struct CommonContext{
 		int elem_count = params.div_count*2;
 
 
-		unsigned long long int* result_raw;
-		float* result;
+		std::vector<float> result;
 		float y_min, y_max;
 
 		if( show || csv ){
 
-			result_raw = (unsigned long long int*) malloc(sizeof(unsigned long long int)*elem_count);
-			result = (float*) malloc(sizeof(float)*elem_count);
-
-			cudaMemcpy(
-				(void*)result_raw,
-				params.halted,
-				sizeof(unsigned long long int)*elem_count,
-				cudaMemcpyDeviceToHost
-			);
+			halted >> result;
 
 			float sum = 0;
 			for(unsigned int i=0; i<elem_count; i++){
-				float value = ((float)result_raw[i])/ (((float)params.div_width)*((float)params.source_count));
-				sum += value * params.div_width;
-				result[i] = value;
+				result[i] /= (float) params.source_count;
+				sum += result[i];
+				result[i] /= (float) params.div_width;
 				if( i == 0 ){
-					y_min = value;
-					y_max = value;
+					y_min = result[i];
+					y_max = result[i];
 				}
-				y_min = (value < y_min) ? value : y_min;
-				y_max = (value > y_max) ? value : y_max;
+				y_min = (result[i] < y_min) ? result[i] : y_min;
+				y_max = (result[i] > y_max) ? result[i] : y_max;
 			}
 
 			printf("\n\nSUM IS: %f\n\n",sum);
 
-			unsigned long long int tot;
-			sim_total >> tot;
-			printf("\n\nSIM_TOTAL IS: %d\n\n",tot);
 
 
 		}
@@ -387,7 +400,7 @@ struct CommonContext{
 			shape.height = 16;
 
 			//util::cli_graph(result,elem_count,100,20,-params.pos_limit,params.pos_limit);
-			util::cli::cli_graph(result,elem_count,shape,util::cli::Block2x2Fill);
+			util::cli::cli_graph(result.data(),elem_count,shape,util::cli::Block2x2Fill);
 
 		}
 

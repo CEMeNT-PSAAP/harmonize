@@ -524,7 +524,7 @@ template<typename T> bool tie_breaker (T& A, T& B);
 
 // Experimental population control mechanism
 template<typename T, typename ITER_TYPE = unsigned int, typename HASH_TYPE = unsigned int>
-struct TitanicIOBuffer {
+struct MCPCBuffer {
 
 	typedef ITER_TYPE IterType;
 	typedef HASH_TYPE HashType;
@@ -581,6 +581,7 @@ struct TitanicIOBuffer {
 
 	__device__ void flip(){
 		link_buffer.flip();
+
 	}
 
 	__device__ bool input_empty() {

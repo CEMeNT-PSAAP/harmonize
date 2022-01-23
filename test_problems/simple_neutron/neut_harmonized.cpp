@@ -170,7 +170,7 @@ DEF_MAKE_WORK(ProgType) {
 
 	#ifdef EVENT
 	float fill_frac = QUEUE_FILL_FRACTION(Fn::Neutron);
-	if( fill_frac > 0.9 ){
+	if( fill_frac > 0.5 ){
 		return false;
 	}
 
@@ -185,7 +185,7 @@ DEF_MAKE_WORK(ProgType) {
 
 
 	while(iter.step(id)){
-		Neutron n(id,0.0,0.0,0.0,0.0);
+		Neutron n(id,0.0,0.0,0.0,0.0,1.0);
 
 		#ifdef FILO
 		n.next = mem::Adr<unsigned int>::null;
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]){
 	check_error();
 
 	#ifdef EVENT
-	ProgType::Instance instance = ProgType::Instance(0x40000,com.params);
+	ProgType::Instance instance = ProgType::Instance(0x2000000,com.params);
 	#else 
 	ProgType::Instance instance = ProgType::Instance(0x100000,com.params);
 	#endif
@@ -274,7 +274,7 @@ int main(int argc, char *argv[]){
 		//ProgType::runtime_overview(instance);
 		num++;
 	} while(! instance.complete() );
-	printf("\nIter count is %d\n",num);
+	//printf("\nIter count is %d\n",num);
 
 	#endif
 

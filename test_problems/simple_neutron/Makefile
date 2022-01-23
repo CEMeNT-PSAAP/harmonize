@@ -1,9 +1,9 @@
 
 #use if on DGX or other OSU GPU systems
-CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
+#CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
 
 #otherwise, use this
-#CUDA_NVCC	=	nvcc
+CUDA_NVCC	=	nvcc
 
 STD		=	-std=c++11
 
