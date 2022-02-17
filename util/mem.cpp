@@ -99,6 +99,8 @@ struct Adr
 
 
 
+
+
 template <typename ADR_TYPE>
 struct PoolQueue;
 
@@ -194,7 +196,8 @@ __host__ void mempool_check(T* arena, size_t arena_size, PoolQueue<AdrType>* poo
 
 
 
-
+#define LAZY_MEM
+//#define SMART_MEM
 
 
 template<typename T, typename INDEX> struct MemPool;
@@ -217,6 +220,9 @@ struct MemPool {
 		AdrType  next;
 	};
 
+	#ifdef LAZY_MEM
+	AdrType  claim_count;
+	#endif
 
 	Link*    arena;
 	AdrType  arena_size;
@@ -227,17 +233,31 @@ struct MemPool {
 
 	__host__ void host_init()
 	{
-		arena  = host::hardMalloc<Link>     ( arena_size.adr );
-		pool   = host::hardMalloc<QueueType>( pool_size .adr );
-		mempool_init<<<256,32>>>(*this);
-		cudaDeviceSynchronize();
+		#ifdef LAZY_MEM
+		claim_count = 0;
+		#endif
+
+		if( arena_size.adr != 0 ){
+			arena  = host::hardMalloc<Link>     ( arena_size.adr );
+		}
+		if( pool_size.adr  != 0 ){
+			pool   = host::hardMalloc<QueueType>( pool_size .adr );
+		}
+		if( (arena_size.adr != 0) || (pool_size.adr != 0 ) ){
+			mempool_init<<<256,32>>>(*this);
+			cudaDeviceSynchronize();
+		}
 		//next_print();
 	}
 
 	__host__ void host_free()
 	{
-		host::auto_throw( cudaFree( arena ) );
-		host::auto_throw( cudaFree( pool  ) );
+		if( arena_size.adr != 0 ){
+			host::auto_throw( cudaFree( arena ) );
+		}
+		if( pool_size.adr  != 0 ){
+			host::auto_throw( cudaFree( pool  ) );
+		}
 	}
 
 
@@ -253,6 +273,11 @@ struct MemPool {
 	__host__ MemPool<DataType,Index>( Index as, Index ps )
 		: arena_size(as)
 		, pool_size (ps)
+	{}
+
+	__host__ MemPool<DataType,Index>()
+		: arena_size(0)
+		, pool_size (0)
 	{}
 
 	__device__ DataType& operator[] (Index index){
@@ -359,25 +384,18 @@ struct MemPool {
 	}
 
 
-
-
-	__device__ Index pull_span( Index* dst, Index count, unsigned int& rand_state ){
+	__device__ Index pull_span( Index* dst, Index count, Index stride, unsigned int& rand_state ){
 		
 		Index result = 0;
 		for(unsigned int t=0; t<RETRY_COUNT; t++){
 			Index queue_index = random_uint(rand_state) % pool_size.adr;
 			QueueType queue = pull_queue(queue_index);
 			if( ! queue.is_null() ){
-				for( ; result<count; result++){
-					Index old = atomicCAS(&dst[result],AdrType::null,queue.get_head());
-					if( old != AdrType::null ){
-						continue;
-					}
-					AdrType adr = pop_front(queue);
-					if( adr == AdrType::null ){
-						break;
-					}
-					dst[result] = adr.data;
+				AdrType adr = pop_front(queue);
+				while( (adr.adr != AdrType::null) && (result < count) ){
+					dst[result*stride] = adr.adr;
+					adr = pop_front(queue);
+					result++;
 				}
 				push_queue(queue,queue_index);
 			}
@@ -388,17 +406,20 @@ struct MemPool {
 		return result;
 	}
 
-	__device__ void push_span( Index* src, Index count, unsigned int& rand_state ){
+
+
+	__device__ void push_span( Index* src, Index count, Index stride, unsigned int& rand_state ){
 		Index first = AdrType::null;
 		Index last  = AdrType::null;
 		for( Index i=0; i<count; i++){
-			if( src[i] != AdrType::null ){
+			Index& slot = src[stride*i];
+			if( slot != AdrType::null ){
 				if( first == AdrType::null ){
-					first = src[i];
-				} else if( last  != AdrType::null ){
-					arena[last].next = src[i];
+					first = slot;
+				} else {
+					arena[last].next = slot;
 				}
-				last = src[i];
+				last = slot;
 			}
 		}
 		if( last != AdrType::null ){
@@ -410,7 +431,102 @@ struct MemPool {
 	}
 
 
+
+
+	__device__ Index pull_span_atomic( Index* dst, Index count, Index stride, unsigned int& rand_state ){
+		
+		Index result = 0;
+		for(unsigned int t=0; t<RETRY_COUNT; t++){
+			Index queue_index = random_uint(rand_state) % pool_size.adr;
+			QueueType queue = pull_queue(queue_index);
+			if( ! queue.is_null() ){
+				for( ; result<count; result++){
+					Index old = atomicCAS(&dst[result*stride],AdrType::null,queue.get_head());
+					if( old != AdrType::null ){
+						continue;
+					}
+					AdrType adr = pop_front(queue);
+					if( adr == AdrType::null ){
+						break;
+					}
+				}
+				push_queue(queue,queue_index);
+			}
+			if( result >= count ){
+				return result;
+			}
+		}
+		return result;
+	}
+
+	__device__ void push_span_atomic( Index* src, Index count, Index stride, unsigned int& rand_state ){
+		Index first = AdrType::null;
+		Index last  = AdrType::null;
+		for( Index i=0; i<count; i++){
+			Index swp = atomicExch(&src[stride*i],AdrType::null);
+			if( swp != AdrType::null ){
+				if( first == AdrType::null ){
+					first = swp;
+				} else {
+					arena[last].next = swp;
+				}
+				last = swp;
+			}
+		}
+		if( last != AdrType::null ){
+			arena[last].next = AdrType::null;
+		}
+		QueueType queue = QueueType(first,last);
+		Index queue_index = random_uint(rand_state) % pool_size.adr;
+		push_queue(queue,queue_index);
+	}
+
+
+	#ifdef LAZY_MEM
+	__device__ Index lazy_alloc_index(unsigned int& rand_state){
+
+		#ifdef SMART_MEM
+		__shared__ Index claim_index;
+		unsigned int active = __activemask();
+		__syncwarp(active);
+		unsigned int count  = active_count();
+		unsigned int offset = warp_inc_scan();
+		if(current_leader()){
+			if( claim_count.adr < arena_size.adr ){
+				claim_index = atomicAdd(&(claim_count.adr),count);
+			} else {
+				claim_index = arena_size.adr;
+			}
+		}
+		__syncwarp(active);
+		if( (claim_index+offset) < arena_size.adr ){
+			return claim_index + offset;
+		}
+
+		#else
+		if( claim_count.adr < arena_size.adr ){
+			Index claim_index = atomicAdd(&(claim_count.adr),1);
+			if( claim_index < arena_size.adr ){
+				return claim_index;
+			}
+		}
+		#endif
+		return AdrType::null;
+	}
+	#endif
+
+
+
 	__device__ Index alloc_index(unsigned int& rand_state){
+
+	
+		#ifdef LAZY_MEM
+		Index result = lazy_alloc_index(rand_state);
+		if( result != AdrType::null ){
+			return result;
+		}
+		#endif
+
 		for( unsigned int t=0; t<RETRY_COUNT; t++){
 			Index queue_index = random_uint(rand_state) % pool_size.adr;
 			QueueType queue = pull_queue(queue_index);
@@ -474,8 +590,17 @@ __global__ void mempool_init(MemPool<T,INDEX> mempool){
 	Index thread_count = blockDim.x * gridDim.x;
 	Index thread_index = blockDim.x * blockIdx.x + threadIdx.x;
 
-	Index span = mempool.arena_size.adr / mempool.pool_size.adr;
 	
+	#ifdef LAZY_MEM
+
+	for(Index i=thread_index; i<mempool.pool_size.adr; i+=thread_count){
+		mempool.pool [i] = QueueType(AdrType::null,AdrType::null);
+		//printf("{%d:(%d,%d)}",i,mempool.pool[i].get_head().adr,mempool.pool[i].get_tail().adr);
+	}
+
+	#else
+	
+	Index span = mempool.arena_size.adr / mempool.pool_size.adr;
 
 	Index limit = mempool.arena_size.adr;
 	for(Index i=thread_index; i<limit; i+=thread_count){
@@ -498,12 +623,14 @@ __global__ void mempool_init(MemPool<T,INDEX> mempool){
 		//printf("{%d:(%d,%d)}",i,mempool.pool[i].get_head().adr,mempool.pool[i].get_tail().adr);
 	}
 
+	#endif
+
 }
 
 
 
 
-template<typename T, size_t SIZE>
+template<typename T, size_t SIZE, size_t WARP_SIZE=32>
 struct MemCache {
 
 	typedef typename T::DataType DataType;
@@ -511,9 +638,12 @@ struct MemCache {
 	typedef Adr<Index> AdrType;
 	typedef MemPool<DataType,Index> PoolType;
 
+	#ifdef LAZY_MEM
+	bool try_lazy;
+	#endif
 
 	PoolType* parent;
-	Index indexes[SIZE];
+	Index indexes[SIZE*WARP_SIZE];
 
 
 	#if    __CUDA_ARCH__ < 600
@@ -522,21 +652,29 @@ struct MemCache {
 	#endif
 
 
+	__device__ Index& get_index( unsigned int offset ){
+		unsigned int real_offset = (WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*WARP_SIZE);
+		return indexes[real_offset];
+	}
+
+
 	__device__ void initialize (PoolType& p) {
 		if( current_leader() ){
+			#ifdef LAZY_MEM
+			try_lazy = true;
+			#endif
 			parent = &p;
-			for ( unsigned int i=0; i<SIZE; i++ ) {
-				indexes[i] = AdrType::null;
-			}
+		}
+		for ( unsigned int i=0; i<SIZE; i++ ) {
+			get_index(i) = AdrType::null;
 		}
 	}
 
 	__device__ void finalize (unsigned int &rand_state) {
-		if( current_leader() ){
-			for ( unsigned int i=0; i<SIZE; i++ ) {
-				if( indexes[i] != AdrType::null ){
-					parent->free(indexes[i],rand_state);
-				}
+		for ( unsigned int i=0; i<SIZE; i++ ) {
+			Index& slot = get_index(i);
+			if( slot != AdrType::null ){
+				parent->free(slot,rand_state);
 			}
 		}
 	}
@@ -544,6 +682,20 @@ struct MemCache {
 
 
 	__device__ Index alloc_index(unsigned int& rand_state){
+
+		#if 0
+		if( try_lazy ){
+			Index result = parent->lazy_alloc_index(rand_state);
+			if( result != AdrType::null ){
+				return result;
+			} else {
+				try_lazy = false;
+			}
+		}
+		#endif
+
+
+		#if 0
 		for ( unsigned int i=threadIdx.x; i<SIZE; i++ ) {
 			Index swap = atomicExch_block(&(indexes[i]),AdrType::null);
 			if( swap != AdrType::null ){
@@ -556,6 +708,17 @@ struct MemCache {
 				return swap;
 			}
 		}
+		#else
+		for ( unsigned int i=0; i<(SIZE*WARP_SIZE); i++ ) {
+			Index& slot = get_index(i);
+			Index swap = atomicExch_block(&slot,AdrType::null);
+			if( swap != AdrType::null ){
+				return swap;
+			}
+		}
+		#endif
+
+
 		return parent->alloc_index(rand_state);
 	}
 
@@ -570,6 +733,7 @@ struct MemCache {
 
 
 	__device__ void free(Index index, unsigned int& rand_state){
+		#if 0
 		for ( unsigned int i=threadIdx.x; i<SIZE; i++ ) {
 			Index swap = atomicCAS_block(&(indexes[i]),AdrType::null,index);
 			if( swap == AdrType::null ){
@@ -582,6 +746,15 @@ struct MemCache {
 				return;
 			}
 		}
+		#else
+		for ( unsigned int i=0; i<(SIZE*WARP_SIZE); i++ ) {
+			Index& slot = get_index(i);
+			Index swap = atomicCAS_block(&slot,AdrType::null,index);
+			if( swap == AdrType::null ){
+				return;
+			}
+		}
+		#endif
 		parent->free(index,rand_state);
 	}
 
@@ -605,6 +778,109 @@ struct MemCache {
 
 
 
+template<typename T, size_t SIZE, size_t WARP_SIZE=32>
+struct SimpleMemCache {
+
+	typedef typename T::DataType DataType;
+	typedef typename T::Index    Index;
+	typedef Adr<Index> AdrType;
+	typedef MemPool<DataType,Index> PoolType;
+
+	#ifdef LAZY_MEM
+	bool try_lazy;
+	#endif
+
+	PoolType* parent;
+	unsigned int counts[WARP_SIZE];
+	Index indexes[SIZE*WARP_SIZE];
+
+
+	#if    __CUDA_ARCH__ < 600
+		#define atomicExch_block atomicExch
+		#define atomicCAS_block  atomicCAS
+	#endif
+
+	
+	__device__ Index& get_index( unsigned int offset ){
+		unsigned int real_offset = (WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*WARP_SIZE);
+		return indexes[real_offset];
+	}
+
+
+	__device__ void initialize (PoolType& p) {
+		if( current_leader() ){
+			parent = &p;
+		}
+		counts[threadIdx.x] = 0;
+	}
+
+	__device__ void finalize (unsigned int &rand_state) {
+		unsigned int count = counts[threadIdx.x];
+		for ( unsigned int i=0; i<count; i++ ) {
+			Index& slot = get_index(i);
+			parent->free(slot,rand_state);
+		}
+	}
+
+
+	__device__ void fill_up(unsigned int& rand_state) {
+		unsigned int count = counts[threadIdx.x];
+		if( SIZE/2 > count ) {
+			parent->pull_span( &get_index(count), (SIZE/2)-count, WARP_SIZE, rand_state);
+		}
+	}
+
+
+	__device__ Index alloc_index(unsigned int& rand_state) {
+
+		unsigned int& count = counts[threadIdx.x];
+		if( count > 0 ){
+			count -= 1;
+			Index& slot = get_index(count);
+			return slot;
+		} else {
+			return parent->alloc_index(rand_state);
+		}
+	}
+
+
+	__device__ DataType* alloc(unsigned int& rand_state){
+		Index result_index = alloc_index(rand_state);
+		if ( result_index != Adr<Index>::null ) {
+			return (parent->arena[result_index].data);
+		}
+		return NULL;
+	}
+
+
+	__device__ void free(Index index, unsigned int& rand_state){
+		
+		unsigned int& count = counts[threadIdx.x];
+		if( count < SIZE ){
+			get_index(count) = index;
+			count += 1;
+		} else {
+			parent->free(index,rand_state);
+		}
+
+	}
+
+
+	__device__ void free(DataType* address, unsigned int& rand_state){
+		if( address == NULL ){
+			return;
+		}
+		Index index = address - (parent->arena);
+		free(index,rand_state);
+	}
+
+	#if    __CUDA_ARCH__ < 600
+		#undef atomicExch_block
+		#undef atomicCAS_block
+	#endif
+
+
+};
 
 
 

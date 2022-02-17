@@ -3,9 +3,13 @@
 #include <vector>
 
 
-#define FILO
+//#define FILO
 
 //#define ALLOC_CHECK
+
+//#define LEVEL_CHECK
+
+#define TIMER 9
 
 
 using namespace util;
@@ -118,6 +122,15 @@ struct SimParams {
 
 	int     fiss_mult;
 
+	#ifdef LEVEL_CHECK
+	int*    level_total;
+	#endif
+
+
+	#ifdef TIMER
+	unsigned long long int*    timer;
+	#endif
+
 };
 
 
@@ -218,7 +231,8 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 	n.p_y += n.m_y * step;
 	n.p_z += n.m_z * step;
 
-	if ( params.implicit_capture ) {
+	float original_weight = n.weight;
+	if ( params.implicit_capture && (n.weight >= params.weight_limit) ) {
 		n.weight *= expf(-step*params.capture_x);
 	}
 
@@ -245,7 +259,7 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 		return params.fiss_mult;
 	} else if ( samp <= ((params.scatter_x + params.fission_x + params.capture_x) / params.combine_x) ) {
 		if ( params.implicit_capture ) {
-			if( n.weight < params.weight_limit ){
+			if( original_weight < params.weight_limit ){
 				return -1;
 			} else {
 				return 0;
@@ -277,14 +291,20 @@ struct CommonContext{
 	
 	host::DevObj<iter::IOBuffer<unsigned int>> neutron_io;
 
-	host::Stopwatch watch;
+	#ifdef LEVEL_CHECK
+	host::DevBuf<int> level_total;
+	#endif
+
+	#ifdef TIMER
+	host::DevBuf<unsigned long long int> timer;
+	#endif
+
+	Stopwatch watch;
 
 	CommonContext(cli::ArgSet& args)
 		: neutron_io( args["io_cap"] | args["num"] | 1000u )
-		#if EVENT
-		, neutron_pool(0x8000000,8191)
-		#else
-		, neutron_pool(0x8000000,8191)
+		#ifdef TIMER
+		, timer((size_t) TIMER)
 		#endif
 	{
 
@@ -315,8 +335,17 @@ struct CommonContext{
 
 
 
+
 		watch.start();
 
+
+		unsigned int pool_size = args["pool"] | 0x10000000u;
+		#if EVENT
+		neutron_pool = host::DevObj<mem::MemPool<Neutron,unsigned int>>(pool_size,8191u);
+		#else
+		neutron_pool = host::DevObj<mem::MemPool<Neutron,unsigned int>>(pool_size,8191u);
+		#endif
+		
 
 		int elem_count = params.div_count*2;
 		halted.resize(elem_count);
@@ -330,10 +359,20 @@ struct CommonContext{
 		source_id_iter<< iter::AtomicIter<unsigned int>(0,args["num"]);
 		params.source_id_iter = source_id_iter;
 
-
 		params.neutron_pool = neutron_pool;
 		
 		params.neutron_io = neutron_io;
+
+		#ifdef LEVEL_CHECK
+		level_total << 0;
+		params.level_total = level_total;
+		#endif
+
+		#ifdef TIMER
+		params.timer = timer;
+		cudaMemset( timer, 0, sizeof(unsigned long long int) * TIMER );
+		#endif
+
 	}
 
 
@@ -404,12 +443,31 @@ struct CommonContext{
 
 		}
 
+		#ifdef TIMER
+		printf("Program times:\n");
+		std::vector<unsigned long long int> times;
+		timer >> times;
+		double total = times[0];
+		for(unsigned int i=0; i<times.size(); i++){
+			double the_time = times[i];
+			double prop = 100.0 * (the_time / total);
+			printf("T%d: %llu (~%f%)\n",i,times[i],prop );
+		}
+		#endif
+
+
+		#ifdef LEVEL_CHECK
+		int high_level;
+		level_total >> high_level;
+		printf("%d",high_level);
+		#else
 		
 		if( show ){
 			printf("%f\n",msecTotal);
 		} else {
 			printf("%f",msecTotal);
 		}
+		#endif
 
 	}
 

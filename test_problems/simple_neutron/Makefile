@@ -29,7 +29,7 @@ clean:
 	rm -f neuttest.out
 
 neut_hrm:      Makefile $(HARMONIZE_PATH) neut_harmonized.cpp neut_common.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu $(ARCH_DEF) -DCACHE $(STD) -o neut_hrm neut_harmonized.cpp --restrict -include $(HARMONIZE_PATH)
+	$(CUDA_NVCC) -x cu -DCACHE $(ARCH_DEF)  $(STD) -o neut_hrm neut_harmonized.cpp --restrict -include $(HARMONIZE_PATH)
 
 
 neut_std:      Makefile neut_standard.cpp neut_common.cpp $(UTIL_SOURCE)
@@ -37,5 +37,5 @@ neut_std:      Makefile neut_standard.cpp neut_common.cpp $(UTIL_SOURCE)
 
 
 neut_evt:      Makefile $(HARMONIZE_PATH) neut_harmonized.cpp neut_common.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(STD) -o neut_evt neut_harmonized.cpp -DEVENT --restrict -include $(HARMONIZE_PATH)
+	$(CUDA_NVCC) -x cu -DCACHE $(ARCH_DEF) $(STD) -o neut_evt neut_harmonized.cpp -DEVENT --restrict -include $(HARMONIZE_PATH)
 

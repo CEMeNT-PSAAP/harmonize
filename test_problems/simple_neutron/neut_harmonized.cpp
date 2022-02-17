@@ -2,11 +2,14 @@
 
 #include "neut_common.cpp"
 
+
+
 using namespace util;
 
 
 typedef mem::MemPool<Neutron,unsigned int> PoolType;
-typedef mem::MemCache<PoolType,128>        CacheType;
+//typedef mem::MemCache<PoolType,16>        CacheType;
+typedef mem::SimpleMemCache<PoolType,16>      CacheType;
 
 
 struct ThreadState {
@@ -22,6 +25,15 @@ struct GroupState {
 	CacheType cache;
 	#endif
 
+	#ifdef LEVEL_CHECK
+	int mem_level;
+	int mem_max;
+	#endif
+
+	#ifdef TIMER
+	unsigned long long int time_totals[TIMER];
+	#endif
+
 };
 
 
@@ -35,7 +47,7 @@ DEF_PROMISE_TYPE(Fn::Neutron, unsigned int);
 #ifdef EVENT
 typedef  EventProgram     < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 #else
-typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
+typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState, unsigned int, 16, 64, 64 > ProgType;
 #endif
 
 
@@ -45,6 +57,11 @@ typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
 
 DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] += clock64();
+	}
+	#endif
 
 	if( arg == mem::Adr<unsigned int>::null ){
 		printf("{   Bad argument!   }");
@@ -56,6 +73,12 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
 	n = (*device.neutron_pool)[arg];
 
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[1] -= clock64();
+	}
+	#endif
+
 	int result = 0;
 	for(int i=0; i < device.horizon; i++){
 		result = step_neutron(device,n);
@@ -63,9 +86,22 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 			break;
 		}
 	}
+	
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[1] += clock64();
+	}
+	#endif
 
 	#ifdef FILO
 	unsigned int last = n.next;
+	#endif
+
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[2] -= clock64();
+	}
 	#endif
 
 	for(int i=0; i<result; i++){
@@ -79,6 +115,11 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 		unsigned int index = group.cache.alloc_index(thread.rand_state);
 		#else
 		unsigned int index = device.neutron_pool->alloc_index(thread.rand_state);
+		#endif
+		
+		#ifdef LEVEL_CHECK
+		int mlev = atomicAdd(&group.mem_level,1);
+		atomicMax(&group.mem_max,mlev+1);
 		#endif
 
 		if( index != mem::Adr<unsigned int>::null ){
@@ -112,13 +153,36 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
 	}
 
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[2] += clock64();
+	}
+	#endif
 
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[3] -= clock64();
+	}
+	#endif
 
 	if( result == 0 ) {
 		(*device.neutron_pool)[arg] = n;
 		ASYNC_CALL(Fn::Neutron,arg);
 	}
-	else {
+	
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[3] += clock64();
+	}
+	#endif
+	
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[4] -= clock64();
+	}
+	#endif
+
+	if( result != 0 ) {
 
 		#ifdef FILO
 		if( (result < 0) && (n.next != mem::Adr<unsigned int>::null) ){
@@ -132,7 +196,18 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 		}
 		#endif
 
+		#ifdef LEVEL_CHECK
+		int mlev = atomicAdd(&group.mem_level,-1);
+		#endif
+		
 		#ifdef CACHE
+		#if 0
+		unsigned int idx  = util::warp_inc_scan();
+		unsigned int acnt = util::active_count();
+		if(idx == 0){
+			printf("[%d]",acnt);
+		}
+		#endif
 		group.cache.free(arg,thread.rand_state);
 		#else
 		device.neutron_pool->free(arg,thread.rand_state);
@@ -140,25 +215,79 @@ DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
 
 	}
 
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[4] += clock64();
+	}
+	#endif
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] -= clock64();
+	}
+	#endif
 }
 
 
 DEF_INITIALIZE(ProgType) {
 
+	thread.rand_state = blockDim.x * blockIdx.x + threadIdx.x;
 
 	#ifdef CACHE
 	group.cache.initialize(*device.neutron_pool);
 	#endif
 
-	thread.rand_state = blockDim.x * blockIdx.x + threadIdx.x;
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		for(unsigned int i=0; i<TIMER; i++){
+			group.time_totals[i] = 0;
+		}
+		group.time_totals[0] -= clock64();
+	}
+	#endif
 
+
+	#ifdef LEVEL_CHECK
+	if( util::current_leader() ){
+		group.mem_level = 0;
+		group.mem_max   = 0;
+	}
+	__syncwarp();
+	#endif
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] -= clock64();
+	}
+	#endif
 }
 
 
 DEF_FINALIZE(ProgType) {
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] += clock64();
+	}
+	#endif
 
 	#ifdef CACHE
 	group.cache.finalize(thread.rand_state);
+	#endif
+
+	#ifdef LEVEL_CHECK
+	__syncwarp();
+	if( util::current_leader() ){
+		atomicAdd(device.level_total,group.mem_max);
+	}
+	#endif
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[0] += clock64();
+		for(unsigned int i=0; i<TIMER; i++){
+			atomicAdd(&(device.timer[i]),group.time_totals[i]);
+		}
+	}
 	#endif
 
 }
@@ -166,8 +295,23 @@ DEF_FINALIZE(ProgType) {
 
 DEF_MAKE_WORK(ProgType) {
 
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] += clock64();
+	}
+	#endif
+
+
 	unsigned int id;
 
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[5] -= clock64();
+	}
+	#endif
+	
 	#ifdef EVENT
 	float fill_frac = QUEUE_FILL_FRACTION(Fn::Neutron);
 	if( fill_frac > 0.5 ){
@@ -178,31 +322,50 @@ DEF_MAKE_WORK(ProgType) {
 
 	#else
 
-	iter::Iter<unsigned int> iter = device.source_id_iter->leap(8u);
+	iter::Iter<unsigned int> iter = device.source_id_iter->leap(1u);
 
+	#endif
+	
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[5] += clock64();
+	}
 	#endif
 
 
-
 	while(iter.step(id)){
+
 		Neutron n(id,0.0,0.0,0.0,0.0,1.0);
 
 		#ifdef FILO
 		n.next = mem::Adr<unsigned int>::null;
 		#endif
 
+		#ifdef TIMER
+		if( util::current_leader() ) {
+			group.time_totals[6] -= clock64();
+		}
+		#endif
+		
 		#ifdef CACHE
 		unsigned int index = group.cache.alloc_index(thread.rand_state);
 		#else
 		unsigned int index = device.neutron_pool->alloc_index(thread.rand_state);
 		#endif
-		while(index == mem::Adr<unsigned int>::null){
+		
+		#ifdef TIMER
+		if( util::current_leader() ) {
+			group.time_totals[6] += clock64();
+		}
+		#endif
+
+		#ifdef LEVEL_CHECK
+		int mlev = atomicAdd(&group.mem_level,1);
+		atomicMax(&group.mem_max,mlev+1);
+		#endif
+
+		if(index == mem::Adr<unsigned int>::null){
 			printf("{failed to allocate}");
-			#ifdef CACHE
-			index = group.cache.alloc_index(thread.rand_state);
-			#else
-			index = device.neutron_pool->alloc_index(thread.rand_state);
-			#endif
 		}
 		
 		if( (index != mem::Adr<unsigned int>::null) ) {
@@ -215,14 +378,32 @@ DEF_MAKE_WORK(ProgType) {
 			}
 			#endif
 
+			#ifdef TIMER
+			if( util::current_leader() ) {
+				group.time_totals[7] -= clock64();
+			}
+			#endif
+			
 			#ifdef EVENT
 			IMMEDIATE_CALL(Fn::Neutron,index);
 			#else
 			ASYNC_CALL   (Fn::Neutron,index);
 			#endif
+				
+			#ifdef TIMER
+			if( util::current_leader() ) {
+				group.time_totals[7] += clock64();
+			}
+			#endif
 		}
 		
 	}
+
+	#ifdef TIMER
+	if( util::current_leader() ) {
+		group.time_totals[8] -= clock64();
+	}
+	#endif
 
 	return !device.source_id_iter->done();
 
@@ -245,9 +426,9 @@ int main(int argc, char *argv[]){
 	check_error();
 
 	#ifdef EVENT
-	ProgType::Instance instance = ProgType::Instance(0x2000000,com.params);
+	ProgType::Instance instance = ProgType::Instance(0x10000000,com.params);
 	#else 
-	ProgType::Instance instance = ProgType::Instance(0x100000,com.params);
+	ProgType::Instance instance = ProgType::Instance(0x1000000,com.params);
 	#endif
 
 	cudaDeviceSynchronize();
@@ -275,6 +456,11 @@ int main(int argc, char *argv[]){
 		num++;
 	} while(! instance.complete() );
 	//printf("\nIter count is %d\n",num);
+
+	#ifdef HRM_TIME
+	printf("Instance times:\n");
+	instance.print_times();
+	#endif
 
 	#endif
 

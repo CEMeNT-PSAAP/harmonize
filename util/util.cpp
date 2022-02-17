@@ -89,6 +89,43 @@ __device__ unsigned int random_uint(unsigned int& rand_state){
 #endif
 
 
+struct Stopwatch {
+
+	cudaEvent_t beg;
+	cudaEvent_t end;
+	float duration;
+
+	Stopwatch() {
+        	if (  ( cudaEventCreate( &beg ) != cudaSuccess )
+		   || ( cudaEventCreate( &end  ) != cudaSuccess )
+		) {
+			printf("Failed to create Stopwatch\n");
+			std::exit(1);
+		}
+	}
+
+
+	bool start() {
+		return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+	}
+
+	bool stop() {
+		if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
+			return false;
+		}
+		cudaEventSynchronize( end );
+        	cudaEventElapsedTime( &duration, beg, end );
+		return true;
+	}
+
+	float ms_duration(){
+		return duration;
+	}
+
+};
+
+
+
 namespace func {
 	#include "func.cpp"
 }

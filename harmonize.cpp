@@ -32,6 +32,15 @@
 #endif
 
 
+//#define HRM_TIME 4
+
+#ifdef HRM_TIME
+	#define beg_time(idx) if(util::current_leader()) { grp.time_totals[idx] -= clock64(); }
+	#define end_time(idx) if(util::current_leader()) { grp.time_totals[idx] += clock64(); }
+#else
+	#define beg_time(idx) ;
+	#define end_time(idx) ;
+#endif
 
 #include "util/util.cpp"
 
@@ -294,6 +303,24 @@ union PromiseUnion<HEAD, TAIL...>
 
 
 
+template <typename PROMISE_UNION>
+struct PromiseEnum {
+
+	typedef PROMISE_UNION PromiseUnion;
+
+	PromiseUnion data;
+	Fn           id;
+	
+	PromiseEnum() = default;
+
+	__host__ __device__ PromiseEnum(PromiseUnion uni, Fn fn_id)
+		: data(uni)
+		, id(fn_id)
+	{ }
+
+};
+
+
 
 //!
 //! The `WorkLink` template struct, given a `PromiseUnion` union, an address type, and a group
@@ -336,46 +363,47 @@ struct WorkLink
 
 
 template <typename PROMISE_UNION, typename ADR_TYPE>
-struct SingletonWorkLink
+struct PromiseLink
 {
 	
-	typedef ADR_TYPE      AdrType;
-	typedef PROMISE_UNION PromiseType;
+	typedef ADR_TYPE                 AdrType;
+	typedef PROMISE_UNION            PromiseType;
+	typedef PromiseEnum<PromiseType> PromiseEnumType;
 
-	PromiseType promise;
-	Fn          id;
-	AdrType     next;
+	PromiseEnumType data;
+	AdrType         next;
 
-	/*
-	// Zeros out a link, giving it a null function ID and sets next to the given input.
-	*/
-	__host__ __device__ void empty(AdrType next_adr){
-
+	__host__ __device__ void empty(AdrType next_adr, PromiseEnumType value){
 		next	= next_adr;
-		id	= static_cast<Fn>(PromiseType::Count::value);
-
+		data	= value;
 	}
 
 };
 
 
 template <typename PROMISE_UNION, typename ADR_TYPE, typename COUNTER_TYPE=unsigned int>
-struct SingletonWorkBarrier {
+struct WorkBarrier {
 		
-	typedef ADR_TYPE      AdrType;
-	typedef PROMISE_UNION PromiseType;
-	typedef COUNTER_TYPE  CounterType;
+	typedef ADR_TYPE                 AdrType;
+	typedef PROMISE_UNION            PromiseType;
+	typedef PromiseEnum<PromiseType> PromiseEnumType;
+	typedef COUNTER_TYPE             CounterType;
 
 	CounterType counter;
 	AdrType     work;
 
-	SingletonWorkBarrier<PromiseType,AdrType,CounterType>() = default;
+	WorkBarrier<PromiseType,AdrType,CounterType>() = default;
 	
-	__host__ __device__ SingletonWorkBarrier<PromiseType,AdrType,CounterType>(
+	__host__ __device__ WorkBarrier<PromiseType,AdrType,CounterType>(
 		CounterType dependency_count
 	) {
 		counter = dependency_count;
 	}
+
+	__device__ void await (PromiseEnumType promise) {
+
+	}
+
 
 };
 
@@ -497,6 +525,10 @@ struct WorkStack<FRAME_TYPE, 0>
 // (STASH_SIZE)          `--> (STACK_SIZE)                                        //
 //                                                                                //
 ////////////////////////////////////////////////////////////////////////////////////
+
+
+
+#define LAZY_LINK
 
 
 struct VoidState {};
@@ -652,6 +684,9 @@ struct HarmonizeProgram<
 		int				SM_promise_delta;
 		unsigned long long int		work_iterator;
 
+		#ifdef HRM_TIME
+		unsigned long long int		time_totals[HRM_TIME];
+		#endif
 
 		GroupState			group_state;
 
@@ -667,6 +702,13 @@ struct HarmonizeProgram<
 
 		typedef		ProgramType	ParentProgramType;
 
+		#ifdef LAZY_LINK
+		AdrType*        claim_count;
+		#endif
+
+		#ifdef HRM_TIME
+		unsigned long long int* time_totals;
+		#endif
 
 		ArenaType	arena;
 		PoolType*	pool;
@@ -685,23 +727,47 @@ struct HarmonizeProgram<
 	struct Instance {
 
 
-		size_t arena_size;
+		AdrType                          arena_size;
+		#ifdef LAZY_LINK
+		util::host::DevBuf<AdrType>      claim_count;
+		#endif
+		#ifdef HRM_TIME
+		util::host::DevBuf<unsigned long long int> time_totals;
+		#endif
 		util::host::DevBuf<LinkType>     arena;
 		util::host::DevBuf<PoolType>     pool;
 		util::host::DevBuf<StackType>    stack;
 		DeviceState device_state;		
 
-		__host__ Instance (size_t arsize, DeviceState gs)
+		__host__ Instance (AdrType arsize, DeviceState gs)
 			: arena(arsize)
 			, pool (1)
 			, stack(1)
 			, arena_size(arsize)
 			, device_state(gs)
-		{}
+			#ifdef LAZY_LINK
+			, claim_count(0u)
+			#endif
+			#ifdef HRM_TIME
+			, time_totals((size_t)HRM_TIME)
+			#endif
+		{
+			#ifdef HRM_TIME
+			cudaMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
+			#endif	
+		}
 
 		__host__ DeviceContext to_context(){
 
 			DeviceContext result;
+
+			#ifdef LAZY_LINK
+			result.claim_count  = claim_count;
+			#endif
+			#ifdef HRM_TIME
+			result.time_totals  = time_totals;
+			#endif
+
 			result.arena.size   = arena_size;
 			result.arena.links  = arena;
 			result.pool         = pool ;
@@ -712,6 +778,18 @@ struct HarmonizeProgram<
 
 		}
 
+		#ifdef HRM_TIME
+		__host__ void print_times(){
+			std::vector<unsigned long long int> times;
+			time_totals >> times;
+			double total = times[0];
+			for(unsigned int i=0; i<times.size(); i++){
+				double the_time = times[i];
+				double prop = 100.0 * (the_time / total);
+				printf("T%d: %llu (~%f%)\n",i,times[i],prop );
+			}
+		}
+		#endif
 
 		__host__ bool complete(){
 
@@ -814,6 +892,13 @@ struct HarmonizeProgram<
 
 			grp.SM_promise_delta = 0;
 			
+			#ifdef HRM_TIME
+			for(unsigned int i=0; i<HRM_TIME; i++){
+				grp.time_totals[i] = 0;
+			}
+			beg_time(0);
+			#endif
+
 		}
 
 		__syncwarp(active);
@@ -1174,10 +1259,46 @@ struct HarmonizeProgram<
 	 __device__ static void fill_stash_links(_CTX_ARGS, unsigned int threashold){
 
 
+
 		unsigned int active = __activemask();
 		__syncwarp(active);
 
 		if( util::current_leader() ){
+
+			#ifdef LAZY_LINK
+
+			#if 1
+			unsigned int wanted = threashold - grp.link_stash_count; 
+			if( (grp.link_stash_count < threashold) && ((*glb.claim_count) <  glb.arena.size) ){
+				AdrType claim_offset = atomicAdd(glb.claim_count,wanted);
+				unsigned int received = 0;
+				if( claim_offset <= (glb.arena.size - wanted) ){
+					received = wanted;
+				} else if ( claim_offset >= glb.arena.size ) {
+					received = 0;
+				} else {
+					received = glb.arena.size - claim_offset;
+				}
+				for( unsigned int index=0; index < received; index++){
+					insert_stash_link(_CTX_REFS,LinkAdrType(claim_offset+index));
+				}
+			}
+			#else
+			for(int i=grp.link_stash_count; i < threashold; i++){
+				if((*glb.claim_count) <  glb.arena.size ){
+					AdrType claim_index = atomicAdd(glb.claim_count,1);
+					if( claim_index < glb.arena.size ){
+						//glb.arena[claim_index].empty(LinkAdrType::null);
+						insert_stash_link(_CTX_REFS,LinkAdrType(claim_index));
+					}
+				} else {
+					break;
+				}
+			}
+			#endif
+			
+			#endif
+
 
 			for(int try_itr=0; try_itr < RETRY_LIMIT; try_itr++){
 		
@@ -2367,6 +2488,13 @@ struct HarmonizeProgram<
 				//printf("{Level 0 CR is (%d,%d)}",(cr&0xFFFF0000)>>16,cr&0xFFFF );
 			}
 
+			#ifdef HRM_TIME
+			end_time(0);
+			for(int i=0; i<HRM_TIME; i++){
+				atomicAdd(&glb.time_totals[i],grp.time_totals[i]);
+			}
+			#endif
+
 		}
 
 	}
@@ -2442,6 +2570,18 @@ struct HarmonizeProgram<
 		}
 
 
+		#ifdef LAZY_LINK
+
+		/*
+		// Initialize the pool, assigning empty queues to each queue slot.
+		*/
+		for(unsigned int index = thd.thread_id; index < POOL_SIZE; index+=worker_count ){	
+			
+			pool->queues[index].pair.data = QueueType::null;
+
+		}
+
+		#else
 		/*
 		// Initialize the arena, connecting the contained links into roughly equally sized lists,
 		// zeroing the promise counter in the links and marking the function ID with an invalid
@@ -2470,6 +2610,7 @@ struct HarmonizeProgram<
 			pool->queues[index] = QueueType(LinkAdrType(head),LinkAdrType(tail));
 
 		}
+		#endif
 
 
 	}
@@ -2481,8 +2622,7 @@ struct HarmonizeProgram<
 	// a previous state.
 	*/
 	 __device__ static void push_calls(DeviceContext glb, LinkType* call_buffer, size_t link_count){
-
-
+		
 		/* Initialize per-warp resources */
 		__shared__ GroupContext grp;
 		init_group(glb,grp);
