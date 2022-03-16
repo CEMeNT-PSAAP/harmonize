@@ -173,7 +173,7 @@ int main(int argc, char* argv[]){
 	unsigned int wg_count    = args["wg_count"];
 	unsigned int cycle_count = args["cycle_count"] | 0x100000u;
 
-	host::Stopwatch watch;
+	Stopwatch watch;
 
 	watch.start();
 

@@ -344,6 +344,10 @@ struct GroupArrayIter {
 		return false;
 	}
 
+	__device__ bool done () {
+		return iter.done();
+	}
+
 	__device__ GroupArrayIter<T,IterType> (T* adr, GroupIter<IterType> itr)
 		: array(adr)
 		, iter (itr)
@@ -481,8 +485,10 @@ struct IOBuffer
 
 	__device__ void flip()
 	{
-		toggle = !toggle;	
-		input_iter  = AtomicIter<IterType>(0,output_iter.value);
+		toggle = !toggle;
+		IterType in_count = output_iter.value >= capacity ? capacity : output_iter.value;
+		//printf("{Flipped with output at %d.}",in_count);
+		input_iter  = AtomicIter<IterType>(0,in_count);
 		output_iter = AtomicIter<IterType>(0,capacity);
 	}
 

@@ -240,7 +240,9 @@ class DevObj {
 
 	operator T*()    { return inner->adr; }
 
-	T& host_copy() { return inner->host_copy; }
+	operator T()     { return inner->host_copy; }
+	
+	T& host_copy()   { return inner->host_copy; }
 
 	template<typename... ARGS>
 	DevObj<T>(ARGS... args)

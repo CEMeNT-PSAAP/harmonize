@@ -11,10 +11,12 @@
 #define INF_LOOP_SAFE
 
 
+#define NOOP(x) ;
+
 #ifdef QUEUE_PRINT
 	#define q_printf  printf
 #else
-	#define q_printf(fmt, ...) ;
+	#define q_printf(fmt, ...) NOOP(...);
 #endif
 
 
@@ -32,7 +34,7 @@
 #endif
 
 
-//#define HRM_TIME 4
+//#define HRM_TIME 16
 
 #ifdef HRM_TIME
 	#define beg_time(idx) if(util::current_leader()) { grp.time_totals[idx] -= clock64(); }
@@ -151,7 +153,7 @@ union PromiseUnion;
 //!
 template <>
 union PromiseUnion <> {
-
+	
 	template <typename PROG_TYPE, Fn ID>
 	__host__  __device__ void rigid_eval(
 		typename PROG_TYPE::DeviceContext & device_context,
@@ -177,6 +179,7 @@ union PromiseUnion <> {
 		return;
 	}
 
+	__host__ __device__ void dyn_copy_as(Fn id, PromiseUnion<>& other){ }
 };
 
 
@@ -296,6 +299,20 @@ union PromiseUnion<HEAD, TAIL...>
 			);
 		}
 
+	}
+
+	template <Fn ID>
+	__host__ __device__ void copy_as(PromiseUnion<HEAD,TAIL...>& other){
+		cast<ID>() = other.template cast<ID>();
+	}
+
+
+	__host__ __device__ void dyn_copy_as(Fn id, PromiseUnion<HEAD,TAIL...>& other){
+		if( id == HEAD ){
+			cast<HEAD>() = other.cast<HEAD>();
+		} else {
+			tail_form.dyn_copy_as(id,other.tail_form);
+		}
 	}
 
 };
@@ -589,7 +606,9 @@ struct HarmonizeProgram<
 	// During system verification/debugging, this will be used as a cutoff to prevent infinite
 	// looping
 	*/
-	static const unsigned int RETRY_LIMIT      = 32;
+	static const unsigned int PUSH_QUEUE_RETRY_LIMIT         = 32;
+	static const unsigned int FILL_STASH_RETRY_LIMIT         = 1;
+	static const unsigned int FILL_STASH_LINKS_RETRY_LIMIT   = 32;
 	
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -1060,6 +1079,7 @@ struct HarmonizeProgram<
 		} else {
 			LinkAdrType tail = queue.get_tail();
 			glb.arena[tail].next = link_adr;
+			//atomicExch( &(glb.arena[tail].next.adr),link_adr.adr);
 			queue.set_tail(link_adr);
 		}
 
@@ -1076,17 +1096,20 @@ struct HarmonizeProgram<
 
 		QueueType result;
 		
-		
+		__threadfence();
 		/*
 		// First iterate from the starting index to the end of the queue range, attempting to
 		// claim a non-null queue until either there are no more slots to try, or the atomic
 		// swap successfuly retrieves something.
 		*/
 		for(unsigned int i=start_index; i < range_size; i++){
-			result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
-			if( ! result.is_null() ){
-				src_index = i;
-				return result;
+			if( src[i].pair.data != QueueType::null ) {
+				result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
+				if( ! result.is_null() ){
+					src_index = i;
+					__threadfence();
+					return result;
+				}
 			}
 		}
 
@@ -1095,10 +1118,13 @@ struct HarmonizeProgram<
 		// previous scan.
 		*/
 		for(unsigned int i=0; i < start_index; i++){
-			result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
-			if( ! result.is_null() ){
-				src_index = i;
-				return result;
+			if( src[i].pair.data != QueueType::null ) {
+				result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
+				if( ! result.is_null() ){
+					src_index = i;
+					__threadfence();
+					return result;
+				}
 			}
 		}
 
@@ -1124,12 +1150,17 @@ struct HarmonizeProgram<
 	*/
 	 __device__ static void push_queue(_CTX_ARGS, QueueType& dest, QueueType queue){
 
+		if( queue.is_null() ){
+			return;
+		}
 		#ifdef INF_LOOP_SAFE
 		while(true)
 		#else
-		for(int i=0; i<RETRY_LIMIT; i++)
+		for(int i=0; i<PUSH_QUEUE_RETRY_LIMIT; i++)
 		#endif
 		{
+			__threadfence();
+			
 			QueueType swap;
 			swap.pair.data = atomicExch(&dest.pair.data,queue.pair.data);
 			/*
@@ -1300,7 +1331,7 @@ struct HarmonizeProgram<
 			#endif
 
 
-			for(int try_itr=0; try_itr < RETRY_LIMIT; try_itr++){
+			for(int try_itr=0; try_itr < FILL_STASH_LINKS_RETRY_LIMIT; try_itr++){
 		
 				if(grp.link_stash_count >= threashold){
 					break;
@@ -1329,7 +1360,6 @@ struct HarmonizeProgram<
 						break;
 					}
 				}
-				__threadfence();
 				push_queue(_CTX_REFS,glb.pool->queues[src_index],queue);
 				q_printf("Pushed queue (%d,%d) to pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
 
@@ -1372,7 +1402,7 @@ struct HarmonizeProgram<
 		for(unsigned int i=0; i < spill_count; i++){
 			
 			LinkAdrType link = claim_stash_link(_CTX_REFS);
-			q_printf("Claimed link %d from link stash\n",link);
+			q_printf("Claimed link %d from link stash\n",link.adr);
 			push_back(_CTX_REFS,queue,link);
 
 		}
@@ -1383,12 +1413,11 @@ struct HarmonizeProgram<
 		/*
 		// Push out the queue to the pool
 		*/
-		q_printf("Pushing queue (%d,%d) to pool\n",get_head(queue),get_tail(queue));
+		q_printf("Pushing queue (%d,%d) to pool\n",queue.get_head().adr,queue.get_tail().adr);
 		unsigned int dest_idx = util::random_uint(thd.rand_state) % POOL_SIZE;
-		__threadfence();
 		push_queue(_CTX_REFS,glb.pool->queues[dest_idx],queue);
 		
-		q_printf("Pushed queue (%d,%d) to pool\n",get_head(queue),get_tail(queue));
+		q_printf("Pushed queue (%d,%d) to pool\n",queue.get_head().adr,queue.get_tail().adr);
 
 	}
 
@@ -1463,7 +1492,7 @@ struct HarmonizeProgram<
 
 		LinkAdrType tail = queue.get_tail();
 		LinkAdrType head = queue.get_head();
-		rc_printf("SM %d: push_promises(level:%d,index:%d,queue:(%d,%d),delta:%d)\n",bthdkIdx.x,level,index,tail,head,promise_delta);
+		rc_printf("SM %d: push_promises(level:%d,index:%d,queue:(%d,%d),delta:%d)\n",threadIdx.x,level,index,tail.adr,head.adr,promise_delta);
 		/*
 		// Do not bother pushing a null queue if there is no delta to report
 		*/
@@ -1493,10 +1522,10 @@ struct HarmonizeProgram<
 
 
 			grp.SM_promise_delta += promise_delta;
-			rc_printf("SM %d-%d: Old count: %d, New count: %d\n",bthdkIdx.x,threadIdx.x,old_count,new_count);
+			rc_printf("SM %d-%d: Old count: %d, New count: %d\n",blockIdx.x,threadIdx.x,old_count,new_count);
 
 			
-			//rc_printf("SM %d-%d: frame zero resident count is: %d\n",bthdkIdx.x,threadIdx.x,glb.stack->frames[0].children_residents);
+			//rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,glb.stack->frames[0].children_residents);
 			/*
 			// If the addition caused a frame to change from empty to non-empty or vice-versa,
 			// make an appropriate incrementation or decrementation at the stack base.
@@ -1506,21 +1535,21 @@ struct HarmonizeProgram<
 			} else if( (old_count != 0) && (new_count == 0) ){
 				atomicSub(&(glb.stack->depth_live),0x00010000u);
 			} else {
-				rc_printf("SM %d: No change!\n",bthdkIdx.x);
+				rc_printf("SM %d: No change!\n",threadIdx.x);
 			}
 
-			__threadfence();	
 			/*
 			// Finally, push the queues
 			*/
 			push_queue(_CTX_REFS,dest.pool.queues[index],queue);
-			rc_printf("SM %d: Pushed queue (%d,%d) to stack at index %d\n",bthdkIdx.x,get_head(queue),get_tail(queue),index);
+			rc_printf("SM %d: Pushed queue (%d,%d) to stack at index %d\n",threadIdx.x,queue.get_head().adr,queue.get_tail().adr,index);
 		
-				
-			//rc_printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",bthdkIdx.x,threadIdx.x,glb.stack->frames[0].children_residents);
+			if( (glb.stack->frames[0].children_residents % 0x1000000 ) == 0 ) {
+				//printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,glb.stack->frames[0].children_residents);
+			}
 
 		}
-		rc_printf("(%d) the delta: %d\n",bthdkIdx.x,promise_delta);
+		rc_printf("(%d) the delta: %d\n",threadIdx.x,promise_delta);
 
 	}
 
@@ -1534,17 +1563,20 @@ struct HarmonizeProgram<
 	 __device__ static QueueType pull_promises(_CTX_ARGS, unsigned int level, unsigned int& source_index) {
 
 
-		rc_printf("SM %d: pull_promises(level:%d)\n",bthdkIdx.x,level);
+		rc_printf("SM %d: pull_promises(level:%d)\n",threadIdx.x,level);
 		unsigned int src_idx = util::random_uint(thd.rand_state) % FRAME_SIZE;
 
+		__threadfence();
 		FrameType &src = get_frame(_CTX_REFS,level);
-		
+	
 		QueueType queue = pull_queue(src.pool.queues,src_idx,FRAME_SIZE,source_index);
+		
 		if( ! queue.is_null() ){
 			q_printf("SM %d: Pulled queue (%d,%d) from stack at index %d\n",blockIdx.x,queue.get_tail().adr,queue.get_head().adr, src_idx);
 		} else {
 			q_printf("SM %d: Failed to pull queue from stack starting at index %d\n",blockIdx.x, src_idx);
 		}
+		__threadfence();
 		return queue;
 
 	}
@@ -1664,6 +1696,7 @@ struct HarmonizeProgram<
 			queue.pair.data = QueueType::null;
 			unsigned int partial_iter = 0;
 			bool has_full_slots = true;
+			//printf("{Spilling to %d}",threashold);
 			for(unsigned int i=0; i < spill_count; i++){
 				unsigned int slot = STASH_SIZE;
 				if(has_full_slots){
@@ -1677,6 +1710,7 @@ struct HarmonizeProgram<
 						db_printf("%d",partial_iter);
 						if(grp.partial_map[partial_iter] != STASH_SIZE){
 							slot = grp.partial_map[partial_iter];
+							//printf("{Spilling partial}");
 							partial_iter++;
 							break;
 						}
@@ -1696,7 +1730,6 @@ struct HarmonizeProgram<
 				}
 			}
 		
-			
 			unsigned int push_index = util::random_uint(thd.rand_state)%FRAME_SIZE;
 			q_printf("Pushing promises in (%d,%d) for spilling\n",queue.get_head().adr,queue.get_tail().adr);
 			push_promises(_CTX_REFS,0,push_index,queue,delta);
@@ -1819,6 +1852,7 @@ struct HarmonizeProgram<
 			if(grp.link_stash_count < 2){
 				fill_stash_links(_CTX_REFS,2);
 			}
+			//printf("{Spilling for call.}");
 			spill_stash(_CTX_REFS, STASH_SIZE-3);
 		}
 		#endif
@@ -1905,7 +1939,7 @@ struct HarmonizeProgram<
 	// depth_delta. This scheme ensures that the function being called and the depth of the promises
 	// being created for those calls are consistent across the warp.
 	*/
-	 __device__ static void async_call(_CTX_ARGS, Fn func_id, int depth_delta, PromiseUnionType promise){
+	 __device__ static void async_call(_CTX_ARGS, Fn func_id, int depth_delta, PromiseUnionType& promise){
 
 		unsigned int active = __activemask();
 
@@ -1931,10 +1965,12 @@ struct HarmonizeProgram<
 		__syncwarp(active);
 		if( (left_start + index) >= WORK_GROUP_SIZE ){
 			//db_printf("Overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
-			grp.stash[right].promises[left_start+index-WORK_GROUP_SIZE] = promise;
+			grp.stash[right].promises[left_start+index-WORK_GROUP_SIZE].dyn_copy_as(func_id,promise);
+			//grp.stash[right].promises[left_start+index-WORK_GROUP_SIZE] = promise;
 		} else {
 			//db_printf("Non-overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
-			grp.stash[left].promises[left_start+index] = promise;
+			grp.stash[left].promises[left_start+index].dyn_copy_as(func_id,promise);
+			//grp.stash[left].promises[left_start+index] = promise;
 		}
 		__syncwarp(active);	
 
@@ -1947,7 +1983,7 @@ struct HarmonizeProgram<
 	template<Fn FUNC_ID>
 	 __device__ static void async_call_cast(_CTX_ARGS, int depth_delta, typename PromiseType<FUNC_ID>::ParamType param_value){
 
-
+		beg_time(7);
 		unsigned int active = __activemask();
 
 		/*
@@ -1957,12 +1993,16 @@ struct HarmonizeProgram<
 		unsigned int index = util::warp_inc_scan();
 		unsigned int delta = util::active_count();
 
+		beg_time(8);
 		async_call_stash_dump(_CTX_REFS, FUNC_ID, depth_delta, delta);
+		end_time(8);
 
 		__shared__ unsigned int left, left_start, right;
 
 
+		beg_time(9);
 		async_call_stash_prep(_CTX_REFS,FUNC_ID,depth_delta,delta,left,left_start,right);
+		end_time(9);
 		
 		/*
 		// Write the promise into the appropriate part of the stash, writing into the left link 
@@ -1977,11 +2017,24 @@ struct HarmonizeProgram<
 			grp.stash[left].promises[left_start+index].template cast<FUNC_ID>() = param_value;
 		}
 		__syncwarp(active);	
+		end_time(7);
 
 	}
 
 
-	//#define PARACON
+
+	template<Fn FUNC_ID>
+	__device__ static void immediate_call_cast(_CTX_ARGS, typename PromiseType<FUNC_ID>::ParamType param_value){
+		PromiseUnionType promise;
+		promise.template cast<FUNC_ID>() = param_value;
+		promise.template rigid_eval<ProgramType,FUNC_ID>(_CTX_REFS,glb.device_state,grp.group_state,thd.thread_state);
+		//promise_eval<ProgramType,FUNC_ID>(_CTX_REFS,_STATE_REFS,param_value);
+
+	}
+
+
+
+	#define PARACON
 
 	/*
 	// Adds the contents of the link at the given index to the stash and adds the given link to link
@@ -1991,13 +2044,12 @@ struct HarmonizeProgram<
 	 __device__ static unsigned int consume_link(_CTX_ARGS, LinkAdrType link_index ){
 
 
-		#ifdef PARACON
+		#if 0 //def PARACON
 		__shared__ LinkAdrType the_index;
 		__shared__ unsigned int add_count;
-		__shared__ unsigned int func_id;
+		__shared__ Fn func_id;
 
 		unsigned int active = __activemask();
-
 
 		__syncwarp(active);
 		
@@ -2014,10 +2066,17 @@ struct HarmonizeProgram<
 		
 		__syncwarp(active);
 		
+		#if 0
 		if(threadIdx.x < add_count){
-			PromiseType promise = glb.arena[the_index].data.data[threadIdx.x];
-			async_call(_CTX_REFS,func_id,0,promise);
+			async_call(_CTX_REFS,func_id,0,glb.arena[the_index].promises[threadIdx.x]);
 		}
+		#else
+		unsigned int idx = util::warp_inc_scan();
+		unsigned int tot = util::active_count();
+		for(unsigned int i=idx; i<add_count; i+=tot){
+			async_call(_CTX_REFS,func_id,0,glb.arena[the_index].promises[i]);
+		}
+		#endif
 
 
 		__syncwarp(active);
@@ -2053,8 +2112,9 @@ struct HarmonizeProgram<
 		db_printf("\n\nprior stash count: %d\n\n\n",grp.stash_count);
 		//*
 		for(unsigned int i=0; i< add_count; i++){
-			PromiseUnionType promise = glb.arena[the_index].promises[i];
-			async_call(_CTX_REFS,func_id,0,promise);
+			//PromiseUnionType promise = glb.arena[the_index].promises[i];
+			//async_call(_CTX_REFS,func_id,0,promise);
+			async_call(_CTX_REFS,func_id,0, glb.arena[the_index].promises[i] );
 		}
 		// */
 		//PromiseType promise = glb.arena[the_index].data.data[0];
@@ -2088,11 +2148,11 @@ struct HarmonizeProgram<
 
 		unsigned int active =__activemask();
 		__syncwarp(active);
-		
+	
 
 		#ifdef PARACON
 		__shared__ unsigned int link_count;
-		__shared__ unsigned int links[STASH_SIZE];
+		__shared__ LinkAdrType links[STASH_SIZE];
 		#endif
 
 		/*
@@ -2105,13 +2165,17 @@ struct HarmonizeProgram<
 			//db_printf("Filling stash...\n");
 
 			unsigned int taken = 0;
-			
+	
+			beg_time(12);	
 			threashold = (threashold > STASH_SIZE) ? STASH_SIZE : threashold;
+			//printf("{Filling to %d @ %d}",threashold,blockIdx.x);
+			
 			unsigned int gather_count = (threashold < grp.stash_count) ? 0  : threashold - grp.stash_count;
 			if( (STASH_SIZE - grp.link_stash_count) < gather_count){
 				unsigned int spill_thresh = STASH_SIZE - gather_count;
 				spill_stash_links(_CTX_REFS,spill_thresh);
 			}
+			end_time(12);	
 			
 
 			#ifdef PARACON
@@ -2120,10 +2184,10 @@ struct HarmonizeProgram<
 
 			#ifdef RACE_COND_PRINT
 			unsigned int p_depth_live = glb.stack->depth_live;
-			rc_printf("SM %d: depth_live is (%d,%d)\n",bthdkIdx.x,left_half(p_depth_live),right_half(p_depth_live));
+			rc_printf("SM %d: depth_live is (%d,%d)\n",threadIdx.x,(p_depth_live&0xFFFF0000)>>16,p_depth_live&0xFFFF);
 			#endif
 
-			for(unsigned int i = 0; i < RETRY_LIMIT; i++){
+			for(unsigned int i = 0; i < FILL_STASH_RETRY_LIMIT; i++){
 
 				/* If the stack is empty or a flag is set, return false */
 				unsigned int depth_live = glb.stack->depth_live;
@@ -2138,11 +2202,16 @@ struct HarmonizeProgram<
 				unsigned int src_index;
 				QueueType queue;
 
+				beg_time(3);	
 				#if DEF_STACK_MODE == 0
 			
 				db_printf("STACK MODE ZERO\n");	
 				q_printf("%dth try pulling promises for fill\n",i+1);
-				queue = pull_promises(_CTX_REFS,grp.level,src_index);
+				if( get_frame(_CTX_REFS,grp.level).children_residents != 0 ){
+					queue = pull_promises(_CTX_REFS,grp.level,src_index);
+				} else {
+					queue.pair.data = QueueType::null;
+				}
 
 				#else
 				/*
@@ -2168,19 +2237,26 @@ struct HarmonizeProgram<
 					queue = pull_promises(_CTX_REFS,grp.level,src_index);
 				}
 				#endif
+				end_time(3);	
 
+
+				beg_time(11);
 				#ifdef PARACON
 				db_printf("About to pop promises\n");
 				while(	( ! queue.is_null() ) 
 				     && (thd_link_count < gather_count)
 				     && (grp.link_stash_count < STASH_SIZE) 
 				){
+					beg_time(13);
 					LinkAdrType link = pop_front(_CTX_REFS,queue);					
-					if(link != LinkAdrType::null){
+					end_time(13);
+					if( ! link.is_null() ){
+						beg_time(14);
 						db_printf("Popping front %d\n",link);
 						links[thd_link_count] = link;
 						taken += glb.arena[link].count;
 						thd_link_count++;
+						end_time(14);
 					} else {
 						break;
 					}
@@ -2191,16 +2267,22 @@ struct HarmonizeProgram<
 				     && (grp.stash_count < threashold)
 				     && (grp.link_stash_count < STASH_SIZE) 
 				){
-					LinkAdrType link = pop_front(_CTX_REFS,queue);					
+					beg_time(13);
+					LinkAdrType link = pop_front(_CTX_REFS,queue);
+					end_time(13);
+
 					q_printf("Popping front %d. Q is now (%d,%d)\n",link.adr,queue.get_head().adr,queue.get_tail().adr);
 					
 					if( ! link.is_null() ){
+						beg_time(14);
 						taken += consume_link(_CTX_REFS,link);
+						end_time(14);
 					} else {
 						break;
 					}
 				}
 				#endif
+				end_time(11);
 		
 				db_printf("Popped promises\n");
 				if(taken != 0){
@@ -2208,14 +2290,18 @@ struct HarmonizeProgram<
 						atomicAdd(&(glb.stack->depth_live),1);
 						grp.busy = true;
 						//printf("{got busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
-						rc_printf("SM %d: Incremented depth value\n",bthdkIdx.x);
+						rc_printf("SM %d: Incremented depth value\n",threadIdx.x);
 					}
 					rc_printf("Pushing promises for filling\n");	
 					push_promises(_CTX_REFS,grp.level,src_index,queue,-taken);
 					break;
 				}
 		
-				#ifndef PARACON
+				#ifdef PARACON
+				if( thd_link_count >= gather_count ){
+					break;
+				}
+				#else
 				if( grp.stash_count >= threashold ){
 					break;
 				}
@@ -2227,10 +2313,14 @@ struct HarmonizeProgram<
 
 
 
+			#ifdef PARACON
+			if(grp.busy && (grp.stash_count == 0) && (taken == 0) ){
+			#else
 			if(grp.busy && (grp.stash_count == 0)){
+			#endif
 				unsigned int depth_live = atomicSub(&(glb.stack->depth_live),1);
 				//printf("{unbusy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
-				rc_printf("SM %d: Decremented depth value\n",bthdkIdx.x);
+				rc_printf("SM %d: Decremented depth value\n",threadIdx.x);
 				grp.busy = false;
 			}
 
@@ -2248,12 +2338,18 @@ struct HarmonizeProgram<
 
 		#ifdef PARACON
 
-		for(int i=0; i<link_count;i++){
-			consume_link(_CTX_REFS,links[i]);
+		__threadfence();
+		beg_time(15);
+		if(util::current_leader()){
+			for(int i=0; i<link_count;i++){
+				consume_link(_CTX_REFS,links[i]);
+			}
 		}
+		end_time(15);
 
 
 		__syncwarp(active);
+		__threadfence();
 		#endif
 
 
@@ -2342,6 +2438,7 @@ struct HarmonizeProgram<
 	 __device__ static void exec_cycle(_CTX_ARGS){
 
 
+
 		clear_exec_head(_CTX_REFS);
 
 		/*
@@ -2350,12 +2447,15 @@ struct HarmonizeProgram<
 		//*
 
 
+		beg_time(1);
 		///*
 		if ( ( ((glb.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (grp.full_head == STASH_SIZE) ) { 
 			fill_stash(_CTX_REFS,STASH_SIZE-2,false);
 		}
 		// */
+		end_time(1);
 
+		beg_time(5);
 		if ( grp.can_make_work && (grp.full_head == STASH_SIZE) ) {
 			grp.can_make_work = make_work(_CTX_REFS,_STATE_REFS);
 			if( util::current_leader() && (! grp.busy ) && ( grp.stash_count != 0 ) ){
@@ -2364,6 +2464,7 @@ struct HarmonizeProgram<
 				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 			}
 		}
+		end_time(5);
 
 
 		#if 1
@@ -2389,11 +2490,14 @@ struct HarmonizeProgram<
 		#endif
 		// */
 
+		beg_time(2);
 		if( !advance_stash_iter(_CTX_REFS) ){
 			/*
 			// No more work exists in the stash, so try to fetch it from the stack.
 			*/
+			beg_time(10);
 			fill_stash(_CTX_REFS,STASH_SIZE-2,true);
+			end_time(10);
 
 			if( grp.keep_running && !advance_stash_iter(_CTX_REFS) ){
 				/*
@@ -2410,12 +2514,14 @@ struct HarmonizeProgram<
 				*/
 			}
 		}
+		end_time(2);
 
 		
 		unsigned int active = __activemask();
 		__syncwarp(active);
 
 
+		beg_time(4);
 		if( grp.exec_head != STASH_SIZE ){
 			/* 
 			// Find which function the current link corresponds to.
@@ -2439,6 +2545,7 @@ struct HarmonizeProgram<
 		}
 
 		__syncwarp(active);
+		end_time(4);
 
 
 	}
@@ -2448,11 +2555,12 @@ struct HarmonizeProgram<
 	 __device__ static void cleanup_runtime(_CTX_ARGS){
 
 		
-		unsigned int active = __activemask();
-		__syncwarp(active);
+		//unsigned int active = __activemask();
+		//__syncwarp(active);
+		__syncwarp();
 	
 
-		if(util::current_leader()){
+		if(threadIdx.x == 0){
 
 			q_printf("CLEANING UP\n");
 			clear_exec_head(_CTX_REFS);
@@ -2469,10 +2577,20 @@ struct HarmonizeProgram<
 				unsigned int depth_live = atomicSub(&(glb.stack->depth_live),1);
 				//printf("{wrap busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 			}
-
+		}
+	
+		//__syncwarp(active);
+		__syncwarp();
+		__threadfence();
+		//__syncwarp(active);
+		__syncwarp();
+		
+		if(threadIdx.x == 0){
 			unsigned int checkout_index = atomicAdd(&(glb.stack->checkout),1);
+			__threadfence();
+			//printf("{%d}",checkout_index);
 			if( checkout_index == (gridDim.x-1) ){
-				//printf("{Final}");
+				//printf("{Final}\n");
 				atomicExch(&(glb.stack->checkout),0);
 				unsigned int old_flags = atomicAnd(&(glb.stack->status_flags),~EARLY_HALT_FLAG);
 				unsigned int depth_live = atomicAdd(&(glb.stack->depth_live),0);
@@ -2564,7 +2682,7 @@ struct HarmonizeProgram<
 			if( frame_index == FRAME_SIZE ){
 				stack->frames[target_level].children_residents = 0u;
 			} else {
-				stack->frames[target_level].pool.queues[threadIdx.x].pair.data = QueueType::null;
+				stack->frames[target_level].pool.queues[frame_index].pair.data = QueueType::null;
 			}
 
 		}
@@ -2734,7 +2852,7 @@ struct HarmonizeProgram<
 		initialize(_CTX_REFS,_STATE_REFS);
 
 		if(util::current_leader()){
-			rc_printf("\n\n\nInitial frame zero resident count is: %d\n\n\n",runtime.stack->frames[0].children_residents);
+			//printf("\n\n\nInitial frame zero resident count is: %d\n\n\n",glb.stack->frames[0].children_residents);
 		}	
 
 		/* The execution loop. */
@@ -2761,7 +2879,7 @@ struct HarmonizeProgram<
 		cleanup_runtime(_CTX_REFS);
 			
 		if(util::current_leader()){
-			rc_printf("SM %d finished after %d cycles with promise delta %d\n",bthdkIdx.x,cycle_break,grp.SM_promise_delta);
+			rc_printf("SM %d finished after %d cycles with promise delta %d\n",threadIdx.x,cycle_break,grp.SM_promise_delta);
 		}
 
 	}
@@ -2773,12 +2891,15 @@ struct HarmonizeProgram<
 	#if 1
 
 
-	__host__ static bool queue_count(LinkType* host_arena, QueueType queue, LinkAdrType& result){
+	__host__ static bool queue_count(Instance runtime, LinkType* host_arena, QueueType queue, LinkAdrType& result){
 
+		//printf("Entered function\n");	
 		LinkAdrType head = queue.get_head();
 		LinkAdrType tail = queue.get_tail();
 		LinkAdrType last = LinkAdrType::null;
 		LinkAdrType count = 0;	
+		
+		//printf("About to check if the head or tail was NULL\n");	
 		
 		if( head.is_null() ){
 			if( tail.is_null() ) {
@@ -2793,8 +2914,13 @@ struct HarmonizeProgram<
 			return false;
 		}
 
+		//printf("Just checked if the head or tail was NULL\n");	
 		LinkAdrType iter = head;
 		while( ! iter.is_null() ){
+			if( iter.adr > runtime.arena_size ){
+				printf("Queue has bad index pointing to index %d\n",iter.adr);
+				return false;
+			}
 			if(host_arena[iter.adr].meta_data != 0){
 				printf("Link re-visited\n");
 				LinkAdrType loop_point = iter;
@@ -2815,6 +2941,10 @@ struct HarmonizeProgram<
 						printf("%d->",iter.adr);
 					}
 					iter = host_arena[iter.adr].next;
+					if( iter.is_null() ){
+						printf("NULL\n",iter.adr);
+						return false;
+					}
 					step_count.adr +=1;
 					if(step_count.adr > 64){
 						printf("...{%d}\n",loop_point.adr);
@@ -2865,6 +2995,11 @@ struct HarmonizeProgram<
 		LinkAdrType* stack_counts = new LinkAdrType[STACK_SIZE*FRAME_SIZE];
 		bool*         stack_count_validity = new bool[STACK_SIZE*FRAME_SIZE];
 
+		
+		#ifdef LAZY_LINK
+		AdrType claim_count;
+		runtime.claim_count >> claim_count;
+		#endif
 
 		LinkType* host_arena = new LinkType[runtime.arena_size];
 
@@ -2890,7 +3025,9 @@ struct HarmonizeProgram<
 		for(int i=0; i < POOL_SIZE; i++){
 			//printf("Counting pool queue %d\n",i);	
 			QueueType queue = host_pool[i];
-			pool_count_validity[i] = queue_count(host_arena,queue,pool_counts[i]);
+			//printf("Read pool queue %d\n",i);	
+			pool_count_validity[i] = queue_count(runtime,host_arena,queue,pool_counts[i]);
+			//printf("Just validated pool queue %d\n",i);	
 			result = result && pool_count_validity[i];
 			if(pool_count_validity[i]){
 				link_total.adr += pool_counts[i].adr;
@@ -2902,7 +3039,7 @@ struct HarmonizeProgram<
 			for(int j=0; j < FRAME_SIZE; j++){
 				QueueType queue = host_stack->frames[i].pool.queues[j];
 				unsigned int index = i*FRAME_SIZE + j;
-				stack_count_validity[i] = queue_count(host_arena,queue,stack_counts[index]);
+				stack_count_validity[i] = queue_count(runtime,host_arena,queue,stack_counts[index]);
 				result = result && stack_count_validity[i];
 				if(stack_count_validity[i]){
 					link_total.adr += stack_counts[index].adr;
@@ -2926,6 +3063,11 @@ struct HarmonizeProgram<
 			unsigned int status_flags	= host_stack->status_flags;
 			unsigned int depth	= (host_stack->depth_live >> 16) & 0xFFFF;
 			unsigned int live	= (host_stack->depth_live) & 0xFFFF;
+
+			#ifdef LAZY_LINK
+			printf("CLAIM_COUNT:\t%d\n",claim_count);
+			#endif
+
 			printf("STACK:\t(status_flags: %#010x\tdepth: %d\tlive: %d)\t{\n",status_flags,depth,live);
 			for(int i=0; i < STACK_SIZE; i++){
 				unsigned int children_residents = host_stack->frames[i].children_residents;
@@ -2948,7 +3090,10 @@ struct HarmonizeProgram<
 
 		delete[] host_arena;
 		delete[] host_pool;
-		delete[] host_stack;
+		delete   host_stack;
+
+		delete[] pool_count_validity;
+		delete[] stack_count_validity;
 
 		return result;
 
@@ -3305,6 +3450,7 @@ struct EventProgram<
 		PromiseUnionType promise;
 		promise.template cast<FUNC_ID>() = param_value;
 		promise.template rigid_eval<ProgramType,FUNC_ID>(_CTX_REFS,glb.device_state,grp.group_state,thd.thread_state);
+		//promise_eval<ProgramType,FUNC_ID>(_CTX_REFS,_STATE_REFS,param_value);
 
 	}
 
@@ -3331,6 +3477,14 @@ struct EventProgram<
 		__shared__ bool done;
 		__shared__ Fn func_id;
 
+		util::iter::GroupIter<unsigned int> the_iter;
+		the_iter.reset(0,0);
+		__syncthreads();
+		if( util::current_leader() ){
+			group_work = util::iter::GroupArrayIter<PromiseUnionType,unsigned int> (NULL,the_iter);
+		}
+		__syncthreads();
+
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
@@ -3343,7 +3497,7 @@ struct EventProgram<
 					if( !glb.event_io[i]->input_empty() ){
 						done = false;
 						func_id = static_cast<Fn>(i);
-						group_work = glb.event_io[i]->pull_group_span(chunk_size);
+						group_work = glb.event_io[i]->pull_group_span(chunk_size*GROUP_SIZE);
 						break;
 					}
 				}
@@ -3370,10 +3524,19 @@ struct EventProgram<
 
 		}
 
+
 		__syncthreads();
+
+		finalize(_CTX_REFS,_STATE_REFS);
+		
+		__threadfence();
+		__syncthreads();
+
 		if( threadIdx.x == 0 ){
 			unsigned int checkout_index = atomicAdd(glb.checkout,1);
+			//printf("{%d}",checkout_index);
 			if( checkout_index == (gridDim.x - 1) ){
+				//printf("{Final}");
 				atomicExch(glb.checkout,0);
 				 for(unsigned int i=0; i < PromiseUnionType::Count::value; i++){
 					 glb.event_io[i]->flip();
@@ -3382,7 +3545,6 @@ struct EventProgram<
 			}
 		}
 
-		finalize(_CTX_REFS,_STATE_REFS);
 
 
 	}
@@ -3397,5 +3559,4 @@ struct EventProgram<
 
 
 #define QUEUE_FILL_FRACTION(fn_id) _device_context.event_io[static_cast<unsigned int>(fn_id)]->output_fill_fraction_sync()
-
 

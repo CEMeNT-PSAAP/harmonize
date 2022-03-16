@@ -213,7 +213,7 @@ struct MemPool {
 	typedef Adr<Index> AdrType;
 	typedef PoolQueue<AdrType> QueueType;
 
-	const unsigned int RETRY_COUNT = 32;
+	static const unsigned int RETRY_COUNT = 32;
 
 	union Link {
 		DataType data;

@@ -53,7 +53,7 @@ int main(int argc, char* argv[]){
 	unsigned int limit    = args["limit"]; 
 
 
-	host::Stopwatch watch;
+	Stopwatch watch;
 
 	if( ! watch.start() ){
 		printf("A\n");

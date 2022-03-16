@@ -9,7 +9,9 @@
 
 //#define LEVEL_CHECK
 
-#define TIMER 9
+//#define TIMER 16
+
+//#define BY_REF
 
 
 using namespace util;
@@ -24,6 +26,7 @@ struct Neutron {
 	float p_x;
 	float p_y;
 	float p_z;
+	//unsigned int padding[32];
 	float m_x;
 	float m_y;
 	float m_z;
@@ -52,7 +55,6 @@ struct Neutron {
 		, p_y(y)
 		, p_z(z)
 		, weight(w)
-
 		#ifdef HARMONIZE
 		#ifdef FILO
 		, next(mem::Adr<unsigned int>::null)
@@ -64,30 +66,25 @@ struct Neutron {
 	}
 
 	
-	__device__ Neutron(Neutron& parent)
-		: seed(random_uint(parent.seed))
-		, time(parent.time)
-		, p_x(parent.p_x)
-		, p_y(parent.p_y)
-		, p_z(parent.p_z)
-		, weight(parent.weight)
-
+	__device__ Neutron child()
+	{
+		Neutron result = *this;
+		result.seed = random_uint(seed);
+		result.seed ^= __float_as_uint(time);
+		random_uint(result.seed);
+		result.seed ^= __float_as_uint(p_x);
+		random_uint(result.seed);
+		result.seed ^= __float_as_uint(p_y);
+		random_uint(result.seed);
+		result.seed ^= __float_as_uint(p_z);
+		random_uint(result.seed);
+		random_3D_iso_mom(result);
 		#ifdef HARMONIZE
 		#ifdef FILO
-		, next(mem::Adr<unsigned int>::null)
+		result.next = mem::Adr<unsigned int>::null;
 		#endif
 		#endif
-
-	{
-		seed ^= __float_as_uint(time);
-		random_uint(seed);
-		seed ^= __float_as_uint(p_x);
-		random_uint(seed);
-		seed ^= __float_as_uint(p_y);
-		random_uint(seed);
-		seed ^= __float_as_uint(p_z);
-		random_uint(seed);
-		random_3D_iso_mom(*this);
+		return result;
 	}
 
 };
@@ -100,7 +97,9 @@ struct SimParams {
 	int	source_count;
 	iter::AtomicIter<unsigned int> *source_id_iter;
 
-	mem::MemPool<Neutron,unsigned int> *neutron_pool;
+	#ifdef BY_REF
+	mem::MemPool<Neutron,unsigned int>* neutron_pool;
+	#endif
 
 	iter::IOBuffer<unsigned int> *neutron_io;
 
@@ -130,6 +129,7 @@ struct SimParams {
 	#ifdef TIMER
 	unsigned long long int*    timer;
 	#endif
+	
 
 };
 
@@ -217,9 +217,10 @@ __device__ float clamp(float val, float low, float high){
 
 __device__ int step_neutron(SimParams params, Neutron& n){
 
-	// Advance particle position
-	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;
 	
+	// Advance particle position
+	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;	
+
 	bool halt = false;
 	if( n.time + step > params.time_limit){
 		step = params.time_limit - n.time;
@@ -252,12 +253,12 @@ __device__ int step_neutron(SimParams params, Neutron& n){
 	if ( halt ){
 		atomicAdd(&params.halted[index],n.weight);
 		return -1;
-	} else if( samp <= (params.scatter_x/params.combine_x) ){
+	} else if( samp < (params.scatter_x/params.combine_x) ){
 		random_3D_iso_mom(n);
 		return 0;
-	} else if ( samp <= ((params.scatter_x + params.fission_x) / params.combine_x) ) {
+	} else if ( samp < ((params.scatter_x + params.fission_x) / params.combine_x) ) {
 		return params.fiss_mult;
-	} else if ( samp <= ((params.scatter_x + params.fission_x + params.capture_x) / params.combine_x) ) {
+	} else if ( samp < ((params.scatter_x + params.fission_x + params.capture_x) / params.combine_x) ) {
 		if ( params.implicit_capture ) {
 			if( original_weight < params.weight_limit ){
 				return -1;
@@ -282,11 +283,14 @@ struct CommonContext{
 
 	bool	    show;
 	bool	    csv;
+	bool	    value;
 
 	host::DevBuf<iter::AtomicIter<unsigned int>> source_id_iter;
 	host::DevBuf<float> halted;
 
+	#ifdef BY_REF
 	host::DevObj<mem::MemPool<Neutron,unsigned int>> neutron_pool;
+	#endif
 
 	
 	host::DevObj<iter::IOBuffer<unsigned int>> neutron_io;
@@ -298,6 +302,7 @@ struct CommonContext{
 	#ifdef TIMER
 	host::DevBuf<unsigned long long int> timer;
 	#endif
+
 
 	Stopwatch watch;
 
@@ -330,19 +335,17 @@ struct CommonContext{
 		params.implicit_capture  = args["imp_cap"];
 		params.weight_limit      = args["wlim"] | 0.0001f;
 
-		show = args["show"];
-		csv  = args["csv"];
+		value = args["value"];
+		show  = args["show"];
+		csv   = args["csv"];
 
 
 
 
 		watch.start();
 
-
-		unsigned int pool_size = args["pool"] | 0x10000000u;
-		#if EVENT
-		neutron_pool = host::DevObj<mem::MemPool<Neutron,unsigned int>>(pool_size,8191u);
-		#else
+		unsigned int pool_size = args["pool"] | 0x8000000u;
+		#ifdef BY_REF
 		neutron_pool = host::DevObj<mem::MemPool<Neutron,unsigned int>>(pool_size,8191u);
 		#endif
 		
@@ -359,15 +362,17 @@ struct CommonContext{
 		source_id_iter<< iter::AtomicIter<unsigned int>(0,args["num"]);
 		params.source_id_iter = source_id_iter;
 
+		#ifdef BY_REF
 		params.neutron_pool = neutron_pool;
-		
+		#endif		
+
 		params.neutron_io = neutron_io;
 
 		#ifdef LEVEL_CHECK
 		level_total << 0;
 		params.level_total = level_total;
 		#endif
-
+		
 		#ifdef TIMER
 		params.timer = timer;
 		cudaMemset( timer, 0, sizeof(unsigned long long int) * TIMER );
@@ -387,13 +392,15 @@ struct CommonContext{
 
 		std::vector<float> result;
 		float y_min, y_max;
+		float sum = 0;
+		int real_sum = 0;	
 
-		if( show || csv ){
+		if( show || csv || value){
 
 			halted >> result;
 
-			float sum = 0;
 			for(unsigned int i=0; i<elem_count; i++){
+				real_sum += result[i];
 				result[i] /= (float) params.source_count;
 				sum += result[i];
 				result[i] /= (float) params.div_width;
@@ -405,8 +412,7 @@ struct CommonContext{
 				y_max = (result[i] > y_max) ? result[i] : y_max;
 			}
 
-			printf("\n\nSUM IS: %f\n\n",sum);
-
+			//printf("\nReal sum is: %d\n",real_sum);
 
 
 		}
@@ -456,16 +462,16 @@ struct CommonContext{
 		#endif
 
 
-		#ifdef LEVEL_CHECK
-		int high_level;
-		level_total >> high_level;
-		printf("%d",high_level);
-		#else
-		
+		#ifndef LEVEL_CHECK
 		if( show ){
+			printf("\nSUM IS: %f\n",sum);
 			printf("%f\n",msecTotal);
 		} else {
-			printf("%f",msecTotal);
+			if( value ) {
+				printf("%f",sum);
+			} else {
+				printf("%f",msecTotal);
+			}
 		}
 		#endif
 
