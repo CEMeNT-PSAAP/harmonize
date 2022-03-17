@@ -186,7 +186,7 @@ else
 		best_size=$pool_size
 		else
 		low_count=$(( low_count + 1 ))
-		if (( low_count > 2 ))
+		if (( low_count > 5 ))
 		then
 			break
 		fi
@@ -267,10 +267,10 @@ poolUsed=9999999
 
 #hrzn_range=$( cat $tune/$dirname/${filename}_bst_tune )
 
-tune_scatX=$( get_sum $captX $scatX )
-tune_scatX=$( get_pretty $tune_scatX )
-tune_captX=0.0
-sweep_range=$( cat light_data/bench${suf}/${exe}/c${tune_captX}s${tune_scatX}f${fissX}_bst_tune )
+#tune_scatX=$( get_sum $captX $scatX )
+#tune_scatX=$( get_pretty $tune_scatX )
+#tune_captX=0.0
+#sweep_range=$( cat bench_data/heavy_data/bench${suf}/${exe}/c${tune_captX}s${tune_scatX}f${fissX}_bst_tune )
 
 
 
@@ -281,7 +281,7 @@ do
 
 mem_command="${exe}_level -cx $captX -sx $scatX -fx $fissX -res 0.1 -size $size   -time $sec -hrzn $hrzn  -num $num -wg_count $wg_count -mult 2 $opt -dev_idx $dev_idx -pool $max_level"
 #mem_command="neut_hrm_level -cx $captX -sx $scatX -fx $fissX -res 0.1 -size $size   -time $sec -hrzn $hrzn  -num $num -wg_count $wg_count -mult 2 $opt"
-level=$( $mem_command )
+level=$( $mem_command 2>&1 )
 
 level_len=${#level}
 
@@ -294,19 +294,29 @@ fi
 
 check_command="$exe -cx $captX -sx $scatX -fx $fissX -res 0.1 -size $size   -time $sec -hrzn $hrzn  -num $num -wg_count $wg_count -mult 2 $opt -dev_idx $dev_idx"
 
+if (( 1 == 1 ))
+then
+
 
 pool_size=$(( $level * $pool_mult ))
-pool_pair=$( bound_pool_size $pool_size 1 200 "$check_command" )
+pool_pair=$( bound_pool_size $pool_size 2 200 "$check_command" )
 best_size=${pool_pair##*:}
 best_size=$(( $best_size * 2 ))
 pool_size=${pool_pair%%:*}
-pool_pair=$( bound_pool_size $best_size 2 150 "$check_command" )
+pool_pair=$( bound_pool_size $best_size 4 150 "$check_command" )
 best_size=${pool_pair##*:}
 pool_size=${pool_pair%%:*}
 best_size=$(( ( $best_size * 3 ) / 2 ))
-pool_pair=$( bound_pool_size $best_size 3 110 "$check_command" )
+pool_pair=$( bound_pool_size $best_size 6 110 "$check_command" )
 best_size=${pool_pair##*:}
 pool_size=${pool_pair%%:*}
+
+else
+
+best_size=$max_level
+pool_size=$max_level
+
+fi
 
 
 echo "$hrzn:	$pool_size"  | tee -a "${targ}_mem_low"
@@ -393,7 +403,7 @@ echo "$poolUsed"   | tee -a "${targ}_mem"
 }
 
 do_bench neut_hrm 1024 10 "1"
-do_bench neut_evt 1024 10 "1 2 3 4 6 8 12 16 24 32"
+do_bench neut_evt 1024 10 "16" #1 2 3 4 6 8 12 16 24 32"
 
 
 echo "$filename" completed
