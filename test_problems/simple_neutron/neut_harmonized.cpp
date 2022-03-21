@@ -394,92 +394,107 @@ int main(int argc, char *argv[]){
 
 	cli::ArgSet args(argc,argv);
 
-	unsigned int wg_count = args["wg_count"];
+	unsigned int dup    = args["dup"] | 1;
 
-	unsigned int dev_idx  = args["dev_idx"] | 0;
-	cudaSetDevice(dev_idx); 
+	for(unsigned int i=0; i<dup; i++){
 
-	CommonContext com(args);
+		{
+			unsigned int wg_count = args["wg_count"];
 
-	cudaDeviceSynchronize();
-		
-	check_error();
+			unsigned int dev_idx  = args["dev_idx"] | 0;
+			cudaSetDevice(dev_idx); 
 
-	//#ifndef BY_REF
-	unsigned int arena_size = args["pool"] | 0x8000000;
-	//#endif
+			CommonContext com(args);
 
-	//printf("Constructing instance...\n");
-	#ifdef EVENT
-	#ifdef BY_REF
-	ProgType::Instance instance = ProgType::Instance(arena_size,com.params);
-	#else 
-	ProgType::Instance instance = ProgType::Instance(arena_size,com.params);
-	#endif
-	#else 
-	#ifdef BY_REF
-	ProgType::Instance instance = ProgType::Instance(arena_size/32u,com.params);
-	#else
-	ProgType::Instance instance = ProgType::Instance(arena_size/32u,com.params);
-	#endif
-	#endif
-	//printf("Constructed instance.\n");
+			cudaDeviceSynchronize();
+				
+			check_error();
 
-	cudaDeviceSynchronize();
-	check_error();
+			//#ifndef BY_REF
+			unsigned int arena_size = args["pool"] | 0x8000000;
+			//#endif
 
-	#ifdef LEVEL_CHECK
-	int high_level = 0;
-	#endif
+			//printf("Constructing instance...\n");
+			#ifdef EVENT
+			#ifdef BY_REF
+			ProgType::Instance instance = ProgType::Instance(arena_size,com.params);
+			#else 
+			ProgType::Instance instance = ProgType::Instance(arena_size,com.params);
+			#endif
+			#else 
+			#ifdef BY_REF
+			ProgType::Instance instance = ProgType::Instance(arena_size/32u,com.params);
+			#else
+			ProgType::Instance instance = ProgType::Instance(arena_size/32u,com.params);
+			#endif
+			#endif
+			//printf("Constructed instance.\n");
 
-	//printf("Executing...\n");
-	#ifdef EVENT
+			cudaDeviceSynchronize();
+			check_error();
 
-	do {
-		exec<ProgType>(instance,wg_count,1);
-		cudaDeviceSynchronize();
-		check_error();
-		#ifdef LEVEL_CHECK
-		int level;
-		com.level_total >> level;
-		high_level = (level > high_level) ? level : high_level;
-		com.level_total << 0;
-		#endif
-		//printf("\n---\n");
-	} while ( ! instance.complete() );
+			#ifdef LEVEL_CHECK
+			int high_level = 0;
+			#endif
 
-	#else	
+			//printf("Executing...\n");
+			#ifdef EVENT
 
-	init<ProgType>(instance,wg_count);
-	cudaDeviceSynchronize();
-	check_error();
-	int num = 0;
-	do {
-		exec<ProgType>(instance,wg_count,0x10000);//0x800);
-		cudaDeviceSynchronize();
-		check_error();
-		#ifdef LEVEL_CHECK
-		int level;
-		com.level_total >> level;
-		high_level = (level > high_level) ? level : high_level;
-		com.level_total << 0;
-		#endif
-		//ProgType::runtime_overview(instance);
-		num++;
-	} while(! instance.complete() );
-	//printf("\nIter count is %d\n",num);
-	//printf("Completed\n");
+			do {
+				exec<ProgType>(instance,wg_count,1);
+				cudaDeviceSynchronize();
+				if( check_error() ){
+					return 1;
+				}
+				#ifdef LEVEL_CHECK
+				int level;
+				com.level_total >> level;
+				high_level = (level > high_level) ? level : high_level;
+				com.level_total << 0;
+				#endif
+				//printf("\n---\n");
+			} while ( ! instance.complete() );
 
-	#ifdef HRM_TIME
-	printf("Instance times:\n");
-	instance.print_times();
-	#endif
+			#else	
 
-	#endif
+			init<ProgType>(instance,wg_count);
+			cudaDeviceSynchronize();
+			check_error();
+			int num = 0;
+			do {
+				exec<ProgType>(instance,wg_count,0x10000);//0x800);
+				cudaDeviceSynchronize();
+				if( check_error() ){
+					return 1;
+				}
+				#ifdef LEVEL_CHECK
+				int level;
+				com.level_total >> level;
+				high_level = (level > high_level) ? level : high_level;
+				com.level_total << 0;
+				#endif
+				//ProgType::runtime_overview(instance);
+				num++;
+			} while(! instance.complete() );
+			//printf("\nIter count is %d\n",num);
+			//printf("Completed\n");
 
-	#ifdef LEVEL_CHECK
-	printf("%d",high_level);
-	#endif
+			#ifdef HRM_TIME
+			printf("Instance times:\n");
+			instance.print_times();
+			#endif
+
+			#endif
+
+			#ifdef LEVEL_CHECK
+			printf("%d",high_level);
+			#endif
+		}
+
+		if( i != (dup-1) ){
+			printf(";");
+		}
+	}
 
 	return 0;
 

@@ -32,8 +32,11 @@ done
 
 
 
-super_limit=17
-limit=4
+#super_limit=17
+#limit=4
+super_limit=66
+limit=1
+
 super_count=0
 count=0
 cmd=""
@@ -97,7 +100,8 @@ fissX=$( norm $fission )
 scatX=$( norm $scatter )
 captX=$( norm $capture )
 
-samp=32
+#samp=32
+samp=128
 
 
 name=$(gen_name $captX $scatX $fissX)
@@ -106,7 +110,7 @@ if [[ ! -f "${dirname}/neut_evt/${name}_avg" || ! -f "${dirname}/neut_hrm/${name
 then
 #srun -N 1 -n 1 sub_speed.sh $captX $scatX $fissX $samp $secs $num $count $wlim &
 #jsrun -p 1 -c 1 -g 1 sub_speed.sh $captX $scatX $fissX $samp $secs $num 0 $wlim &
-cmd="$cmd sub_speed.sh $captX $scatX $fissX $samp $secs $num $count $wlim &"
+cmd="$cmd sub_speed.py $captX $scatX $fissX $samp $secs $num $count $wlim &"
 count=$(( $count + 1 ))
 fi
 
@@ -116,7 +120,8 @@ fi
 
 if (( $count >= $limit ))
 then
-srun -N 1 -n 1 go_run.sh "$cmd" &
+#srun -N 1 -n 1 go_run.sh "$cmd" &
+srun -A eecs -p dgx2 --gres=gpu:$count go_run.sh "$cmd" &
 count=0
 cmd=""
 super_count=$(( $super_count + 1 ))
@@ -134,7 +139,8 @@ done
 
 if (( $count > 0 ))
 then
-srun -N 1 -n 1 go_run.sh "$cmd" &
+#srun -N 1 -n 1 go_run.sh "$cmd" &
+srun -A eecs -p dgx2 --gres=gpu:$count go_run.sh "$cmd" &
 cmd=""
 fi
 

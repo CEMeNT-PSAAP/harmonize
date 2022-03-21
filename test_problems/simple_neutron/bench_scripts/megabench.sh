@@ -7,10 +7,9 @@ do
 for num in  1000 10000 100000 #1000000
 do
 
-quickbench.sh $sec $num 0.00001 &
+quickbench.sh $sec $num
 
 done
 
 done
 
-wait

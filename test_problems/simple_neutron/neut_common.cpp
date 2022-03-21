@@ -468,7 +468,7 @@ struct CommonContext{
 			printf("%f\n",msecTotal);
 		} else {
 			if( value ) {
-				printf("%f",sum);
+				printf("%f,%f",sum,msecTotal);
 			} else {
 				printf("%f",msecTotal);
 			}

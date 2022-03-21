@@ -4,7 +4,7 @@
 
 
 
-void check_error(){
+bool check_error(){
 
 	cudaError_t status = cudaGetLastError();
 
@@ -12,6 +12,8 @@ void check_error(){
 		const char* err_str = cudaGetErrorString(status);
 		printf("ERROR: \"%s\"\n",err_str);
 	}
+
+	return (status != cudaSuccess);
 
 }
 
