@@ -118,6 +118,7 @@ def bound_pool_size ( exe, horizon, base_pool_size, check_lim, approach, overste
 
 	while ( True ) :
 
+
 		debug_log( f"Trying pool size {pool_size}" )
 
 
@@ -144,7 +145,7 @@ def bound_pool_size ( exe, horizon, base_pool_size, check_lim, approach, overste
 
 		time_avg = time_total / check_lim	
 
-		if ( best_time*1.00 >= time_min ):
+		if ( best_time*1.05 >= time_min ):
 			best_time = time_min
 			debug_log( f"New best time {best_time}" )
 			best_size = pool_size
@@ -192,27 +193,28 @@ def do_bench ( exe, pool_mult, sweep_range ):
 	bstTune=sys.maxsize
 	size_used=float('inf')
 
-	base_pool_size_str = perform_run(exe,3,int(max_pool_size),RunMode.MEMORY)
 
-	try:
-		pool_size = int( base_pool_size_str ) * pool_mult
-	except ValueError as e:
-		raise Exception(
-		       f"Could not get config for {targ} to work even at max memory capacity."
-		       f" Got output {base_pool_size_str}" ) from e
 
 
 
 	#ratios = [ (2,32,6), (1.5,32,6), (1.25,32,6), (1.125,32,6) ]
-	ratios = [ (1.5,128,6), (1.25,128,6), (1.125,128,6) ]
-	for idx, (ratio,check_count,overstep) in enumerate(ratios):
-		pool_size = bound_pool_size(exe,3,pool_size, check_count, ratio, overstep, targ)
-		if ( idx < len(ratios) - 1 ):
-			pool_size *= ratio
 
 	for hrzn in sweep_range :
 
 
+		
+		try:
+			pool_size = perform_run(exe,hrzn,int(max_pool_size),RunMode.MEMORY) * pool_mult
+		except ValueError as e:
+			raise Exception(
+			       f"Could not get config for {targ} to work even at max memory capacity."
+			       f" Got output {base_pool_size_str}" ) from e
+
+		ratios = [ (1.5,samp,6), (1.25,samp,6), (1.125,samp,6) ]
+		for idx, (ratio,check_count,overstep) in enumerate(ratios):
+			pool_size = bound_pool_size(exe,hrzn,pool_size, check_count, ratio, overstep, targ)
+			if ( idx < len(ratios) - 1 ):
+				pool_size *= ratio
 
 		best_time = sys.maxsize
 
@@ -223,6 +225,8 @@ def do_bench ( exe, pool_mult, sweep_range ):
 				break
 			except:
 				pool_size *= 1.1
+				if ( pool_size > max_pool_size ):
+					sys.exit(1)
 				continue
 		
 		total_time = 0
@@ -254,7 +258,7 @@ def do_bench ( exe, pool_mult, sweep_range ):
 
 do_bench( "neut_hrm", 10, [1])
 
-do_bench( "neut_evt", 10, [3]) #[1, 2, 3, 4, 6, 8, 12, 16, 24, 32])
+do_bench( "neut_evt", 10, [1, 2, 3, 4, 6, 8, 12, 16, 24, 32])
 
 print( f"{filename} completed" )
 

@@ -100,8 +100,8 @@ fissX=$( norm $fission )
 scatX=$( norm $scatter )
 captX=$( norm $capture )
 
-#samp=32
-samp=128
+samp=32
+#samp=128
 
 
 name=$(gen_name $captX $scatX $fissX)
