@@ -57,7 +57,7 @@ struct Neutron {
 };
 
 
-struct DeviceState {
+struct MyDeviceState {
 
 	int	horizon;
 
@@ -142,7 +142,7 @@ __device__ void random_3D_iso_mom(Neutron& n){
 }
 
 // Maps a neutron's x position to the correspoding tally index
-__device__ int pos_to_idx(DeviceState& params, float pos){
+__device__ int pos_to_idx(MyDeviceState& params, float pos){
 
 	return params.div_count + (int) floor(pos / params.div_width);
 
@@ -174,7 +174,7 @@ __device__ float clamp(float val, float low, float high){
 
 // Iterates the neutron forward one step, returning -1 on capture, 0 on scatter, and a positive number
 // on fission, with the positive number being the number of neutrons produced by the fission
-__device__ int step_neutron(DeviceState params, Neutron& n){
+__device__ int step_neutron(MyDeviceState params, Neutron& n){
 
 	
 	///////////////////////////////////////////////////////////////////////////////////////////

@@ -5,112 +5,168 @@
 // Pull in the utilities from harmonize
 using namespace util;
 
-struct ThreadState {
-	// Nothing here, to keep things simple
+
+
+// The single operation for processing neutrons
+struct Step {
+
+	using type = void(*)(Neutron);
+
+	template<typename PROGRAM>
+	__device__ static void eval(PROGRAM prog, Neutron arg) {
+
+		
+		Neutron n = arg;
+
+		// Keep performing steps until the horizon is reached
+		int result = 0;
+		for(int i=0; i < prog.device.horizon; i++){
+			result = step_neutron(prog.device,n);
+			if( result != 0 ){
+				break;
+			}
+		}
+		
+		// If result is positive, generate that number of neutrons from fission
+		for(int i=0; i<result; i++){
+			Neutron new_neutron = n.child();
+			prog. template async<Step>(new_neutron);
+		}
+
+		// If result is zero, re-queue neutron for further processing
+		if( result == 0 ) {
+			prog. template async<Step>(n);
+		}
+
+		// If result is negative, do nothing
+		
+
+	}
+
 };
 
 
-struct GroupState {
-	// Nothing here, to keep things simple
+// Define a specification for our program 
+struct MyProgramSpec {
+
+	// Define a type called OpSet (specializing OpUnion) to define what operations
+	// the program uses. Since this is a specialization of OpUnion, this should be done
+	// as a typedef or similar construct. The default type assumed is OpUnion<>, which
+	// contains no operations.
+	typedef OpUnion<Step> OpSet;
+
+
+
+	// Define a type called DeviceState to define what state is made available on a
+	// per-device basis. This can be done by a typedef or by manually declaring a type.
+	// If no definition is provided, the memberless, zero-size VoidState will be used.
+	//
+	// The device state, itself, is an immutable struct, but can contain references
+	// and pointers to non-const data.
+	typedef MyDeviceState DeviceState;
+	
+	// Same idea as DeviceState, but it is a state tracked on a per-group basis, and
+	// the state provided will be directly mutable.
+	struct GroupState {
+		// Nothing here, to keep things simple
+	};
+
+	// Same idea as GroupState, but it is a state tracked on a per-thread basis.
+	struct ThreadState {
+		// Nothing here, to keep things simple
+	};
+	
+
+	// Defines what integer type is used to represent the address of intermediate
+	// data stored in global memory. If unset, the default type assumed is uint32_t.
+	// Using a larger representation can accomodate for more data. Using  smaller
+	// representation can make some aspects of managing intermediate data more efficient.
+	//typedef unsigned int AdrType;
+
+
+	// The size of the local storage used by the asynchronous scheduler.
+	// The current default, if undeclared, is 16
+	static const size_t STASH_SIZE = 8;
+
+	// The number of queues used by the asynchronous method to store valid work in main memory.
+	// The current default, if undecleared, is 32
+	static const size_t FRAME_SIZE = 8191;
+	
+	// The number of queues used by the asynchronous method to store unused intermediate data storage.
+	// The current default, if undecleared, is 32
+	static const size_t POOL_SIZE  = 8191;
+
+
+
+	// A function called by each work group at the start of each execution pass, before
+	// any operations are processed.
+	template<typename PROGRAM>
+	__device__ static void initialize(PROGRAM prog) {}
+
+	// A function called by each work group at the end of each execution pass, after the
+	// final operation evaluations for the pass have occured for that particular work group.
+	template<typename PROGRAM>
+	__device__ static void finalize(PROGRAM prog) {}
+
+	// A function called by a single work group, after all work groups (including itself) have
+	// fully evaluated their call to `finalize` for a given execution pass. This allows the calling
+	// work group to clean up global data structures without the possibility of interference from
+	// other work groups.
+	template<typename PROGRAM>
+	__device__ static void global_finalize(PROGRAM prog) {}
+
+
+	// A function called by each work group if it detects scarcity of work. This function is called
+	// every time such a detection occurs during an execution pass until the first time a false
+	// value is returned for that work group during that execution pass. This function may be 
+	// subsequently called in different execution passes.
+	template<typename PROGRAM>
+	__device__ static bool make_work(PROGRAM prog) {
+
+		unsigned int id;
+		
+		#ifdef EVENT
+		// If buffer is greater than 50% full, stop generating work to prevent over-filling
+		// due to fission
+		float fill_frac = prog.queue_fill_fraction<Step>();
+		if( fill_frac > 0.5 ){
+			return false;
+		}
+		#endif
+
+		// How many neutron IDs we want to claim from the iterator each time the make_work function is called
+		unsigned int iter_step_length = 1u;
+
+		// Claim the next set of IDs
+		iter::Iter<unsigned int> iter = prog.device.source_id_iter->leap(iter_step_length);
+		
+		// Keep processing new neutrons until the iterator runs out
+		while(iter.step(id)){
+			Neutron n(id,0.0,0.0,0.0,0.0,1.0);
+			prog.template sync<Step>(n);
+		}
+
+		// Return whether or not the ID iterator has any IDs left
+		return !prog.device.source_id_iter->done();
+
+	}
+
+
 };
 
 
-// Define our program state definition
-typedef ProgramStateDef<DeviceState,GroupState,ThreadState> ProgState;
-//                        ^
-//                        Our device state, as defined in logic.cpp
-
-// Declare the set of operations
-enum class Fn { Neutron };
-
-// Declare the argument types corresponding to the operations
-DEF_PROMISE_TYPE(Fn::Neutron, Neutron);
 
 
 // Define our program type
 #ifdef EVENT
-typedef  EventProgram     < PromiseUnion<Fn::Neutron>, ProgState > ProgType;
+//typedef  EventProgram     < PromiseUnion<Step>, ProgState > ProgType;
+typedef  EventProgram     < MyProgramSpec > ProgType;
 #else
-typedef  HarmonizeProgram < PromiseUnion<Fn::Neutron>, ProgState, unsigned int,  8, 8191, 8191 > ProgType;
+//typedef  HarmonizeProgram < PromiseUnion<Step>, ProgState, unsigned int,  8, 8191, 8191 > ProgType;
+typedef  HarmonizeProgram < MyProgramSpec > ProgType;
 #endif
 
 
-
-
-// The single operation for processing neutrons
-DEF_ASYNC_FN(ProgType, Fn::Neutron, arg) {
-
-	Neutron n = arg;
-
-	// Keep performing steps until the horizon is reached
-	int result = 0;
-	for(int i=0; i < device.horizon; i++){
-		result = step_neutron(device,n);
-		if( result != 0 ){
-			break;
-		}
-	}
-	
-	// If result is positive, generate that number of neutrons from fission
-	for(int i=0; i<result; i++){
-		Neutron new_neutron = n.child();
-		ASYNC_CALL(Fn::Neutron,new_neutron);
-	}
-
-	// If result is zero, re-queue neutron for further processing
-	if( result == 0 ) {
-		ASYNC_CALL(Fn::Neutron,n);
-	}
-
-	// If result is negative, do nothing
-
-}
-
-
-DEF_INITIALIZE(ProgType) {
-
-	// Nothing here, to keep things simple
-
-}
-
-
-DEF_FINALIZE(ProgType) {
-
-	// Nothing here, to keep things simple
-
-}
-
-
-// Function for queueing new neutrons when work is running low
-DEF_MAKE_WORK(ProgType) {
-
-	unsigned int id;
-	
-	#ifdef EVENT
-	// If buffer is greater than 50% full, stop generating work to prevent over-filling
-	// due to fission
-	float fill_frac = QUEUE_FILL_FRACTION(Fn::Neutron);
-	if( fill_frac > 0.5 ){
-		return false;
-	}
-	#endif
-
-	// How many neutron IDs we want to claim from the iterator each time the make_work function is called
-	unsigned int iter_step_length = 1u;
-
-	// Claim the next set of IDs
-	iter::Iter<unsigned int> iter = device.source_id_iter->leap(iter_step_length);
-	
-	// Keep processing new neutrons until the iterator runs out
-	while(iter.step(id)){
-		Neutron n(id,0.0,0.0,0.0,0.0,1.0);
-		IMMEDIATE_CALL(Fn::Neutron,n);
-	}
-
-	// Return whether or not the ID iterator has any IDs left
-	return !device.source_id_iter->done();
-
-}
 
 
 
@@ -142,7 +198,7 @@ int main(int argc, char *argv[]){
 	// The size of the arena/io buffer used by the async/event-based program
 	unsigned int arena_size = args["pool"] | 0x8000000;
 	
-	DeviceState  dev_state;
+	MyDeviceState  dev_state;
 
 	// The source ID iterator
 	host::DevBuf<iter::AtomicIter<unsigned int>> source_id_iter;
@@ -158,7 +214,7 @@ int main(int argc, char *argv[]){
 	dev_state.horizon    = args["hrzn"] | 1u;
 	
 	// How many neutrons the source generates
-	dev_state.source_count  = args["num"]  | 1000u;;
+	dev_state.source_count  = args["num"]  | 1000u;
 
 	// How long the simulation runs
 	dev_state.time_limit = args["time"] | 1.0f;
@@ -211,6 +267,8 @@ int main(int argc, char *argv[]){
 	cudaDeviceSynchronize();
 	check_error();
 
+
+	
 	// Initialize instance
 	#ifdef EVENT
 	ProgType::Instance instance = ProgType::Instance(arena_size,dev_state);
@@ -221,7 +279,8 @@ int main(int argc, char *argv[]){
 	// Sync for safety and report any errors
 	cudaDeviceSynchronize();
 	check_error();
-	
+
+
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Execution
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -248,7 +307,7 @@ int main(int argc, char *argv[]){
 	do {
 		// Give the number of work groups used and the number of iterations
 		// to perform before halting early, to prevent GPU timeouts
-		exec<ProgType>(instance,wg_count,0x10000);
+		exec<ProgType>(instance,wg_count,0x100000);
 		cudaDeviceSynchronize();
 		check_error();
 		num++;
@@ -257,6 +316,7 @@ int main(int argc, char *argv[]){
 	#endif
 
 
+	
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Program Wrap-up
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -327,7 +387,10 @@ int main(int argc, char *argv[]){
 
 	printf("\nProcessing took %f milliseconds\n",msec_total);
 
+	
+
 	return 0;
 
 }
+
 
