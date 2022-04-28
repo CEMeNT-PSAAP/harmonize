@@ -84,12 +84,13 @@ struct OpType < RETURN (*) (ARGS...) > {
 
 
 
+
 template<typename OPERATION>
 struct Promise
 {
 
-	typedef typename OpType< typename OPERATION::type >::Return Return;
-	typedef typename OpType< typename OPERATION::type >::Args   Args;
+	typedef typename OpType< typename OPERATION::Type >::Return Return;
+	typedef typename OpType< typename OPERATION::Type >::Args   Args;
 
 	Args args;
 
@@ -166,6 +167,9 @@ template <typename OP_UNION>
 union PromiseUnion;
 
 
+struct VoidState {};
+
+
 //!
 //! The base case of the `PromiseUnion` template union defines empty functions to cap off the
 //! recursion of non-base cases when evaluating promises. 
@@ -174,6 +178,7 @@ template <>
 union PromiseUnion <OpUnion<>> {
 
 	static const OpDisc COUNT = 0;
+
 
 	template <typename PROGRAM, typename TYPE>
 	__host__  __device__ void rigid_eval( PROGRAM program ) {
@@ -186,6 +191,9 @@ union PromiseUnion <OpUnion<>> {
 	}
 
 	__host__ __device__ void dyn_copy_as( OpDisc op_disc, PromiseUnion<OpUnion<>>& other){ }
+
+	PromiseUnion<OpUnion<>> () = default;
+
 };
 
 
@@ -220,7 +228,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		std::is_same<TYPE,HEAD>::value, 
 		Promise<TYPE>&
 	>::type
-	cast() {	
+	cast() {
 		return head_form;
 	}
 
@@ -239,7 +247,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		Promise<TYPE>&
 	>::type
 	cast (){	
-		_assert( (!OpUnionLookup<TYPE,TAIL...>::CONTAINED), "Promise type does not exist in union" );
+		static_assert( (!OpUnionLookup<TYPE,TAIL...>::CONTAINED), "Promise type does not exist in union" );
 	}
 
 
@@ -285,7 +293,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		if(disc == INDEX){
 			head_form(program);
 		} else {
-			tail_form. template loose_eval<PROGRAM>(program,disc);
+			tail_form. template loose_eval<PROGRAM>(program,disc-1);
 		}
 
 	}
@@ -300,9 +308,11 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		if( disc == INDEX ){
 			cast<HEAD>() = other.cast<HEAD>();
 		} else {
-			tail_form.dyn_copy_as(disc,other.tail_form);
+			tail_form.dyn_copy_as(disc-1,other.tail_form);
 		}
 	}
+
+	__host__ __device__ PromiseUnion<OpUnion<HEAD,TAIL...>> () : tail_form() {}
 
 };
 
@@ -357,7 +367,7 @@ struct WorkLink
 	__host__ __device__ void empty(AdrType next_adr){
 
 		next	= next_adr;
-		id	= 0;
+		id	= PromiseType::COUNT;
 		count	= 0;
 
 	}
@@ -532,19 +542,14 @@ namespace detector {
 		typedef FALSE_TYPE type;
 	};
 
+
 }
 
 template<template<class...> class LOOKUP, class... ARGS>
 using is_detected = typename detector::is_detected<LOOKUP,void,ARGS...>::type;
 
 template<class DEFAULT, template<class> class LOOKUP, class TYPE>
-using type_or = typename detector::type_switch< is_detected<LOOKUP,TYPE>::value ,TYPE,DEFAULT>::type;
-
-template<typename TYPE, size_t VALUE>
-struct SizeGuard   { static const size_t value = VALUE; };
-
-template<size_t VALUE>
-struct SizeDefault { static const size_t value = VALUE; };
+using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::value ,TYPE,DEFAULT>::type;
 
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -581,7 +586,6 @@ struct SizeDefault { static const size_t value = VALUE; };
 #define LAZY_LINK
 
 
-struct VoidState {};
 
 
 template< typename PROGRAM_SPEC >
@@ -592,85 +596,44 @@ class HarmonizeProgram
 
 	typedef HarmonizeProgram<PROGRAM_SPEC> ProgramType;
 
-	template<class TYPE> using  AdrTypeCheck = decltype( std::declval<TYPE::AdrType>() );
+	#define MEMBER_GUARD(NAME,DEFAULT) \
+		struct NAME##Default { typedef unsigned int NAME; }; \
+		template<class TYPE> using  NAME##Check = typename TYPE::NAME; \
+		typedef typename type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME NAME;
+
+	/*
 	struct AdrTypeDefault { typedef unsigned int AdrType; };
-
+	template<class TYPE> using  AdrTypeCheck = typename TYPE::AdrType;
 	typedef typename type_or<AdrTypeDefault,AdrTypeCheck,PROGRAM_SPEC>::AdrType AdrType;
-	
+	*/
 
+	MEMBER_GUARD(    AdrType,unsigned int)
+	MEMBER_GUARD(      OpSet,   OpUnion<>)
+	MEMBER_GUARD(DeviceState,   VoidState)
+	MEMBER_GUARD( GroupState,   VoidState)
+	MEMBER_GUARD(ThreadState,   VoidState)
 
-	typedef typename PROGRAM_SPEC::      OpSet       OpSet;
-	typedef typename PROGRAM_SPEC::DeviceState DeviceState;
-	typedef typename PROGRAM_SPEC:: GroupState  GroupState;
-	typedef typename PROGRAM_SPEC::ThreadState ThreadState;
+	#undef MEMBER_GUARD
 
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 	template<typename TYPE>
 	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
 
-	/*
-
-	template<class TYPE>
-	using  DeviceStateLookup = decltype( std::declval<TYPE::DeviceState>() );
-	struct DeviceStateDefault { typedef VoidState type; };
-
-	template<class TYPE>
-	using  GroupStateLookup = decltype( std::declval<TYPE::GroupState>() );
-	struct GroupStateDefault { typedef VoidState type; };
-
-	template<class TYPE>
-	using  ThreadStateLookup = decltype( std::declval<TYPE::ThreadState>() );
-	struct ThreadStateDefault { typedef VoidState type; };
-
-
+	#define SIZE_T_GUARD(NAME,DEFAULT) \
+		struct NAME##Default { static const size_t NAME = DEFAULT; }; \
+		template<class TYPE> using  NAME##Check = decltype( TYPE::NAME ); \
+		static const size_t NAME = type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME;
 	
-
-	template <typename TYPE>
-	using StashSizeLookup = SizeGuard<decltype( TYPE::STASH_SIZE ), TYPE::STASH_SIZE>;
-
-	template <typename TYPE>
-	using FrameSizeLookup = SizeGuard<decltype( TYPE::FRAME_SIZE ), TYPE::FRAME_SIZE>;
-
-	template <typename TYPE>
-	using  PoolSizeLookup = SizeGuard<decltype( TYPE:: POOL_SIZE ), TYPE:: POOL_SIZE>;
-
-	template <typename TYPE>
-	using GroupSizeLookup = SizeGuard<decltype( TYPE::GROUP_SIZE ), TYPE::GROUP_SIZE>;
-
-	template <typename TYPE>
-	using StackSizeLookup = SizeGuard<decltype( TYPE::STACK_SIZE ), TYPE::STACK_SIZE>;
+	SIZE_T_GUARD(STASH_SIZE,16)
+	SIZE_T_GUARD(FRAME_SIZE,32)
+	SIZE_T_GUARD( POOL_SIZE,32)
+	SIZE_T_GUARD(GROUP_SIZE,32)
+	SIZE_T_GUARD(STACK_SIZE, 0)
 
 
-	
-	typedef HarmonizeProgram<PROGRAM_SPEC> ProgramType;
+	#undef SIZE_T_GUARD
 
-	typedef type_or<OpSetDefault,OpSetLookup,PROGRAM_SPEC> OpSet;
-	typedef PromiseUnion<OpSet> PromiseUnionType;
-
-	typedef type_or<AdrTypeDefault,AdrTypeLookup,PROGRAM_SPEC> AdrType;
-
-	*/
-
-	/*
-	// The types representing the per-device, per-group, and per-thread information that needs to
-	// be tracked for the developer's program.
-	*/
-
-	/*
-	typedef type_or<DeviceStateDefault,DeviceStateLookup,PROGRAM_SPEC> DeviceState;
-	typedef type_or< GroupStateDefault, GroupStateLookup,PROGRAM_SPEC>  GroupState;
-	typedef type_or<ThreadStateDefault,ThreadStateLookup,PROGRAM_SPEC> ThreadState;
-	*/
-
-	static const size_t STASH_SIZE = 16;//type_or<SizeDefault<16>,StashSizeLookup,PROGRAM_SPEC>::value;
-	static const size_t FRAME_SIZE = 32;//type_or<SizeDefault<32>,FrameSizeLookup,PROGRAM_SPEC>::value;
-	static const size_t  POOL_SIZE = 32;//type_or<SizeDefault<32>, PoolSizeLookup,PROGRAM_SPEC>::value;
-	static const size_t GROUP_SIZE = 32;//type_or<SizeDefault<32>,GroupSizeLookup,PROGRAM_SPEC>::value;
-	static const size_t STACK_SIZE = 0;//type_or<SizeDefault< 0>,StackSizeLookup,PROGRAM_SPEC>::value;
-
-
-	//typedef typename DeviceState::DUMMY dummy;
 
 	/*
 	// The number of async functions present in the program.
@@ -766,6 +729,7 @@ class HarmonizeProgram
 		unsigned long long int		time_totals[HRM_TIME];
 		#endif
 
+	
 	};
 
 
@@ -912,13 +876,6 @@ class HarmonizeProgram
 
 
 
-
-	/*
-	// To be defined by developer. These can be given an empty definition, if desired.
-	*/
-	 __device__  void        initialize();
-	 __device__  void        finalize  ();
-	 __device__  bool        make_work ();
 
 	protected:
 	
@@ -1954,7 +1911,7 @@ class HarmonizeProgram
 		*/
 		if( util::current_leader() ){
 
-			db_printf("Queueing %d promises of type %d\n",delta,func_id);
+			db_printf("{Queueing %d promises of type %d}",delta,func_id);
 			/*
 			// Null out the right index. This index should not be used unless the number of
 			// promises queued spills over beyond the first link being written to (the left one)
@@ -3188,6 +3145,15 @@ class HarmonizeProgram
 		immediate_call_cast<TYPE>(Promise<TYPE>(args...));
 	}
 
+
+	template<typename TYPE>
+	__device__ float queue_fill_fraction()
+	{
+		return NAN;
+
+	}
+
+
 };
 
 
@@ -3199,8 +3165,10 @@ class HarmonizeProgram
 template<typename ProgType>
 __global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device) {
 	
+		
 	__shared__ typename ProgType::GroupContext _grp_ctx;
 	__shared__ typename ProgType::GroupState   group;
+
 
 	typename ProgType::ThreadContext _thd_ctx;
 	typename ProgType::ThreadState   thread;
@@ -3212,7 +3180,7 @@ __global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename Pr
 
 
 template<typename ProgType>
-__global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device, unsigned int cycle_count) {
+__global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device, size_t cycle_count) {
 	
 	__shared__ typename ProgType::GroupContext _grp_ctx;
 	__shared__ typename ProgType::GroupState   group;
@@ -3228,71 +3196,6 @@ __global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename Pr
 
 
 
-/*
-// These functions unwrap an instance into its device context and passes it to the responsible
-// kernel.
-*/
-template<typename ProgType>
-__host__ void init(typename ProgType::Instance& instance,size_t group_count) {
-	_dev_init<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state);
-}
-template<typename ProgType>
-__host__ void exec(typename ProgType::Instance& instance,size_t group_count, unsigned int cycle_count) {
-	_dev_exec<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state,cycle_count);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#define PARAM_TYPE(id) typename PromiseType<id>::ParamType
-
-
-#define HARM_ARG_PREAMBLE(progtype)                         \
-                progtype::DeviceContext & _device_context,  \
-                progtype::GroupContext  & _group_context,   \
-                progtype::ThreadContext & _thread_context,  \
-                progtype::DeviceState & device,             \
-                progtype::GroupState  & group,              \
-                progtype::ThreadState & thread              \
-
-#define DEF_ASYNC_FN(progtype, id, arg_name)                \
-        template<>  __device__                              \
-        void promise_eval<progtype,id> (                    \
-                HARM_ARG_PREAMBLE(progtype),                \
-                PARAM_TYPE(id) arg_name                     \
-        )                                                   \
-
-
-#define DEF_INITIALIZE(progtype)                            \
-        template<>  __device__                              \
-        void progtype::initialize(                          \
-                HARM_ARG_PREAMBLE(progtype)                 \
-        )                                                   \
-
-#define DEF_FINALIZE(progtype)                              \
-        template<>  __device__                              \
-        void progtype::finalize(                            \
-                HARM_ARG_PREAMBLE(progtype)                 \
-        )                                                   \
-
-#define DEF_MAKE_WORK(progtype)                             \
-        template<>  __device__                              \
-        bool progtype::make_work(                           \
-                HARM_ARG_PREAMBLE(progtype)                 \
-        )                                                   \
-
-
-#define ASYNC_CALL(fn_id,param) std::remove_reference<decltype(_device_context)>::type::ParentProgramType::template async_call_cast<fn_id>(_device_context,_group_context,_thread_context, 0, param)
 
 
 
@@ -3309,39 +3212,55 @@ __host__ void exec(typename ProgType::Instance& instance,size_t group_count, uns
 
 
 
-template<
-	typename PROMISE_UNION,
-	typename PROGRAM_STATE,
-	typename ADR_TYPE = unsigned int,
-	size_t   GROUP_SIZE = 32
->
-class EventProgram;
 
 
 
-template<
-	typename... PROMISE_TYPES,
-	typename PROGRAM_STATE,
-	typename ADR_TYPE,
-	size_t   GROUP_SIZE
->
-class EventProgram<
-	PromiseUnion<PROMISE_TYPES...>,
-	PROGRAM_STATE,
-	ADR_TYPE,
-	GROUP_SIZE
->
+
+
+template<typename PROGRAM_SPEC>
+class EventProgram
 {
 
 
 	public:
 
-	typedef struct EventProgram<
-			PromiseUnion<PROMISE_TYPES...>,
-			PROGRAM_STATE,
-			ADR_TYPE,
-			GROUP_SIZE
-		> ProgramType;
+
+	typedef EventProgram<PROGRAM_SPEC> ProgramType;
+
+	#define MEMBER_GUARD(NAME,DEFAULT) \
+		struct NAME##Default { typedef unsigned int NAME; }; \
+		template<class TYPE> using  NAME##Check = typename TYPE::NAME; \
+		typedef typename type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME NAME;
+
+	/*
+	struct AdrTypeDefault { typedef unsigned int AdrType; };
+	template<class TYPE> using  AdrTypeCheck = typename TYPE::AdrType;
+	typedef typename type_or<AdrTypeDefault,AdrTypeCheck,PROGRAM_SPEC>::AdrType AdrType;
+	*/
+
+	MEMBER_GUARD(    AdrType,unsigned int)
+	MEMBER_GUARD(      OpSet,   OpUnion<>)
+	MEMBER_GUARD(DeviceState,   VoidState)
+	MEMBER_GUARD( GroupState,   VoidState)
+	MEMBER_GUARD(ThreadState,   VoidState)
+
+	#undef MEMBER_GUARD
+
+	typedef PromiseUnion<OpSet> PromiseUnionType;
+
+	template<typename TYPE>
+	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
+
+
+	#define SIZE_T_GUARD(NAME,DEFAULT) \
+		struct NAME##Default { static const size_t NAME = 16; }; \
+		template<class TYPE> using  NAME##Check = decltype( TYPE::NAME ); \
+		static const size_t NAME = type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME;
+	
+	SIZE_T_GUARD(GROUP_SIZE,32)
+
+	#undef SIZE_T_GUARD
+
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -3354,21 +3273,9 @@ class EventProgram<
 
 
 	/*
-	// The types representing the per-device, per-group, and per-thread information that needs to
-	// be tracked for the developer's program.
-	*/
-	typedef typename PROGRAM_STATE::DeviceState   DeviceState;
-	typedef typename PROGRAM_STATE::GroupState    GroupState;
-	typedef typename PROGRAM_STATE::ThreadState   ThreadState;
-
-
-	typedef PromiseUnion    <PROMISE_TYPES...>    PromiseUnionType;
-	typedef ADR_TYPE                              AdrType;
-
-	/*
 	// The number of async functions present in the program.
 	*/
-	static const unsigned char FN_ID_COUNT = sizeof...(PROMISE_TYPES);
+	static const unsigned char FN_ID_COUNT = PromiseUnionType::COUNT;
 
 	/*
 	// This struct represents the entire set of data structures that must be stored in thread
@@ -3472,12 +3379,7 @@ class EventProgram<
 
 
 	__device__ 
-	EventProgram<
-		PromiseUnion<PROMISE_TYPES...>,
-		PROGRAM_STATE,
-		ADR_TYPE,
-		GROUP_SIZE
-	>
+	EventProgram<PROGRAM_SPEC>
 	(
 		DeviceContext & d_c,
 		GroupContext  & g_c,
@@ -3589,7 +3491,7 @@ class EventProgram<
 		/* Initialize per-thread resources */
 		init_thread();
 
-		initialize();
+		PROGRAM_SPEC::initialize(*this);
 
 		__shared__ util::iter::GroupArrayIter<PromiseUnionType,unsigned int> group_work;
 		__shared__ bool done;
@@ -3623,7 +3525,7 @@ class EventProgram<
 			__syncthreads();
 
 			if( done ){
-				while(make_work()){}
+				while(PROGRAM_SPEC::make_work(*this)){}
 				break;
 			}
 
@@ -3645,7 +3547,7 @@ class EventProgram<
 
 		__syncthreads();
 
-		finalize();
+		PROGRAM_SPEC::finalize(*this);
 		
 		__threadfence();
 		__syncthreads();
@@ -3681,15 +3583,29 @@ class EventProgram<
 	template<typename TYPE>
 	__device__ float queue_fill_fraction()
 	{
-		return _dev_ctx.event_io[PromiseUnionLookup<TYPE,PROMISE_TYPES...>::DISC]->output_fill_fraction_sync();
+		return _dev_ctx.event_io[Lookup<TYPE>::type::DISC]->output_fill_fraction_sync();
 
 	}
 };
 
 
 
-#define IMMEDIATE_CALL(fn_id,promise) std::remove_reference<decltype(_device_context)>::type::ParentProgramType::template immediate_call_cast<fn_id>(_device_context,_group_context,_thread_context,promise);
 
 
-#define QUEUE_FILL_FRACTION(fn_id) _device_context.event_io[static_cast<unsigned int>(fn_id)]->output_fill_fraction_sync()
+
+
+
+/*
+// These functions unwrap an instance into its device context and passes it to the responsible
+// kernel.
+*/
+template<typename ProgType>
+__host__ void init(typename ProgType::Instance& instance,size_t group_count) {
+	_dev_init<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state);
+}
+template<typename ProgType>
+__host__ void exec(typename ProgType::Instance& instance,size_t group_count, size_t cycle_count) {
+	_dev_exec<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state,cycle_count);
+}
+
 

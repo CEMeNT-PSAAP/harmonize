@@ -19,16 +19,12 @@ ARCH_DEF=-arch=$(ARCH)
 endif
 
 
-all: neut_hrm neut_evt
+all: neut
 
 
 clean:
-	rm -f neut_evt
-	rm -f neut_hrm
+	rm -f neut
 
-neut_hrm:      Makefile $(HARMONIZE_PATH) program.cpp logic.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(FLAGS) -o neut_hrm program.cpp --restrict -include $(HARMONIZE_PATH)
-
-neut_evt:      Makefile $(HARMONIZE_PATH) program.cpp logic.cpp $(UTIL_SOURCE)
-	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(FLAGS) -o neut_evt program.cpp --restrict -include $(HARMONIZE_PATH) -DEVENT
+neut:      Makefile $(HARMONIZE_PATH) program.cpp logic.cpp $(UTIL_SOURCE)
+	$(CUDA_NVCC) -x cu $(ARCH_DEF) $(FLAGS) -o neut program.cpp --restrict -include $(HARMONIZE_PATH)
 

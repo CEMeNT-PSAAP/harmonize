@@ -83,6 +83,8 @@ struct MyDeviceState {
 	float   weight_limit;
 
 	int     fiss_mult;
+
+	bool    is_async;
 	
 };
 

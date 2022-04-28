@@ -1,151 +1,161 @@
 
 using namespace util;
 
+
+
+// Define a 'collaz' struct to hold the arguments for the even and odd async functions
+struct Collaz{ unsigned int step; unsigned int original; unsigned long long int val; };
+
+struct Even;
+struct Odd;
+
+
+struct Even {
+
+	using Type = void(*)(unsigned int step, unsigned int original, unsigned long long int val);
+
+
+	template<typename PROGRAM>
+	__device__ static void eval(PROGRAM prog, unsigned int step, unsigned int original, unsigned long long int val) {
+
+		if( val <= 1 ){
+			prog.device.output[original] = step;
+			return;
+		}
+
+		step += 1;
+		val  /= 2;
+
+		if( (val%2) == 0 ){
+			prog.template async<Even>(step,original,val);
+		} else {
+			prog.template async< Odd>(step,original,val);
+		}
+
+	}
+
+};
+
+
+
+struct Odd{
+
+	using Type = void(*)(unsigned int step, unsigned int original, unsigned long long int val);
+
+	template<typename PROGRAM>
+	__device__ static void eval(PROGRAM prog, unsigned int step, unsigned int original, unsigned long long int val) {
+
+		if( val <= 1 ){
+			prog.device.output[original] = step;
+			return;
+		}
+
+		step += 1;
+		val  *= 3;
+		val  += 1;
+
+		if( (val%2) == 0 ){
+			prog.template async<Even>(step,original,val);
+		} else {
+			prog.template async< Odd>(step,original,val);
+		}
+
+	}
+
+};
+
 // The state that will be stored per program instance and accessible by all work groups
-struct DeviceState{
+struct MyDeviceState{
 	unsigned int start;
 	unsigned int limit;
 	unsigned int *output;
+	iter::AtomicIter<unsigned int>* iterator;
 };
 
-// The state that will be stored per work group
-struct GroupState {
-	iter::GroupIter<unsigned int> iterator;
-};
-
-/*
-// Declare a certain Device+Group+Thread state tuple and name it 'ProgState' for convenience.
-// We do not need a per-thread state and so fill it with the zero-size type 'VoidState'.
-*/
-typedef ProgramStateDef<DeviceState,GroupState,VoidState> ProgState;
-
-// Name the identifiers for the async functions we plan to use
-enum class Fn { Even, Odd };
-
-// Define a 'collaz' struct to hold the arguments for the even and odd async functions
-struct collaz{ unsigned int step; unsigned int original; unsigned long long int val; };
-
-// Declare that our even and odd async functions accept an argument of type 'collaz'
-DEF_PROMISE_TYPE(Fn::Even, collaz);
-DEF_PROMISE_TYPE(Fn::Odd,  collaz);
-
-/*
-// Declare a Harmonize program type capable of executing all promises in the set {Fn::Even,Fn::Odd}
-// and which use the Device+Group+Thread states declared for 'ProgState'. For convenience,
-// we name this type 'ProgType'.
-*/
-typedef  HarmonizeProgram < PromiseUnion<Fn::Even,Fn::Odd>, ProgState > ProgType;
 
 
-/*
-// Defines the async function to handle 'Even' promises for programs with type 'ProgType'. We
-// furthermore specify that the name of the argument accepted by the function is 'arg'. Device,
-// Group, and Thread states are respectively accessed thro
-*/
-DEF_ASYNC_FN(ProgType, Fn::Even, arg) {
+struct MyProgramSpec {
 
-	if( arg.val <= 1 ){
-		device.output[arg.original] = arg.step;
-		return;
+
+	typedef OpUnion<Even,Odd>       OpSet;
+	typedef     MyDeviceState DeviceState;
+
+	static const size_t STASH_SIZE =   16;
+	static const size_t FRAME_SIZE = 8191;
+	static const size_t  POOL_SIZE = 8191;
+
+
+
+
+	/*
+	// Defines the initialization function for programs of type 'ProgType'. This function is called by
+	// all threads in all work groups just prior to beginning normal execution. States are accessible
+	// through the 'device', 'group', and 'thread' variables, just like when defining async functions.
+	// 
+	// Here, we initialize the work iterator to iterate over a range of integers unique to the work
+	// group, distributing the set of integers to process more or less evenly across the set of
+	// work groups.
+	*/
+	template<typename PROGRAM>
+	__device__ static void initialize(PROGRAM prog){
+
 	}
 
-	arg.step += 1;
-	arg.val  /= 2;
+	/*
+	// Defines a function for programs of type 'ProgType' which is called by all threads in all work
+	// groups after it is determined that there are no more promises to be processed. To be clear:
+	// you should not perform any async calls in here and expect them to be always evaluated, since
+	// the program is wrapping up and there is a good chance that no work groups will notice the
+	// promises before exiting.
+	//
+	// Because promises are persistant across execution calls, if you want to queue work for the next
+	// execution call, you can check if the current executing work group is the final one to call the
+	// finalize function and queue work then. This will guarantee that the queued work will only be
+	// evaluated in the next exec call.
+	*/
+	template<typename PROGRAM>
+	__device__ static void finalize(PROGRAM prog){
 
-	if( (arg.val%2) == 0 ){
-		ASYNC_CALL(Fn::Even,arg);
-	} else {
-		ASYNC_CALL(Fn::Odd, arg);
+
 	}
 
-}
-/*
-// Same as the definition above, but handling 'Odd' promises and performing the operations
-// corresponding to odd values in the collaz iteration.
-*/
-DEF_ASYNC_FN(ProgType, Fn::Odd, arg) {
-
-	if( arg.val <= 1 ){
-		device.output[arg.original] = arg.step;
-		return;
-	}
-
-	arg.step += 1;
-	arg.val  *= 3;
-	arg.val  += 1;
-
-	if( (arg.val%2) == 0 ){
-		ASYNC_CALL(Fn::Even,arg);
-	} else {
-		ASYNC_CALL(Fn::Odd, arg);
-	}
-
-}
-
-/*
-// Defines the initialization function for programs of type 'ProgType'. This function is called by
-// all threads in all work groups just prior to beginning normal execution. States are accessible
-// through the 'device', 'group', and 'thread' variables, just like when defining async functions.
-// 
-// Here, we initialize the work iterator to iterate over a range of integers unique to the work
-// group, distributing the set of integers to process more or less evenly across the set of
-// work groups.
-*/
-DEF_INITIALIZE(ProgType) {
-
-	unsigned int group_data_size = (device.limit - device.start) / gridDim.x;
-	unsigned int group_start = device.start + group_data_size * blockIdx.x;
-	unsigned int group_end   = group_start + group_data_size;
-	if( blockIdx.x == (gridDim.x-1) ){
-		group_end = device.limit;
-	}
-
-	group.iterator.reset(group_start,group_end);
-
-}
-
-/*
-// Defines a function for programs of type 'ProgType' which is called by all threads in all work
-// groups after it is determined that there are no more promises to be processed. To be clear:
-// you should not perform any async calls in here and expect them to be always evaluated, since
-// the program is wrapping up and there is a good chance that no work groups will notice the
-// promises before exiting.
-//
-// Because promises are persistant across execution calls, if you want to queue work for the next
-// execution call, you can check if the current executing work group is the final one to call the
-// finalize function and queue work then. This will guarantee that the queued work will only be
-// evaluated in the next exec call.
-*/
-DEF_FINALIZE(ProgType) {
 
 
-}
+	/*
+	// Defines the work making function for programs of type 'ProgType'. This function is called by
+	// work groups whenever they notice that they are running out of work to perform. To indicate
+	// that there is still more work to perform, return 'true'. To indicate that there is no more
+	// work left for the work group to make, return 'false', at which point, the work group will no
+	// longer call this function for the remainder of the execution run.
+	*/
+	template<typename PROGRAM>
+	__device__ static bool make_work(PROGRAM prog){
 
+		unsigned int iter_step_length = 1u;
 
-
-/*
-// Defines the work making function for programs of type 'ProgType'. This function is called by
-// work groups whenever they notice that they are running out of work to perform. To indicate
-// that there is still more work to perform, return 'true'. To indicate that there is no more
-// work left for the work group to make, return 'false', at which point, the work group will no
-// longer call this function for the remainder of the execution run.
-*/
-DEF_MAKE_WORK(ProgType) {
-
-
-	unsigned int index;
-        if(group.iterator.step(index)){
-		collaz prom = { 0, index, index};
-		if( (index % 2) == 0 ){
-			ASYNC_CALL(Fn::Even,prom);
-		} else {
-			ASYNC_CALL(Fn::Odd,prom);
+		iter::Iter<unsigned int> iter = prog.device.iterator->leap(iter_step_length);
+		
+		unsigned int index;
+		while(iter.step(index)){
+			if( (index % 2) == 0 ){
+				prog.template async<Even>(0,index,index);
+			} else {
+				prog.template async< Odd>(0,index,index);
+			}
 		}
+
+		return ! prog.device.iterator->done();
+
 	}
 
-	return ! group.iterator.done();
 
-}
+
+};
+
+
+typedef  HarmonizeProgram < MyProgramSpec > ProgType;
+
+
 
 
 // A function to double-check our work
@@ -178,7 +188,7 @@ int main(int argc, char* argv[]){
 	watch.start();
 
 	// Declare a device state and initialize it with the information  it requires:
-	DeviceState ds;
+	MyDeviceState ds;
 
 	// Define the range of values to process through the collaz iteration
 	ds.start  = 0;
@@ -189,6 +199,12 @@ int main(int argc, char* argv[]){
 	// Assign the address of the device-side buffer to the device state so that the program
 	// can know where to put its output.
 	ds.output = dev_out;
+
+	iter::AtomicIter<unsigned int> host_iter(0,ds.limit);
+	host::DevBuf<iter::AtomicIter<unsigned int>> iterator;
+	iterator << host_iter;
+	ds.iterator = iterator;
+
 
 	// Declare and instance of type 'ProgType' with an arena size of 2^(20) with a device state
 	// initialized to the value of our declared device state struct. The arena size of a

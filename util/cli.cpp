@@ -378,17 +378,58 @@ struct ArgSet
 			return false;
 		}
 
+
+		bool scan_arg(char *str, unsigned char &dest) const {	
+			return ( 0 < sscanf(str,"%hhu",&dest) );
+		}
+
+		bool scan_arg(char *str, unsigned short int &dest) const {	
+			return ( 0 < sscanf(str,"%hu",&dest) );
+		}
+
 		bool scan_arg(char *str, unsigned int &dest) const {	
 			return ( 0 < sscanf(str,"%u",&dest) );
 		}
 		
-		bool scan_arg(char *str, int &dest) const {	
+		bool scan_arg(char *str, unsigned long int &dest) const {	
+			return ( 0 < sscanf(str,"%lu",&dest) );
+		}
+	
+		bool scan_arg(char *str, unsigned long long int &dest) const {	
+			return ( 0 < sscanf(str,"%llu",&dest) );
+		}
+
+
+		bool scan_arg(char *str,   signed char &dest) const {	
+			return ( 0 < sscanf(str,"%hhd",&dest) );
+		}
+
+		bool scan_arg(char *str,   signed short int &dest) const {	
+			return ( 0 < sscanf(str,"%hd",&dest) );
+		}
+
+		bool scan_arg(char *str,   signed int &dest) const {	
 			return ( 0 < sscanf(str,"%d",&dest) );
 		}
+		
+		bool scan_arg(char *str,   signed long int &dest) const {	
+			return ( 0 < sscanf(str,"%ld",&dest) );
+		}
+	
+		bool scan_arg(char *str,   signed long long int &dest) const {	
+			return ( 0 < sscanf(str,"%lld",&dest) );
+		}
+
+
 		
 		bool scan_arg(char *str, float &dest) const {	
 			return ( 0 < sscanf(str,"%f",&dest) );
 		}
+		
+		bool scan_arg(char *str, double &dest) const {	
+			return ( 0 < sscanf(str,"%lf",&dest) );
+		}
+
 		
 		bool scan_arg(char *str, bool &dest) const{
 			if        ( strcmp(str,"false") == 0 ){
