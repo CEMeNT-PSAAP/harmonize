@@ -21,7 +21,7 @@ fi
 
 exelist="neut_hrm neut_evt"
 
-mkdir -p "$dirname"
+mkdir -p "${dirname}"
 
 for exe in $exelist
 do
@@ -65,7 +65,7 @@ rm -f $scr
 
 function norm {
 
-bceval "scale=1; x = $1 / 10; if(x<1) print 0; if(x==0) print \".\"; print x;"
+bceval "scale=2; x = $1 / 20; if(x<1) print 0; if(x==0) print \".0\"; print x;"
 
 }
 
@@ -73,41 +73,25 @@ bceval "scale=1; x = $1 / 10; if(x<1) print 0; if(x==0) print \".\"; print x;"
 
 
 
-#for fission in $( seq 0 10 )
-#do
-#scatterLim=$(( 10 - fission ))
-#for scatter in $( seq 0 $scatterLim )
-#do
-#capture=$(( 10 - fission - scatter ))
-
 
 for capture in $( seq 0 10 )
 do
 
-fissionLim=$(( 10 - capture ))
+fission=$capture
+scatter=$(( 20 - $capture - $fission ))
 
-for fission in $( seq 0 $fissionLim )
-do
-
-scatter=$(( 10 - fission - capture ))
-
-#if (( $capture < fission ))
-#then
-#break
-#fi
 
 fissX=$( norm $fission )
 scatX=$( norm $scatter )
 captX=$( norm $capture )
 
-#samp=32
-samp=128
+samp=32
+#samp=128
 
 
 name=$(gen_name $captX $scatX $fissX)
 
-#if [[ ! -f "${dirname}/neut_evt/${name}_avg" || ! -f "${dirname}/neut_hrm/${name}_avg" ]]
-if [[ ! -f "${dirname}/neut_hrm/${name}_avg" ]]
+if [[ ! -f "${dirname}/neut_evt/${name}_avg" || ! -f "${dirname}/neut_hrm/${name}_avg" ]]
 then
 #srun -N 1 -n 1 sub_speed.sh $captX $scatX $fissX $samp $secs $num $count $wlim &
 #jsrun -p 1 -c 1 -g 1 sub_speed.sh $captX $scatX $fissX $samp $secs $num 0 $wlim &
@@ -122,6 +106,7 @@ fi
 if (( $count >= $limit ))
 then
 srun -N 1 -n 1 go_run.sh "$cmd" &
+echo srun -N 1 -n 1 go_run.sh "$cmd" &
 #srun -A eecs -p dgx2 --gres=gpu:$count go_run.sh "$cmd" &
 count=0
 cmd=""
@@ -136,11 +121,10 @@ fi
 
 done
 
-done
-
 if (( $count > 0 ))
 then
 srun -N 1 -n 1 go_run.sh "$cmd" &
+echo srun -N 1 -n 1 go_run.sh "$cmd" &
 #srun -A eecs -p dgx2 --gres=gpu:$count go_run.sh "$cmd" &
 cmd=""
 fi
@@ -165,12 +149,10 @@ rm "$dirname/$exe/mem.log"
 for capture in $( seq 10 -1 0 )
 do
 
-fissionLim=$(( 10 - capture ))
+echo Capture is $capture
 
-for fission in $( seq 0 $fissionLim )
-do
-
-scatter=$(( 10 - fission - capture ))
+fission=$capture
+scatter=$(( 20 - $capture - $fission ))
 
 fissX=$( norm $fission )
 scatX=$( norm $scatter )
@@ -179,7 +161,7 @@ captX=$( norm $capture )
 
 name=$(gen_name $captX $scatX $fissX)
 targ="$dirname/$exe/$name"
-
+echo $targ
 
 cat "${targ}_avg"      | tail -n 1 | tr '\n' '\t' | tee -a "$dirname/$exe/avg.log"
 cat "${targ}_avg_tune" | tail -n 1 | tr '\n' '\t' | tee -a "$dirname/$exe/avg_tune.log"
@@ -201,7 +183,6 @@ echo | tee -a "$dirname/$exe/mem.log"
 
 done
 
-done
 
 
 

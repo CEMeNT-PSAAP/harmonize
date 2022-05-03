@@ -21,8 +21,8 @@ suffix  = ""
 if ( argc >= 4 ):
 	suffix = f"_imp_{sys.argv[3]}"
 
-n_range = [ 1000, 10000, 100000, 1000000 ]
-t_range = [ 2, 4, 6, 8  ]
+n_range = [ 1000, 10000, 100000 ] #, 1000000 ]
+t_range = [ 2, 4, 6 ] #, 8  ]
 
 for t in t_range :
 	for n in n_range:
