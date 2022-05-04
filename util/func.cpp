@@ -3,7 +3,7 @@
 
 
 
-
+#if 0
 
 
 template<typename T>
@@ -109,7 +109,7 @@ class Result {
 
 
 
-
+#endif
 
 
 
