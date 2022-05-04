@@ -148,18 +148,18 @@ struct OpUnionLookup;
 template <typename QUERY>
 struct OpUnionLookup <QUERY> {
 	static const bool   CONTAINED = false;
-	static const OpDisc LEVEL     = 0;
-	static const OpDisc Q_LEV     = LEVEL;
-	static const OpDisc DISC      = LEVEL;
+	static const OpDisc DEPTH     = 0;
+	static const OpDisc Q_LEVEL   = DEPTH;
+	static const OpDisc DISC      = DEPTH;
 };
 
 template <typename QUERY, typename HEAD, typename... TAIL>
 struct OpUnionLookup <QUERY, HEAD, TAIL...> {
 	static const bool   MATCHES   = std::is_same<QUERY,HEAD>::value ;
 	static const bool   CONTAINED = MATCHES || (OpUnionLookup<QUERY,TAIL...>::CONTAINED);
-	static const OpDisc LEVEL     = OpUnionLookup<QUERY,TAIL...>::LEVEL + 1;
-	static const OpDisc Q_LEV     = MATCHES ? LEVEL : (OpUnionLookup<QUERY,TAIL...>::Q_LEV);
-	static const OpDisc DISC      = LEVEL - Q_LEV;
+	static const OpDisc DEPTH     = OpUnionLookup<QUERY,TAIL...>::DEPTH + 1;
+	static const OpDisc Q_LEVEL   = MATCHES ? DEPTH : (OpUnionLookup<QUERY,TAIL...>::Q_LEVEL);
+	static const OpDisc DISC      = DEPTH - Q_LEVEL;
 };
 
 
@@ -177,8 +177,9 @@ struct VoidState {};
 template <>
 union PromiseUnion <OpUnion<>> {
 
-	static const OpDisc COUNT = 0;
-
+	struct Info {
+		static const OpDisc COUNT = 0;
+	};
 
 	template <typename PROGRAM, typename TYPE>
 	__host__  __device__ void rigid_eval( PROGRAM program ) {
@@ -216,8 +217,10 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	public:
 
-	static const OpDisc COUNT = sizeof...(TAIL) + 1;
-	static const OpDisc INDEX = OpUnionLookup<HEAD,HEAD,TAIL...>::DISC;
+	struct Info {
+		static const OpDisc COUNT = sizeof...(TAIL) + 1;
+		static const OpDisc INDEX = OpUnionLookup<HEAD,HEAD,TAIL...>::DISC;
+	};
 
 	template <typename TYPE>
 	struct Lookup { typedef OpUnionLookup<TYPE,HEAD,TAIL...> type; };
@@ -290,7 +293,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		PROGRAM program,
 		OpDisc disc
 	) {
-		if(disc == INDEX){
+		if(disc == Info::INDEX){
 			head_form(program);
 		} else {
 			tail_form. template loose_eval<PROGRAM>(program,disc-1);
@@ -305,7 +308,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 
 	__host__ __device__ void dyn_copy_as(OpDisc disc, PromiseUnion<OpUnion<HEAD,TAIL...>>& other){
-		if( disc == INDEX ){
+		if( disc == Info::INDEX ){
 			cast<HEAD>() = other.cast<HEAD>();
 		} else {
 			tail_form.dyn_copy_as(disc-1,other.tail_form);
@@ -367,7 +370,7 @@ struct WorkLink
 	__host__ __device__ void empty(AdrType next_adr){
 
 		next	= next_adr;
-		id	= PromiseType::COUNT;
+		id	= PromiseType::Info::COUNT;
 		count	= 0;
 
 	}
@@ -521,35 +524,37 @@ namespace detector {
 	using void_size = void;
 
 	template <template <class...> class LOOKUP, class GUARD, class... ARGS>
-	struct is_detected : std::false_type{};
+	struct is_detected
+	{ const static bool value = false; };
 
 	template <template <class...> class LOOKUP, class... ARGS>
-	struct is_detected<LOOKUP, void_t<LOOKUP<ARGS...>>, ARGS...> : std::true_type{};
+	struct is_detected<LOOKUP, void_t<LOOKUP<ARGS...>>, ARGS...>
+	{ const static bool value = true; };
 
 	template<bool COND, class TRUE_TYPE = void, class FALSE_TYPE = void>
-	struct type_switch
-	{};
+	struct type_switch;
 
 	template<class TRUE_TYPE, class FALSE_TYPE>
 	struct type_switch<true, TRUE_TYPE,FALSE_TYPE>
 	{
-		typedef TRUE_TYPE type;
+		using type = TRUE_TYPE;
 	};
 
 	template<class TRUE_TYPE, class FALSE_TYPE>
 	struct type_switch<false, TRUE_TYPE, FALSE_TYPE>
 	{
-		typedef FALSE_TYPE type;
+		using type = FALSE_TYPE;
 	};
 
 
 }
 
 template<template<class...> class LOOKUP, class... ARGS>
-using is_detected = typename detector::is_detected<LOOKUP,void,ARGS...>::type;
+using is_detected = typename detector::is_detected<LOOKUP,void,ARGS...>;
 
 template<class DEFAULT, template<class> class LOOKUP, class TYPE>
 using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::value ,TYPE,DEFAULT>::type;
+
 
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -586,6 +591,16 @@ using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::val
 #define LAZY_LINK
 
 
+#define MEMBER_SWITCH(NAME,DEFAULT_TYPE) \
+	template<class PROG,class DEFAULT> static auto NAME##Lookup (int)  -> DEFAULT; \
+	template<class PROG,class DEFAULT> static auto NAME##Lookup (bool) -> typename PROG::NAME; \
+	typedef decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_TYPE>(true)) NAME;
+
+
+#define CONST_SWITCH(TYPE,NAME,DEFAULT_VAL) \
+	template<class PROG,TYPE DEFAULT> static auto NAME##Lookup (int)  -> std::integral_constant<TYPE,    DEFAULT>; \
+	template<class PROG,TYPE DEFAULT> static auto NAME##Lookup (bool) -> std::integral_constant<TYPE, PROG::NAME>; \
+	static const size_t NAME = decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_VAL>(true))::value;
 
 
 template< typename PROGRAM_SPEC >
@@ -596,49 +611,32 @@ class HarmonizeProgram
 
 	typedef HarmonizeProgram<PROGRAM_SPEC> ProgramType;
 
-	#define MEMBER_GUARD(NAME,DEFAULT) \
-		struct NAME##Default { typedef unsigned int NAME; }; \
-		template<class TYPE> using  NAME##Check = typename TYPE::NAME; \
-		typedef typename type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME NAME;
 
-	/*
-	struct AdrTypeDefault { typedef unsigned int AdrType; };
-	template<class TYPE> using  AdrTypeCheck = typename TYPE::AdrType;
-	typedef typename type_or<AdrTypeDefault,AdrTypeCheck,PROGRAM_SPEC>::AdrType AdrType;
-	*/
 
-	MEMBER_GUARD(    AdrType,unsigned int)
-	MEMBER_GUARD(      OpSet,   OpUnion<>)
-	MEMBER_GUARD(DeviceState,   VoidState)
-	MEMBER_GUARD( GroupState,   VoidState)
-	MEMBER_GUARD(ThreadState,   VoidState)
+	MEMBER_SWITCH(    AdrType,unsigned int)
+	MEMBER_SWITCH(      OpSet,   OpUnion<>)
+	MEMBER_SWITCH(DeviceState,   VoidState)
+	MEMBER_SWITCH( GroupState,   VoidState)
+	MEMBER_SWITCH(ThreadState,   VoidState)
 
-	#undef MEMBER_GUARD
 
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 	template<typename TYPE>
 	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
-
-	#define SIZE_T_GUARD(NAME,DEFAULT) \
-		struct NAME##Default { static const size_t NAME = DEFAULT; }; \
-		template<class TYPE> using  NAME##Check = decltype( TYPE::NAME ); \
-		static const size_t NAME = type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME;
 	
-	SIZE_T_GUARD(STASH_SIZE,16)
-	SIZE_T_GUARD(FRAME_SIZE,32)
-	SIZE_T_GUARD( POOL_SIZE,32)
-	SIZE_T_GUARD(GROUP_SIZE,32)
-	SIZE_T_GUARD(STACK_SIZE, 0)
+	CONST_SWITCH(size_t,STASH_SIZE,16)
+	CONST_SWITCH(size_t,FRAME_SIZE,32)
+	CONST_SWITCH(size_t, POOL_SIZE,32)
+	CONST_SWITCH(size_t,STACK_SIZE, 0)
+	CONST_SWITCH(size_t,GROUP_SIZE,32)
 
-
-	#undef SIZE_T_GUARD
 
 
 	/*
 	// The number of async functions present in the program.
 	*/
-	static const unsigned char FN_ID_COUNT = PromiseUnionType::COUNT;
+	static const unsigned char FN_ID_COUNT = PromiseUnionType::Info::COUNT;
 
 
 	/*
@@ -3227,40 +3225,32 @@ class EventProgram
 
 	typedef EventProgram<PROGRAM_SPEC> ProgramType;
 
-	#define MEMBER_GUARD(NAME,DEFAULT) \
-		struct NAME##Default { typedef unsigned int NAME; }; \
-		template<class TYPE> using  NAME##Check = typename TYPE::NAME; \
-		typedef typename type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME NAME;
 
+	template<class TYPE,class DEFAULT>
+	static auto ThreadStateLookup (int)   -> DEFAULT;
+
+	template<class TYPE,class DEFAULT>
+	static auto ThreadStateLookup (double) -> typename TYPE::ThreadState;
 	/*
 	struct AdrTypeDefault { typedef unsigned int AdrType; };
 	template<class TYPE> using  AdrTypeCheck = typename TYPE::AdrType;
 	typedef typename type_or<AdrTypeDefault,AdrTypeCheck,PROGRAM_SPEC>::AdrType AdrType;
 	*/
 
-	MEMBER_GUARD(    AdrType,unsigned int)
-	MEMBER_GUARD(      OpSet,   OpUnion<>)
-	MEMBER_GUARD(DeviceState,   VoidState)
-	MEMBER_GUARD( GroupState,   VoidState)
-	MEMBER_GUARD(ThreadState,   VoidState)
+	MEMBER_SWITCH(    AdrType,unsigned int)
+	MEMBER_SWITCH(      OpSet,   OpUnion<>)
+	MEMBER_SWITCH(DeviceState,   VoidState)
+	MEMBER_SWITCH( GroupState,   VoidState)
 
-	#undef MEMBER_GUARD
+	typedef decltype(ThreadStateLookup<PROGRAM_SPEC,VoidState>(1.0)) ThreadState;	
 
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 	template<typename TYPE>
 	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
 
-
-	#define SIZE_T_GUARD(NAME,DEFAULT) \
-		struct NAME##Default { static const size_t NAME = 16; }; \
-		template<class TYPE> using  NAME##Check = decltype( TYPE::NAME ); \
-		static const size_t NAME = type_switch<NAME##Default,NAME##Check,PROGRAM_SPEC>::NAME;
 	
-	SIZE_T_GUARD(GROUP_SIZE,32)
-
-	#undef SIZE_T_GUARD
-
+	CONST_SWITCH(size_t,GROUP_SIZE,32)
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -3275,7 +3265,7 @@ class EventProgram
 	/*
 	// The number of async functions present in the program.
 	*/
-	static const unsigned char FN_ID_COUNT = PromiseUnionType::COUNT;
+	static const unsigned char FN_ID_COUNT = PromiseUnionType::Info::COUNT;
 
 	/*
 	// This struct represents the entire set of data structures that must be stored in thread
@@ -3311,7 +3301,7 @@ class EventProgram
 		typedef		ProgramType       ParentProgramType;
 
 		unsigned int*                               checkout;
-		util::iter::IOBuffer<PromiseUnionType,AdrType>*   event_io[PromiseUnionType::COUNT];
+		util::iter::IOBuffer<PromiseUnionType,AdrType>*   event_io[PromiseUnionType::Info::COUNT];
 	};
 
 
@@ -3324,13 +3314,13 @@ class EventProgram
 
 		
 		util::host::DevBuf<unsigned int> checkout;
-		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::COUNT];
+		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Info::COUNT];
 		DeviceState device_state;		
 
 		__host__ Instance (size_t io_size, DeviceState gs)
 			: device_state(gs)
 		{
-			for( unsigned int i=0; i<PromiseUnionType::COUNT; i++){
+			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
 			}
 			checkout<< 0u;
@@ -3341,7 +3331,7 @@ class EventProgram
 			DeviceContext result;
 			
 			result.checkout = checkout;
-			for( unsigned int i=0; i<PromiseUnionType::COUNT; i++){
+			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				result.event_io[i] = event_io[i];
 			}
 
@@ -3351,7 +3341,7 @@ class EventProgram
 
 		__host__ bool complete(){
 
-			for( unsigned int i=0; i<PromiseUnionType::COUNT; i++){
+			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i].pull_data();
 				check_error();
 				if( ! event_io[i].host_copy().input_iter.limit == 0 ){
@@ -3513,7 +3503,7 @@ class EventProgram
 			__syncthreads();
 			if( util::current_leader() ) {
 				done = true;
-				for(unsigned int i=0; i < PromiseUnionType::COUNT; i++){
+				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					if( !_dev_ctx.event_io[i]->input_empty() ){
 						done = false;
 						func_id = static_cast<OpDisc>(i);
@@ -3558,7 +3548,7 @@ class EventProgram
 			if( checkout_index == (gridDim.x - 1) ){
 				//printf("{Final}");
 				atomicExch(_dev_ctx.checkout,0);
-				 for(unsigned int i=0; i < PromiseUnionType::COUNT; i++){
+				 for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					 _dev_ctx.event_io[i]->flip();
 				 }
 				 
@@ -3607,5 +3597,12 @@ template<typename ProgType>
 __host__ void exec(typename ProgType::Instance& instance,size_t group_count, size_t cycle_count) {
 	_dev_exec<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state,cycle_count);
 }
+
+
+
+
+
+#undef MEMBER_SWITCH
+#undef CONST_SWITCH
 
 
