@@ -48,6 +48,113 @@
 
 
 
+
+
+
+//!
+//! Forward declaring the more fundamental types of Harmonize
+//!
+using OpDisc = unsigned int;
+
+template<typename... TYPES>
+struct OpUnion {};
+
+template<typename OPERATION>
+struct Promise;
+
+template <typename OP_UNION>
+union PromiseUnion;
+
+template <typename OP_UNION>
+struct PromiseEnum;
+
+struct VoidState {};
+
+
+
+
+
+
+
+template <typename QUERY, typename OP_UNION>
+struct OpUnionLookup;
+
+template <typename QUERY>
+struct OpUnionLookup <QUERY,OpUnion<>>
+{
+	static const bool   CONTAINED = false;
+	static const OpDisc DEPTH     = 0;
+	static const OpDisc Q_LEVEL   = DEPTH;
+	static const OpDisc DISC      = DEPTH;
+};
+
+template <typename QUERY, typename HEAD, typename... TAIL>
+struct OpUnionLookup <QUERY, OpUnion<HEAD, TAIL...> >
+{
+	static const bool   MATCHES   = std::is_same<QUERY,HEAD>::value ;
+	static const bool   CONTAINED = MATCHES || (OpUnionLookup<QUERY,OpUnion<TAIL...>>::CONTAINED);
+	static const OpDisc DEPTH     = OpUnionLookup<QUERY,OpUnion<TAIL...>>::DEPTH + 1;
+	static const OpDisc Q_LEVEL   = MATCHES ? DEPTH : (OpUnionLookup<QUERY,OpUnion<TAIL...>>::Q_LEVEL);
+	static const OpDisc DISC      = DEPTH - Q_LEVEL;
+};
+
+
+
+
+
+template<typename HEAD, typename TAIL_UNION>
+struct OpUnionAppend;
+
+template<typename HEAD, typename... TAIL>
+struct OpUnionAppend<HEAD,OpUnion<TAIL...>>
+{
+	using Type = OpUnion<HEAD,TAIL...>;
+};
+
+
+
+
+
+
+
+
+template<typename RETURN, typename OP_UNION>
+struct OpReturnFilter;
+
+template<typename RETURN>
+struct OpReturnFilter<RETURN,OpUnion<>>
+{
+	using Type = OpUnion<>;
+};
+
+template<typename RETURN, typename HEAD, typename... TAIL>
+struct OpReturnFilter<RETURN,OpUnion<HEAD,TAIL...>>
+{
+
+	template<typename H,typename... T>	
+	static typename std::enable_if< 
+		! ( std::is_same< typename Promise<H>::Return,RETURN>::value ) ,
+		typename OpReturnFilter<RETURN,OpUnion<T...>>::Type
+	>::type
+	filtered ();
+
+	template<typename H,typename... T>	
+	static typename std::enable_if< 
+		std::is_same< typename Promise<H>::Return,RETURN>::value,
+		typename OpUnionAppend<H,typename OpReturnFilter<RETURN,OpUnion<T...>>::Type>::Type
+	>::type
+	filtered ();
+
+	using Type = decltype(filtered<HEAD,TAIL...>());
+};
+
+
+
+
+
+
+
+
 template <typename... TAIL>
 struct ArgTuple;
 
@@ -60,7 +167,7 @@ struct ArgTuple <>
 template <typename HEAD, typename... TAIL>
 struct ArgTuple <HEAD, TAIL...>
 {
-	typedef ArgTuple<TAIL...> Tail;
+	using Tail = ArgTuple<TAIL...>;
 
 	HEAD head;
 	Tail tail;
@@ -83,6 +190,87 @@ struct OpType < RETURN (*) (ARGS...) > {
 };
 
 
+
+
+template<typename PROGRAM>
+struct AsyncBarrier;
+
+
+template<typename PROGRAM, typename TYPE>
+struct ReturnAdr {
+	using Type = TYPE;
+
+	AsyncBarrier<PROGRAM>*  base;
+	Type*                   dest;
+};
+
+template<typename PROGRAM>
+struct ReturnAdr<PROGRAM, void> {
+	using Type = void;
+
+	AsyncBarrier<PROGRAM>*  base;
+};
+
+
+template <typename PROGRAM, typename TYPE>
+struct Future {
+	using Type = TYPE;
+
+	AsyncBarrier<PROGRAM> barrier;
+	Type                  data;
+
+};
+
+
+template <typename PROGRAM, typename TYPE>
+struct Return {
+
+	using Type        = TYPE;
+	using ProgramType = PROGRAM;
+	using OpSet       = typename OpReturnFilter<TYPE,typename ProgramType::OpSet>::Type;
+	using EnumType    = PromiseEnum<OpSet>;
+	using FutureType  = Future<ProgramType,Type>;
+
+	enum Form { VALUE, PROMISE, FUTURE };
+
+	union Data {
+		Type       value;
+		EnumType   promise;
+		FutureType future;
+
+		Data(Type       val) : value   (val) {}
+		Data(EnumType   prm) : promise (prm) {}
+		Data(FutureType fut) : future  (fut) {}
+	};
+
+	Form form;
+	Data data;
+
+	__host__ __device__ Return<ProgramType,Type>(Type value)        : form(Form::VALUE) , data(value) {}
+	
+	__host__ __device__ Return<ProgramType,Type>(FutureType future) : form(Form::FUTURE), data(future) {}
+
+
+	template<typename OP_TYPE>
+	__host__ __device__ static constexpr Promise<OP_TYPE> return_guard(Promise<OP_TYPE> promise)
+	{	
+		static_assert(
+			PromiseUnion<OpSet>::template Lookup<OP_TYPE,OpSet>::type::CONTAINED,
+			"\n\nTYPE ERROR: Type of returned promise does not match return type of "
+			"operation.\n\n"
+			"SUGGESTION: Ensure that the operation of the returned promise returns the "
+			"same type as the returning operation.\n\n"
+		);
+		return promise;
+	}
+	
+	template<typename OP_TYPE>
+	__host__ __device__ Return<ProgramType,Type>(Promise<OP_TYPE> promise)
+		: form(Form::PROMISE)
+		, data(return_guard(promise))
+	{}
+
+};
 
 
 template<typename OPERATION>
@@ -121,53 +309,9 @@ struct Promise
 
 
 
-//!
-//! The `ProgramStateDef` template struct is used to define the state that is stored in each scope
-//! of a program class.
-//!
-template <typename DEVICE_STATE, typename GROUP_STATE, typename THREAD_STATE>
-struct ProgramStateDef
-{
-	typedef DEVICE_STATE DeviceState;
-	typedef GROUP_STATE  GroupState;
-	typedef THREAD_STATE ThreadState;
-};
 
 
 
-
-using OpDisc = unsigned int;
-
-template<typename... TYPES>
-struct OpUnion {};
-
-
-template <typename... TYPES>
-struct OpUnionLookup;
-
-template <typename QUERY>
-struct OpUnionLookup <QUERY> {
-	static const bool   CONTAINED = false;
-	static const OpDisc DEPTH     = 0;
-	static const OpDisc Q_LEVEL   = DEPTH;
-	static const OpDisc DISC      = DEPTH;
-};
-
-template <typename QUERY, typename HEAD, typename... TAIL>
-struct OpUnionLookup <QUERY, HEAD, TAIL...> {
-	static const bool   MATCHES   = std::is_same<QUERY,HEAD>::value ;
-	static const bool   CONTAINED = MATCHES || (OpUnionLookup<QUERY,TAIL...>::CONTAINED);
-	static const OpDisc DEPTH     = OpUnionLookup<QUERY,TAIL...>::DEPTH + 1;
-	static const OpDisc Q_LEVEL   = MATCHES ? DEPTH : (OpUnionLookup<QUERY,TAIL...>::Q_LEVEL);
-	static const OpDisc DISC      = DEPTH - Q_LEVEL;
-};
-
-
-template <typename OP_UNION>
-union PromiseUnion;
-
-
-struct VoidState {};
 
 
 //!
@@ -208,9 +352,11 @@ template <typename HEAD, typename... TAIL>
 union PromiseUnion<OpUnion<HEAD, TAIL...>>
 {
 
-	typedef Promise<HEAD> Head;
-	typedef PromiseUnion<OpUnion<TAIL...>> Tail;
+	using Head      = Promise<HEAD>;
+	using Tail      = PromiseUnion<OpUnion<TAIL...>>;
 	
+	using OpSet     = OpUnion<HEAD,TAIL...>;
+	using TailOpSet = OpUnion<TAIL...>;
 
 	Head head_form;
 	Tail tail_form;
@@ -219,11 +365,11 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	struct Info {
 		static const OpDisc COUNT = sizeof...(TAIL) + 1;
-		static const OpDisc INDEX = OpUnionLookup<HEAD,HEAD,TAIL...>::DISC;
+		static const OpDisc INDEX = OpUnionLookup<HEAD,OpSet>::DISC;
 	};
 
 	template <typename TYPE>
-	struct Lookup { typedef OpUnionLookup<TYPE,HEAD,TAIL...> type; };
+	struct Lookup { typedef OpUnionLookup<TYPE,OpSet> type; };
 
 
 	template <typename TYPE>
@@ -237,7 +383,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	template <typename TYPE>
 	__host__  __device__ typename std::enable_if<
-		(!std::is_same<TYPE,HEAD>::value) && OpUnionLookup<TYPE,TAIL...>::CONTAINED,
+		(!std::is_same<TYPE,HEAD>::value) && OpUnionLookup<TYPE,TailOpSet>::CONTAINED,
 		Promise<TYPE>&
 	>::type
 	cast(){	
@@ -246,11 +392,14 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	template <typename TYPE>
 	__host__  __device__ typename std::enable_if<
-		(!std::is_same<TYPE,HEAD>::value) && (!OpUnionLookup<TYPE,TAIL...>::CONTAINED),
+		(!std::is_same<TYPE,HEAD>::value) && (!OpUnionLookup<TYPE,TailOpSet>::CONTAINED),
 		Promise<TYPE>&
 	>::type
 	cast (){	
-		static_assert( (!OpUnionLookup<TYPE,TAIL...>::CONTAINED), "Promise type does not exist in union" );
+		static_assert(
+			(!OpUnionLookup<TYPE,TailOpSet>::CONTAINED),
+			"\n\nTYPE ERROR: Promise type does not exist in union.\n\n"
+		);
 	}
 
 
@@ -267,7 +416,7 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	template <typename PROGRAM, typename TYPE>
 	__host__  __device__ typename std::enable_if<
-		(!std::is_same<TYPE,HEAD>::value) && OpUnionLookup<TYPE,TAIL...>::CONTAINED,
+		(!std::is_same<TYPE,HEAD>::value) && OpUnionLookup<TYPE,TailOpSet>::CONTAINED,
 		void
 	>::type
 	rigid_eval(
@@ -278,13 +427,16 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	template <typename PROGRAM, typename TYPE>
 	__host__  __device__ typename std::enable_if<
-		(!std::is_same<TYPE,HEAD>::value) && (!OpUnionLookup<TYPE,TAIL...>::CONTAINED),
+		(!std::is_same<TYPE,HEAD>::value) && (!OpUnionLookup<TYPE,TailOpSet>::CONTAINED),
 		void
 	>::type
 	rigid_eval(
 		PROGRAM program
 	) {
-		static_assert( (!OpUnionLookup<TYPE,TAIL...>::CONTAINED), "Promise type does not exist in union" );
+		static_assert(
+			(!OpUnionLookup<TYPE,TailOpSet>::CONTAINED),
+			"\n\nTYPE ERROR: Promise type does not exist in union.\n\n"
+		);
 	}
 
 
@@ -302,12 +454,12 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 	}
 
 	template <typename TYPE>
-	__host__ __device__ void copy_as(PromiseUnion<OpUnion<HEAD,TAIL...>>& other){
+	__host__ __device__ void copy_as(PromiseUnion<OpSet>& other){
 		cast<TYPE>() = other.template cast<TYPE>();
 	}
 
 
-	__host__ __device__ void dyn_copy_as(OpDisc disc, PromiseUnion<OpUnion<HEAD,TAIL...>>& other){
+	__host__ __device__ void dyn_copy_as(OpDisc disc, PromiseUnion<OpSet>& other){
 		if( disc == Info::INDEX ){
 			cast<HEAD>() = other.cast<HEAD>();
 		} else {
@@ -315,7 +467,21 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		}
 	}
 
-	__host__ __device__ PromiseUnion<OpUnion<HEAD,TAIL...>> () : tail_form() {}
+	__host__ __device__ PromiseUnion<OpSet> () : tail_form() {}
+
+	template< typename OP_TYPE>
+	__host__ __device__ PromiseUnion<OpSet> ( Promise<OP_TYPE> prom ) {
+		static_assert(
+			OpUnionLookup<OP_TYPE,OpSet>::CONTAINED,
+			"\n\nTYPE ERROR: Type of assigned promise does not exist in promise union.\n\n"
+			"SUGGESTION: Double-check the signature of the promise union and make sure "
+			"its OpUnion template parameter contains the desired operation type.\n\n"
+			"SUGGESTION: Double-check the type signature of the promise and make sure "
+			"it is the correct operation type.\n\n"
+		);
+		cast<OP_TYPE>() = prom;
+	}
+
 
 };
 
@@ -324,18 +490,42 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 
 
-template <typename OP_UNION>
+template <typename OP_SET>
 struct PromiseEnum {
 
-	PromiseUnion<OP_UNION> data;
-	OpDisc                 disc;
+	using UnionType = PromiseUnion<OP_SET>;
+
+	UnionType data;
+	OpDisc    disc;
 	
 	PromiseEnum() = default;
 
-	__host__ __device__ PromiseEnum(PromiseUnion<OP_UNION> uni, OpDisc d)
+	__host__ __device__ PromiseEnum<OP_SET>(UnionType uni, OpDisc d)
 		: data(uni)
 		, disc(d)
-	{ }
+	{}
+
+
+	template<typename OP_TYPE>
+	__host__ __device__ constexpr static Promise<OP_TYPE> promise_guard (Promise<OP_TYPE> promise){
+		static_assert(
+			UnionType::template Lookup<OP_TYPE>::type::CONTAINED,
+			"\n\nTYPE ERROR: Type of assigned promise does not exist in promise enum.\n\n"
+			"SUGGESTION: Double-check the signature of the promise enum and make sure "
+			"its OpUnion template parameter contains the desired operation type.\n\n"
+			"SUGGESTION: Double-check the type signature of the promise and make sure "
+			"it is the correct operation type.\n\n"
+		);
+		return promise;
+	}
+
+
+	template<typename OP_TYPE>
+	__host__ __device__ PromiseEnum<OP_SET>(Promise<OP_TYPE> promise)
+		: data(promise_guard(promise))
+		, disc(UnionType::template Lookup<OP_TYPE>::type::DISC)
+	{}
+
 
 };
 
@@ -348,19 +538,20 @@ struct PromiseEnum {
 //! identify what type of work is contained within the link, a `meta_data` field, and a `count`
 //! field to indicate the number of contained promises.
 //!
-template <typename PROMISE_UNION, typename ADR_TYPE, size_t GROUP_SIZE>
+template <typename OP_SET, typename ADR_TYPE, size_t GROUP_SIZE>
 struct WorkLink
 {
 
-	typedef ADR_TYPE AdrType;
-	typedef PROMISE_UNION PromiseType;
+	using OpSet     = OP_SET;
+	using AdrType   = ADR_TYPE;
+	using UnionType = PromiseUnion<OpSet>;
 
-	PromiseType    promises[GROUP_SIZE];
+	UnionType      promises[GROUP_SIZE];
 
 	AdrType        next;
 	unsigned int   meta_data;
+	unsigned int   count;
 	OpDisc         id;
-	unsigned short count;
 
 
 	/*
@@ -370,59 +561,395 @@ struct WorkLink
 	__host__ __device__ void empty(AdrType next_adr){
 
 		next	= next_adr;
-		id	= PromiseType::Info::COUNT;
+		id	= UnionType::Info::COUNT;
 		count	= 0;
 
 	}
 
 
-};
 
-
-
-
-template <typename PROMISE_UNION, typename ADR_TYPE>
-struct PromiseLink
-{
-	
-	typedef ADR_TYPE                 AdrType;
-	typedef PROMISE_UNION            PromiseType;
-	typedef PromiseEnum<PromiseType> PromiseEnumType;
-
-	PromiseEnumType data;
-	AdrType         next;
-
-	__host__ __device__ void empty(AdrType next_adr, PromiseEnumType value){
-		next	= next_adr;
-		data	= value;
+	template<typename OP_TYPE>
+	__device__ static constexpr Promise<OP_TYPE> promise_guard(Promise<OP_TYPE> promise) {
+		static_assert(
+			UnionType::template Lookup<OP_TYPE,OpSet>::type::CONTAINED,
+			"\n\nTYPE ERROR: Type of promise cannot be contained in atomic work link.\n\n"
+			"SUGGESTION: Double-check the signature of the atomic work link to make sure "
+			"its OpUnion template parameter contains the desired operation type.\n\n"
+			"SUGGESTION: Double-check the type signature of the promise and make sure "
+			"it is the correct operation type.\n\n"
+		);
+		return promise;
 	}
 
+	
+	template<typename OP_TYPE>
+	__device__ bool atomic_append(Promise<OP_TYPE> promise) {
+		unsigned int index = atomicAdd(&count,1);
+		promises[index] = promise_guard(promise);
+		return (index == GROUP_SIZE);
+	}
+
+
 };
 
 
-template <typename PROMISE_UNION, typename ADR_TYPE, typename COUNTER_TYPE=unsigned int>
+
+//!
+//! A WorkBarrier coaleces promises into links in a lock-free manner.
+//! Once released, all work in the queue is made available for work groups to
+//! execute and all further appending operations will redirect promises to execution.
+//! After being released, a queue may be reset to a non-released state.
+//!
+template<typename OP_SET, typename ADR_TYPE = unsigned int>
 struct WorkBarrier {
+
+
+	#if 0
+	using AdrType     = typename PROGRAM::AdrType;
+	using LinkAdrType = typename PROGRAM::LinkAdrType;
+	using QueueType   = typename PROGRAM::QueueType;
+	using ProgramType = PROGRAM;
+	using UnionType   = PromiseUnion<OP_SET>;
+	using LinkType    = typename PROGRAM::LinkType;
+
+	using PairPack    = util::mem::PairPack<AdrType>;
+	using PairType    = typename PairPack::PairType;
+	#else
+	using AdrType     = ADR_TYPE;
+	using LinkAdrType = util::mem::Adr<AdrType>;
+	using QueueType   = util::mem::PoolQueue<LinkAdrType>;
+	using UnionType   = PromiseUnion<OP_SET>;
+
+	using PairPack    = util::mem::PairPack<AdrType>;
+	using PairType    = typename PairPack::PairType;
+	#endif
+
+	static const size_t TYPE_COUNT = UnionType::Info::COUNT;
+
+	unsigned int status;
+	unsigned int count; 
+
+	QueueType full_list; // Head of the linked list of full links
+
+	PairPack partial_table[UnionType::Info::COUNT]; // Points to partial blocks
+
+
+	WorkBarrier<OP_SET,ADR_TYPE>() = default;
+
+	static __host__ __device__ WorkBarrier<OP_SET,ADR_TYPE> empty() {
+		WorkBarrier<OP_SET,ADR_TYPE> result;
+		result.status = 0u;
+		result.count  = 0u;
+		result.full_list.pair.data = QueueType::null;
+		for(size_t i=0; i<TYPE_COUNT; i++){
+			result.partial_table[i].pair = PairPack(0,LinkAdrType::null);
+		}
+	}
+
+
+	template<typename PROGRAM>
+	__device__ void release_queue(PROGRAM program, QueueType queue, AdrType release_count) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+
+		unsigned int index = util::random_uint(program._thd_ctx.rand_state)%ProgramType::FRAME_SIZE;
+		program.push_promises(0, index, queue, release_count);
+	}
+
+
+	//! This does not truely release partial links, but will mark the link for dumping
+	//! by bumping the next semaphore by the index of the claimed pair plus 1. This means
+	//! that, after all true promise insertions have occured, the next semaphore will
+	//! be at GROUP_SIZE+1, a normally impossible value. Should the semaphore reach
+	//! GROUP_SIZE+1 directly after the incrementation (and should the semaphore not
+	//! have an original value of zero), this call will truely release the link. This
+	//! caveat to zero-valued initial values prevents double-queuing.
+	template<typename PROGRAM>
+	__device__ void release_partial(PROGRAM program, PairPack pair) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
 		
-	typedef ADR_TYPE                 AdrType;
-	typedef PROMISE_UNION            PromiseType;
-	typedef PromiseEnum<PromiseType> PromiseEnumType;
-	typedef COUNTER_TYPE             CounterType;
+		AdrType index   = pair.get_left ();
+		AdrType address = pair.get_right();
+		
+		if( address == AdrType::null ){
+			return;
+		}
 
-	CounterType counter;
-	AdrType     work;
+		if( index == 0 ){
+			program.dump_spare_link(address);
+		}
 
-	WorkBarrier<PromiseType,AdrType,CounterType>() = default;
+		LinkType& link = program._dev_ctx[address];
+		unsigned int delta = index+1;
+		unsigned int checkout = atomicAdd(&link.next,delta);
+	       	if( ( (checkout+delta) == (GROUP_SIZE+1) ) && (checkout != 0) ) {
+			atomicExch(&link.next,AdrType::null);
+			QueueType queue(address,address);
+			release_queue(program,queue,index);
+		}
+		
+
+	}
+
+
+	//! Sweeps through full list and partial slots, releasing any queues or links that
+	//! is found in the sweep.
+	template<typename PROGRAM>
+	__device__ void release_sweep(PROGRAM program) {	
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+		
+		AdrType dump_count    = atomicExch(&count,0);
+		QueueType queue;
+		queue.pair.data  = atomicExch(&full_list.pair.data,QueueType::null);
+		release_queue(program,queue,dump_count);
+
+		for( size_t i=0; i<TYPE_COUNT; i++ ) {
+			PairPack swap = AtomicExch(partial_table[i],PairPack(0,AdrType::null));
+			release_partial(swap);
+		}
+	}
+
+
+	//! Appends a full link at the given address to the full list.
+	template<typename PROGRAM>
+	__device__ void append_full(PROGRAM program, LinkAdrType address){
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+		
+		program._dev_ctx.arena[address].next.adr = LinkAdrType::null;
+		QueueType src_queue = QueueType(address,address);
+		program.push_queue(full_list,src_queue);
+		atomicAdd(&count,GROUP_SIZE);
+	}
+
+
+	//! 
+	//! Merges data from the link supplied as the third argument into the remaning space
+	//! available in the link supplied as the second argument. The link given by the third
+	//! argument must never have any merges in flight with it as the destination. The link
+	//! given by the second argument may have concurent merges in flight with it as the 
+	//! destination. If the link given by the second argument was claimed from a partial
+	//! slot through an atomic exchange. If it has been claimed, the fourth argument MUST be
+	//! true. Likewise, if it has not been claimed, the fourth argument MUST NOT be true.
+	//! This is done to ensure that, if a link is merged into but is still not full, that
+	//! link can be safely used in future merging operations as a source.
+	//!
+	//! After merging, the count fields of the input pairs are updated to reflect the change
+	//! in occupancy. If the current thread is found to have custody of the destination
+	//! link, this function returns true. Otherwise, false.
+	//! 
+	template<typename PROGRAM>
+	__device__ bool merge_links(PROGRAM program, PairPack& dst, PairPack& src, bool claimed){
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
 	
-	__host__ __device__ WorkBarrier<PromiseType,AdrType,CounterType>(
-		CounterType dependency_count
-	) {
-		counter = dependency_count;
+		AdrType dst_index   = dst.get_left ();
+		AdrType dst_address = dst.get_right();
+		AdrType src_index   = src.get_left ();
+		AdrType src_address = src.get_right();
+		
+		unsigned int total = dst_index + src_index;
+
+		unsigned int dst_total = ( total >= GROUP_SIZE ) ? GROUP_SIZE         : total;
+		unsigned int src_total = ( total >= GROUP_SIZE ) ? total - GROUP_SIZE :     0;
+
+		unsigned int dst_delta = dst_total  - dst_index;
+		unsigned int dst_empty = GROUP_SIZE - dst_delta;
+		
+		LinkType& dst_link  = program._dev_ctx.arena[dst_address];
+		LinkType& src_link  = program._dev_ctx.arena[src_address];
+
+		if( claimed ) {
+			atomicAdd(&dst_link.next.adr,(AdrType)-dst_empty);
+		}
+
+		unsigned int dst_offset = atomicAdd(&dst_link.count,dst_delta);
+		unsigned int src_offset = dst_index - dst_total;
+
+		for(unsigned int i = 0; i < dst_delta; i++){
+			dst_link.promises[dst_offset+i] = src_link.promises[src_offset+i];
+		}
+
+		AdrType checkout = atomicAdd(&dst_link.next.adr,dst_delta);
+
+		//! If checkout==0, this thread is the last thread to modify the link, and the
+		//! link has not been marked for dumping. This means we have custody of the link
+		//! and must manage getting it into the queue via a partial slot or the full
+		//! list.
+		if( (checkout+dst_delta) == 0 ){
+			dst.set_left(atomicAdd(&dst_link.count,0));
+			src.set_left(src_total);
+			return true;
+		}
+		//! If checkout==(GROUP_SIZE+1), this thread is the last thread to modify the
+		//! link, and the link has been marked for dumping. This means we have custody
+		//! of the link and must release it.
+		else if ( (checkout+dst_delta) == (GROUP_SIZE+1) ) {
+			atomicExch(&dst_link.next.adr,LinkAdrType::null);
+			QueueType queue(dst_address,dst_address);
+			unsigned int total = atomicAdd(&dst_link.count,0);
+			release_queue(program,queue,total);
+			return false;
+		}
+		//! In all other cases, we have no custody of the link.
+		else {
+			return false;
+		}
+
 	}
 
-	__device__ void await (PromiseEnumType promise) {
+	
+	template<typename PROGRAM, typename OP_TYPE>
+	__device__ void atomic_append(PROGRAM program, Promise<OP_TYPE> promise) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+		
+		//! Guards invocations of the function to make sure invalid promise types
+		//! are not passed in.
+		static_assert(
+			UnionType::template Lookup<OP_TYPE>::type::CONTAINED,
+			"TYPE ERROR: Remapping work queue cannot queue promises of this type."
+		);
+
+		OpDisc disc = UnionType::template Lookup<OP_TYPE>::type::DISC;
+		PairPack& part_slot = partial_table[disc];
+		PairType inc_val = PairPack::RIGHT_MASK + 1;
+		bool optimistic = false;
+		
+		//! We check the status. If the status is non-zero, the queue has been
+		//! released, and so the promise can be queued normally. This check does not
+		//! force a load with atomics (as is done later) because the benefits of
+		//! a forced load don't seem to make up for the overhead.
+		if( status != 0 ){
+	 		program.async_call_cast(0, promise);
+			return;
+		}
+
+		//! We start off with a link containing just our input promise. Depending
+		//! upon how merges transpire, this link will either fill up and be
+		//! successfully deposited into the queue, or will have its contents
+		//! drained into a different link and will be stored away for future use.
+		LinkAdrType spare_link_adr = program.alloc_spare_link();
+		PairPack spare_pair(1u,spare_link_adr.adr);
+		LinkType&   spare_link     = program._dev_ctx.arena[spare_link_adr];
+		spare_link.id    = disc;
+		spare_link.count = 1;
+		spare_link.next  = GROUP_SIZE - 1;
+		spare_link.promises[0] = promise;
+		__threadfence();
+
+		while(true) {
+			PairPack dst_link;
+
+			//! Attempt to claim a slot in the link just by incrementing
+			//! the index of the index/address pair pack. This is quicker,
+			//! but only works if the incrementation reaches the field before
+			//! other threads claim the remaining promise slots.
+			if ( optimistic ) {
+				dst_link.data   = atomicAdd(&part_slot.data,inc_val);
+			}
+			//! Gain exclusive access to link via an atomic exchange. This is
+			//! slower, but has guaranteed progress. 
+			else {
+				dst_link.data   = atomicExch(&part_slot.data,spare_pair.data);
+			}
+
+			AdrType index   = dst_link.get_left ();
+			AdrType address = dst_link.get_right();
+			//! Handle cases where represented link is null or already full
+			if ( (address == LinkAdrType::null) || (index >= GROUP_SIZE) ){
+				//! Optimistic queuing must retry, but pessimistic
+				//! queueing can get away with leaving its link behind
+				//! and doing nothing else.
+				if ( optimistic ) {
+					optimistic = (dst_link.get_left() % GROUP_SIZE) != 0;
+					continue;
+				} else {
+					break;
+				}
+			}
+			else {
+				bool owns_dst = merge_links(program,dst_link,spare_pair,!optimistic);
+				//! If the current thread has custody of the destination link,
+				//! it must handle appending it to the full list if it is full and
+				//! merging it into the partial slot if it is partial.
+				if ( owns_dst ){
+					//! Append full destination links to the full list.
+					//! DO NOT BREAK FROM THE LOOP. There may be a partial
+					//! source link that still needs to be merged in another
+					//! pass.
+					if ( dst_link.get_left() == GROUP_SIZE ) {
+						append_full(program,dst_link.get_right());
+					}
+					//! Dump the current spare link and restart the merging
+					//! procedure with our new partial link
+					else if ( dst_link.get_left() != 0 ) {
+						program.dump_spare_link(spare_link.get_right());
+						spare_link = dst_link;
+						continue;
+					}
+					//! This case should not happen, but it does not hurt to 
+					//! include a branch to handle it, in case something
+					//! unexpected occurs.
+					else {
+						program.dump_spare_link(spare_link.get_right());
+						program.dump_spare_link(  dst_link.get_right());
+						break;
+					}
+				}
+				//! If the spare link is empty, dump it rather than try to merge
+				if (spare_link.get_left() == 0) {
+					program.dump_spare_link(spare_link.get_right());
+					break;
+				}
+			}
+
+		}
+		
+		//! Double-check the status at the end. It is very important we do this double
+		//! check and that we do it at the very end of every append operation. Because
+		//! custody of partial links can be given to any append operation of the
+		//! corresponding operation type, and we don't know which append operation
+		//! comes last, we need to assume that, if the append has gotten this far, it
+		//! may be the last append and hence should make sure that no work is left
+		//! behind.
+		unsigned int now_status = atomicAdd(&status,0);
+		if( status != 0 ){
+			release_sweep(program);
+		}
 
 	}
 
+	//! Sets the release flag and performs a release sweep. The sweep is necessary, because
+	//! it is possible for no append operations to occur after a release operation.
+	template<typename PROGRAM>
+	__device__ void release(PROGRAM program) {
+		atomicExch(&status,1);
+		release_sweep(program);
+	}
+
+};
+
+
+
+
+
+template<typename PROGRAM>
+struct AsyncBarrier {
+	
+	using Semaphore = typename PROGRAM::Semaphore;
+	using AdrType   = typename PROGRAM::AdrType;
+
+	Semaphore semaphore;
+	AdrType   await_head;
+	
 
 };
 
@@ -557,6 +1084,7 @@ using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::val
 
 
 
+
 ////////////////////////////////////////////////////////////////////////////////////
 //                                                                                //
 // To have a well-defined Harmonize program, we need to define:                   //
@@ -591,6 +1119,12 @@ using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::val
 #define LAZY_LINK
 
 
+
+#define TEMPLATE_MEMBER_SWITCH(NAME,DEFAULT_TYPE) \
+	template<class PROG,class DEFAULT> static auto NAME##Lookup (int)  -> DEFAULT; \
+	template<class PROG,class DEFAULT> static auto NAME##Lookup (bool) -> typename Specializer<typename PROG::NAME>::Type; \
+	typedef decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_TYPE>(true)) NAME;
+
 #define MEMBER_SWITCH(NAME,DEFAULT_TYPE) \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (int)  -> DEFAULT; \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (bool) -> typename PROG::NAME; \
@@ -607,20 +1141,36 @@ template< typename PROGRAM_SPEC >
 class HarmonizeProgram
 {
 
+
 	public:
 
 	typedef HarmonizeProgram<PROGRAM_SPEC> ProgramType;
 
+	template<typename BASE>
+	struct Specializer
+	{
+		using Type = BASE;
+	};
 
+	template<template<typename>typename BASE>
+	struct Specializer<BASE<ProgramType>>
+	{
+		using Type = BASE<ProgramType>;
+	};
 
 	MEMBER_SWITCH(    AdrType,unsigned int)
 	MEMBER_SWITCH(      OpSet,   OpUnion<>)
+
+	template<typename OP_SET, typename ADR_TYPE>
+	friend class WorkBarrier;
+
 	MEMBER_SWITCH(DeviceState,   VoidState)
 	MEMBER_SWITCH( GroupState,   VoidState)
 	MEMBER_SWITCH(ThreadState,   VoidState)
 
 
 	typedef PromiseUnion<OpSet> PromiseUnionType;
+
 
 	template<typename TYPE>
 	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
@@ -646,7 +1196,6 @@ class HarmonizeProgram
 	static const unsigned int PUSH_QUEUE_RETRY_LIMIT         = 32;
 	static const unsigned int FILL_STASH_RETRY_LIMIT         = 1;
 	static const unsigned int FILL_STASH_LINKS_RETRY_LIMIT   = 32;
-	
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
 
@@ -665,7 +1214,7 @@ class HarmonizeProgram
 	typedef WorkStack       <FrameType,STACK_SIZE>     StackType;
 	typedef WorkPool        <QueueType,POOL_SIZE>      PoolType;
 
-	typedef WorkLink        <PromiseUnionType, LinkAdrType, WORK_GROUP_SIZE> LinkType;
+	typedef WorkLink        <OpSet, LinkAdrType, WORK_GROUP_SIZE> LinkType;
 	
 	typedef WorkArena       <LinkAdrType,LinkType>     ArenaType;
 
@@ -678,6 +1227,7 @@ class HarmonizeProgram
 	static const unsigned char PART_ENTRY_COUNT = FN_ID_COUNT*PART_TABLE_DEPTH;
 
 
+	static const AdrType       SPARE_LINK_COUNT = 2u;
 	
 	/*
 	// This struct represents the entire set of data structures that must be stored in thread
@@ -686,8 +1236,10 @@ class HarmonizeProgram
 	*/
 	struct ThreadContext {
 
-		unsigned int	thread_id;	
-		unsigned int	rand_state;
+		unsigned int thread_id;	
+		unsigned int rand_state;
+		unsigned int spare_index;
+		LinkAdrType  spare_links[SPARE_LINK_COUNT];
 
 	};
 
@@ -718,7 +1270,7 @@ class HarmonizeProgram
 
 		LinkType			stash[STASH_SIZE];
 		LinkAdrType			link_stash[STASH_SIZE];
-		
+	
 		
 		int				SM_promise_delta;
 		unsigned long long int		work_iterator;
@@ -942,6 +1494,7 @@ class HarmonizeProgram
 			_grp_ctx.work_iterator= 0;
 			_grp_ctx.scarce_work  = false;
 
+
 			for(unsigned int i=0; i<STASH_SIZE; i++){
 				_grp_ctx.stash[i].empty(i+1);
 			}
@@ -972,8 +1525,12 @@ class HarmonizeProgram
 	*/
 	 __device__ void init_thread(){
 
-		_thd_ctx.thread_id  = (blockIdx.x * blockDim.x) + threadIdx.x;
-		_thd_ctx.rand_state = _thd_ctx.thread_id;
+		_thd_ctx.thread_id   = (blockIdx.x * blockDim.x) + threadIdx.x;
+		_thd_ctx.rand_state  = _thd_ctx.thread_id;
+		_thd_ctx.spare_index = 0;
+		for(size_t i=0; i<SPARE_LINK_COUNT; i++){
+			_thd_ctx.spare_links[i] = LinkAdrType::null;
+		}
 
 	}
 
@@ -1185,8 +1742,13 @@ class HarmonizeProgram
 	// For now, until correctness is checked, this process repeats a limited number of times. In
 	// production, this will be an infinite loop, as the function should not fail if correctly 
 	// implemented.
+	//
+	// If an invalid queue (one half null, the other half non-null) is ever found at the destination,
+	// the value of that invalid queue is returned, the invalid value is replaced into the queue, and
+	// any work gathered from the replacement is assigned to the second argument. Otherwise, the second
+	// argument is set to a null state.
 	*/
-	 __device__  void push_queue(QueueType& dest, QueueType queue){
+	 __device__  QueueType push_queue(QueueType& dest, QueueType& queue){
 
 		if( queue.is_null() ){
 			return;
@@ -1212,9 +1774,15 @@ class HarmonizeProgram
 			if( ! swap.is_null() ){
 				q_printf("Ugh. We got queue (%d,%d) when trying to push a queue\n",swap.get_head().adr,swap.get_tail().adr);
 				QueueType other_swap;
-				other_swap.pair.data = atomicExch(&dest.pair.data,QueueType::null); 
-				queue = join_queues(other_swap,swap);
-				q_printf("Merged it to form queue (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
+				if( swap.get_head().is_null() || swap.get_tail().is_null() ){
+					other_swap.pair.data = atomicExch(&dest.pair.data,swap.pair.data);
+					queue = other_swap;
+					return swap;
+				} else {
+					other_swap.pair.data = atomicExch(&dest.pair.data,QueueType::null); 
+					queue = join_queues(other_swap,swap);
+					q_printf("Merged it to form queue (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
+				}
 			} else {
 				q_printf("Finally pushed (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
 				break;
@@ -1319,7 +1887,135 @@ class HarmonizeProgram
 	}
 
 
+	 __device__ void dealloc_links(LinkAdrType* src, size_t count) {
+		
+		
+		QueueType queue;
+		queue.pair.data = QueueType::null;
 
+		/*
+		// Connect all links into a queue
+		*/
+		for(unsigned int i=0; i < count; i++){
+			
+			push_back(queue,src[i]);
+
+		}
+
+		/*
+		// Push out the queue to the pool
+		*/
+		q_printf("Pushing queue (%d,%d) to pool\n",queue.get_head().adr,queue.get_tail().adr);
+		unsigned int dest_idx = util::random_uint(_thd_ctx.rand_state) % POOL_SIZE;
+		push_queue(_dev_ctx.pool->queues[dest_idx],queue);
+
+	 }
+
+
+	 //!
+	 //! A thread-safe way of allocating links from global memory. This function is used
+	 //! by the warp leader to restock the link stash in between processing promises and
+	 //! used by individual threads if its current promise needs to use a link while the
+	 //! link stash is empty.
+	 //!
+	 __device__ size_t alloc_links(LinkAdrType* dst, size_t req_count) {
+
+		size_t alloc_count = 0;
+		#ifdef LAZY_LINK
+
+		#if 1
+		if( (alloc_count < req_count) && ((*_dev_ctx.claim_count) <  _dev_ctx.arena.size) ){
+			AdrType claim_offset = atomicAdd(_dev_ctx.claim_count,req_count);
+			unsigned int received = 0;
+			if( claim_offset <= (_dev_ctx.arena.size - req_count) ){
+				received = req_count;
+			} else if ( claim_offset >= _dev_ctx.arena.size ) {
+				received = 0;
+			} else {
+				received = _dev_ctx.arena.size - claim_offset;
+			}
+			for( unsigned int index=0; index < received; index++){
+				//insert_stash_link(LinkAdrType(claim_offset+index));
+				dst[alloc_count] = LinkAdrType(claim_offset+index);
+				alloc_count++;
+			}
+		}
+		#else
+		for(int i=_grp_ctx.link_stash_count; i < threashold; i++){
+			if((*_dev_ctx.claim_count) <  _dev_ctx.arena.size ){
+				AdrType claim_index = atomicAdd(_dev_ctx.claim_count,1);
+				if( claim_index < _dev_ctx.arena.size ){
+					//_dev_ctx.arena[claim_index].empty(LinkAdrType::null);
+					insert_stash_link(LinkAdrType(claim_index));
+				}
+			} else {
+				break;
+			}
+		}
+		#endif
+		
+		#endif
+
+
+		for(int try_itr=0; try_itr < FILL_STASH_LINKS_RETRY_LIMIT; try_itr++){
+	
+			if(alloc_count >= req_count){
+				break;
+			}
+			/*	
+			// Attempt to pull a queue from the pool. This should be very unlikely to fail unless
+			// almost all links have been exhausted or the pool size is disproportionately small
+			// relative to the number of work groups. In the worst case, this should simply not 
+			// al_thd_ctxate any links, and the return value shall report this.
+			*/
+			unsigned int src_index = LinkAdrType::null;
+			unsigned int start = util::random_uint(_thd_ctx.rand_state)%POOL_SIZE;
+			QueueType queue = pull_queue(_dev_ctx.pool->queues,start,POOL_SIZE,src_index);
+			q_printf("Pulled queue (%d,%d) from pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
+
+			/*
+			// Keep popping links from the queue until the full number of links have been added or
+			// the queue runs out of links.
+			*/
+			for(int i=alloc_count; i < req_count; i++){
+				LinkAdrType link = pop_front(queue);
+				if( ! link.is_null() ){
+					//insert_stash_link(link);
+					dst[alloc_count] = link;
+					alloc_count++;
+					q_printf("Inserted link %d into link stash\n",link.adr);
+				} else {
+					break;
+				}
+			}
+			push_queue(_dev_ctx.pool->queues[src_index],queue);
+			q_printf("Pushed queue (%d,%d) to pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
+
+		}
+
+		return alloc_count;
+
+	 }
+
+	__device__ LinkAdrType alloc_spare_link(){
+		if(_thd_ctx.spare_index > 0){
+			_thd_ctx.spare_index--;
+			return _thd_ctx.spare_links[_thd_ctx.spare_index];
+		} else {
+			LinkAdrType result = LinkAdrType::null;
+			alloc_links(&result,1);
+			return result;
+		}
+	}
+
+	__device__ void dump_spare_link(LinkAdrType link_adr){
+		if(_thd_ctx.spare_index < (SPARE_LINK_COUNT-1)){
+			_thd_ctx.spare_links[_thd_ctx.spare_index] = link_adr;
+			_thd_ctx.spare_index++;
+		} else {
+			dealloc_links(&link_adr,1);
+		}
+	}
 
 	/*
 	// Attempts to fill the link stash to the given threshold with links. This should only ever
@@ -1327,81 +2023,22 @@ class HarmonizeProgram
 	*/
 	 __device__  void fill_stash_links(unsigned int threashold){
 
-
-
 		unsigned int active = __activemask();
 		__syncwarp(active);
 
 		if( util::current_leader() ){
 
-			#ifdef LAZY_LINK
-
-			#if 1
-			unsigned int wanted = threashold - _grp_ctx.link_stash_count; 
-			if( (_grp_ctx.link_stash_count < threashold) && ((*_dev_ctx.claim_count) <  _dev_ctx.arena.size) ){
-				AdrType claim_offset = atomicAdd(_dev_ctx.claim_count,wanted);
-				unsigned int received = 0;
-				if( claim_offset <= (_dev_ctx.arena.size - wanted) ){
-					received = wanted;
-				} else if ( claim_offset >= _dev_ctx.arena.size ) {
-					received = 0;
-				} else {
-					received = _dev_ctx.arena.size - claim_offset;
-				}
-				for( unsigned int index=0; index < received; index++){
-					insert_stash_link(LinkAdrType(claim_offset+index));
-				}
+			LinkAdrType    *dst = _grp_ctx.link_stash+_grp_ctx.link_stash_count;
+			size_t count = 0;
+			if( threashold < _grp_ctx.link_stash_count ){
+				count = 0;
+			} else if ( threashold >= STASH_SIZE ){
+				count = STASH_SIZE - _grp_ctx.link_stash_count;
+			} else {
+				count = threashold - _grp_ctx.link_stash_count;
 			}
-			#else
-			for(int i=_grp_ctx.link_stash_count; i < threashold; i++){
-				if((*_dev_ctx.claim_count) <  _dev_ctx.arena.size ){
-					AdrType claim_index = atomicAdd(_dev_ctx.claim_count,1);
-					if( claim_index < _dev_ctx.arena.size ){
-						//_dev_ctx.arena[claim_index].empty(LinkAdrType::null);
-						insert_stash_link(LinkAdrType(claim_index));
-					}
-				} else {
-					break;
-				}
-			}
-			#endif
-			
-			#endif
-
-
-			for(int try_itr=0; try_itr < FILL_STASH_LINKS_RETRY_LIMIT; try_itr++){
-		
-				if(_grp_ctx.link_stash_count >= threashold){
-					break;
-				}
-				/*	
-				// Attempt to pull a queue from the pool. This should be very unlikely to fail unless
-				// almost all links have been exhausted or the pool size is disproportionately small
-				// relative to the number of work groups. In the worst case, this should simply not 
-				// al_thd_ctxate any links, and the return value shall report this.
-				*/
-				unsigned int src_index = LinkAdrType::null;
-				unsigned int start = util::random_uint(_thd_ctx.rand_state)%POOL_SIZE;
-				QueueType queue = pull_queue(_dev_ctx.pool->queues,start,POOL_SIZE,src_index);
-				q_printf("Pulled queue (%d,%d) from pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
-
-				/*
-				// Keep popping links from the queue until the full number of links have been added or
-				// the queue runs out of links.
-				*/
-				for(int i=_grp_ctx.link_stash_count; i < threashold; i++){
-					LinkAdrType link = pop_front(queue);
-					if( ! link.is_null() ){
-						insert_stash_link(link);
-						q_printf("Inserted link %d into link stash\n",link.adr);
-					} else {
-						break;
-					}
-				}
-				push_queue(_dev_ctx.pool->queues[src_index],queue);
-				q_printf("Pushed queue (%d,%d) to pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
-
-			}
+			size_t        added = alloc_links(dst,count);
+			_grp_ctx.link_stash_count += added;
 
 		}
 		__syncwarp(active);
@@ -3152,6 +3789,8 @@ class HarmonizeProgram
 	}
 
 
+
+
 };
 
 
@@ -3576,6 +4215,7 @@ class EventProgram
 		return _dev_ctx.event_io[Lookup<TYPE>::type::DISC]->output_fill_fraction_sync();
 
 	}
+
 };
 
 

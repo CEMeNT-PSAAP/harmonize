@@ -96,10 +96,22 @@ struct Stopwatch {
 	float duration;
 
 	Stopwatch() {
-        	if (  ( cudaEventCreate( &beg ) != cudaSuccess )
-		   || ( cudaEventCreate( &end  ) != cudaSuccess )
-		) {
-			printf("Failed to create Stopwatch\n");
+
+		cudaError_t beg_stat = cudaEventCreate( &beg );
+		cudaError_t end_stat = cudaEventCreate( &end );
+
+		if(beg_stat != cudaSuccess){
+			const char* err_str = cudaGetErrorString(beg_stat);
+			printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
+		}
+
+		if(end_stat != cudaSuccess){
+			const char* err_str = cudaGetErrorString(end_stat);
+			printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
+		}
+
+		if( (beg_stat != cudaSuccess) || (end_stat != cudaSuccess) ) {
+			printf("Failed to create one or more Stopwatch events\n");
 			std::exit(1);
 		}
 	}

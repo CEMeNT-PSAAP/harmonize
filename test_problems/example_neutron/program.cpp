@@ -156,9 +156,18 @@ using AsyncProgram = HarmonizeProgram <MyProgramSpec>;
 
 
 
+struct VoidOp {
+
+	using Type = void(*)(void);
+
+	template<typename PROGRAM>
+	__device__ static void eval(void){}
+
+};
 
 
 int main(int argc, char *argv[]){
+
 
 	using host::check_error;
 
