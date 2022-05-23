@@ -641,9 +641,27 @@ struct WorkBarrier {
 		result.status = 0u;
 		result.count  = 0u;
 		result.full_list.pair.data = QueueType::null;
-		for(size_t i=0; i<TYPE_COUNT; i++){
-			result.partial_table[i].pair = PairPack(0,LinkAdrType::null);
+		for(int i=0; i<TYPE_COUNT; i++){
+			result.partial_table[i] = PairPack(0,LinkAdrType::null);
 		}
+		return result;
+	}
+
+
+	template<typename PROGRAM>
+	__device__ unsigned int queue_count(PROGRAM program, QueueType queue) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+
+		unsigned int total = 0;
+		LinkAdrType iter = queue.get_head();
+		while( ! iter.is_null() ){
+		       LinkType& the_link = program._dev_ctx.arena[iter.adr];
+		       total += the_link.count;
+		       printf("( [%d,%d] @%d #%d -> %d )",blockIdx.x,threadIdx.x,iter.adr,the_link.count,the_link.next.adr);
+		       iter = the_link.next;
+		}
+		return total;
 	}
 
 
@@ -651,7 +669,9 @@ struct WorkBarrier {
 	__device__ void release_queue(PROGRAM program, QueueType queue, AdrType release_count) {
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
-
+		__threadfence();
+		unsigned int true_count = queue_count(program,queue);
+		printf("[%d,%d]: Releasing queue (%d,%d) with count %d with delta %d\n",blockIdx.x,threadIdx.x,queue.get_head().adr,queue.get_tail().adr,true_count,release_count);
 		unsigned int index = util::random_uint(program._thd_ctx.rand_state)%ProgramType::FRAME_SIZE;
 		program.push_promises(0, index, queue, release_count);
 	}
@@ -672,22 +692,29 @@ struct WorkBarrier {
 		
 		AdrType index   = pair.get_left ();
 		AdrType address = pair.get_right();
-		
-		if( address == AdrType::null ){
+
+		if( (address == LinkAdrType::null) || (index >= GROUP_SIZE) ){
+			printf("[%d,%d]: Tried to mark invalid pair (%d,@%d) for release\n",blockIdx.x,threadIdx.x,index,address);
 			return;
 		}
+		
 
 		if( index == 0 ){
 			program.dump_spare_link(address);
 		}
 
-		LinkType& link = program._dev_ctx[address];
+		LinkType& link = program._dev_ctx.arena[address];
 		unsigned int delta = index+1;
-		unsigned int checkout = atomicAdd(&link.next,delta);
+		unsigned int checkout = atomicAdd(&link.next.adr,delta);
+		
+		printf("[%d,%d]: Marking pair (%d,@%d) for release. delta(%d->%d)\n",blockIdx.x,threadIdx.x,index,address,checkout,checkout+delta);
+
 	       	if( ( (checkout+delta) == (GROUP_SIZE+1) ) && (checkout != 0) ) {
-			atomicExch(&link.next,AdrType::null);
+			printf("[%d,%d]: Instant release of (%d,@%d)\n",blockIdx.x,threadIdx.x,index,address);
+			atomicExch(&link.next.adr,LinkAdrType::null);
 			QueueType queue(address,address);
-			release_queue(program,queue,index);
+			unsigned int total = atomicAdd(&link.count,0);
+			release_queue(program,queue,total);
 		}
 		
 
@@ -700,16 +727,21 @@ struct WorkBarrier {
 	__device__ void release_sweep(PROGRAM program) {	
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
-		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
-		
-		AdrType dump_count    = atomicExch(&count,0);
+
+		printf("[%d,%d]: Performing release\n",blockIdx.x,threadIdx.x);	
 		QueueType queue;
 		queue.pair.data  = atomicExch(&full_list.pair.data,QueueType::null);
-		release_queue(program,queue,dump_count);
+		AdrType dump_count    = atomicExch(&count,0);
+		__threadfence();
+		if( (dump_count != 0) || (! queue.is_null() ) ){
+			release_queue(program,queue,dump_count);
+		}
 
 		for( size_t i=0; i<TYPE_COUNT; i++ ) {
-			PairPack swap = AtomicExch(partial_table[i],PairPack(0,AdrType::null));
-			release_partial(swap);
+			PairPack null_pair(0,LinkAdrType::null);
+			PairPack swap;
+			swap.data = atomicExch(&partial_table[i].data,null_pair.data);
+			release_partial(program,swap);
 		}
 	}
 
@@ -720,11 +752,19 @@ struct WorkBarrier {
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
 		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+		//printf("Appending full link @%d\n",address.adr);
 		
+
+		if( ! address.is_null()	) {
+			LinkType& dst_link = program._dev_ctx.arena[address.adr];
+			unsigned int count = atomicAdd(&dst_link.count,0);
+			printf("[%d,%d]:Appending full link @%d with count %d\n",blockIdx.x,threadIdx.x,address.adr,count);
+		}
+		
+		atomicAdd(&count,GROUP_SIZE);
 		program._dev_ctx.arena[address].next.adr = LinkAdrType::null;
 		QueueType src_queue = QueueType(address,address);
 		program.push_queue(full_list,src_queue);
-		atomicAdd(&count,GROUP_SIZE);
 	}
 
 
@@ -754,51 +794,83 @@ struct WorkBarrier {
 		AdrType src_index   = src.get_left ();
 		AdrType src_address = src.get_right();
 		
+		if( src_index >= GROUP_SIZE ){
+			printf("\n\n\nVERY BAD\n\n\n");
+		}
+
 		unsigned int total = dst_index + src_index;
 
 		unsigned int dst_total = ( total >= GROUP_SIZE ) ? GROUP_SIZE         : total;
 		unsigned int src_total = ( total >= GROUP_SIZE ) ? total - GROUP_SIZE :     0;
 
 		unsigned int dst_delta = dst_total  - dst_index;
-		unsigned int dst_empty = GROUP_SIZE - dst_delta;
 		
+		//printf("{[%d,%d]: src is (%d,@%d) }",blockIdx.x,threadIdx.x,src_index,src_address);
+
 		LinkType& dst_link  = program._dev_ctx.arena[dst_address];
-		LinkType& src_link  = program._dev_ctx.arena[src_address];
 
 		if( claimed ) {
-			atomicAdd(&dst_link.next.adr,(AdrType)-dst_empty);
+			//unsigned int old_next = atomicAdd(&dst_link.next.adr,(AdrType)-dst_empty);
+			printf("{[%d,%d]: claimed @%d}",blockIdx.x,threadIdx.x,dst_address);
 		}
 
 		unsigned int dst_offset = atomicAdd(&dst_link.count,dst_delta);
-		unsigned int src_offset = dst_index - dst_total;
+		unsigned int src_offset = src_index - dst_delta;
+		
+		printf("{[%d,%d]: count(%d->%d)}",blockIdx.x,threadIdx.x,dst_offset,dst_offset+dst_delta);
 
-		for(unsigned int i = 0; i < dst_delta; i++){
-			dst_link.promises[dst_offset+i] = src_link.promises[src_offset+i];
+		//printf("%d: src_offset=%d\tdst_offset=%d\tdst_delta=%d\n",blockIdx.x,src_offset,dst_offset,dst_delta);
+
+		if(src_address != LinkAdrType::null){
+			LinkType& src_link  = program._dev_ctx.arena[src_address];
+			for(unsigned int i = 0; i < dst_delta; i++){
+				dst_link.promises[dst_offset+i] = src_link.promises[src_offset+i];
+			}
+			atomicAdd(&src_link.count   ,-dst_delta);
+			atomicAdd(&src_link.next.adr, dst_delta);
+		}		
+
+		__threadfence();
+		unsigned int checkout_delta = dst_delta;
+		if( claimed ){
+			checkout_delta += GROUP_SIZE - dst_total;
 		}
-
-		AdrType checkout = atomicAdd(&dst_link.next.adr,dst_delta);
+		AdrType checkout = atomicAdd(&dst_link.next.adr,-checkout_delta);
+		printf("{[%d,%d]: %d checkout(%d->%d)}",blockIdx.x,threadIdx.x,dst_address,checkout,checkout-checkout_delta);
+		src.set_left(src_total);
+		__threadfence();
 
 		//! If checkout==0, this thread is the last thread to modify the link, and the
 		//! link has not been marked for dumping. This means we have custody of the link
 		//! and must manage getting it into the queue via a partial slot or the full
 		//! list.
-		if( (checkout+dst_delta) == 0 ){
-			dst.set_left(atomicAdd(&dst_link.count,0));
-			src.set_left(src_total);
+		if( (checkout-checkout_delta) == 0 ){
+			printf("[%d-%d]: Got custody of link @%d for re-insertion.\n",blockIdx.x,threadIdx.x,dst_address);
+			unsigned int final_count = atomicAdd(&dst_link.count,0);
+			dst.set_left(final_count);
+			unsigned int reset_delta = (GROUP_SIZE-final_count);
+			unsigned int old_next = atomicAdd(&dst_link.next.adr,reset_delta);
+			printf("[%d-%d]: Reset the next field (%d->%d) of link @%d.\n",blockIdx.x,threadIdx.x,old_next,old_next+reset_delta,dst_address);
+			__threadfence();
 			return true;
 		}
 		//! If checkout==(GROUP_SIZE+1), this thread is the last thread to modify the
 		//! link, and the link has been marked for dumping. This means we have custody
 		//! of the link and must release it.
-		else if ( (checkout+dst_delta) == (GROUP_SIZE+1) ) {
+		else if ( (checkout-checkout_delta) == (GROUP_SIZE+1) ) {
+			printf("[%d-%d]: Got custody of link @%d for immediate dumping.\n",blockIdx.x,threadIdx.x,dst_address);
 			atomicExch(&dst_link.next.adr,LinkAdrType::null);
 			QueueType queue(dst_address,dst_address);
 			unsigned int total = atomicAdd(&dst_link.count,0);
+			__threadfence();
 			release_queue(program,queue,total);
+			__threadfence();
 			return false;
 		}
 		//! In all other cases, we have no custody of the link.
 		else {
+			//printf("(checkout-checkout_delta) = %d\n",checkout-checkout_delta);
+			__threadfence();
 			return false;
 		}
 
@@ -819,15 +891,19 @@ struct WorkBarrier {
 		);
 
 		OpDisc disc = UnionType::template Lookup<OP_TYPE>::type::DISC;
+		
+		//printf("Performing atomic append for type with discriminant %d.\n",disc);
+		
 		PairPack& part_slot = partial_table[disc];
 		PairType inc_val = PairPack::RIGHT_MASK + 1;
-		bool optimistic = false;
+		bool optimistic = true;
 		
 		//! We check the status. If the status is non-zero, the queue has been
 		//! released, and so the promise can be queued normally. This check does not
 		//! force a load with atomics (as is done later) because the benefits of
 		//! a forced load don't seem to make up for the overhead.
 		if( status != 0 ){
+			printf("early exit\n");
 	 		program.async_call_cast(0, promise);
 			return;
 		}
@@ -836,47 +912,61 @@ struct WorkBarrier {
 		//! upon how merges transpire, this link will either fill up and be
 		//! successfully deposited into the queue, or will have its contents
 		//! drained into a different link and will be stored away for future use.
-		LinkAdrType spare_link_adr = program.alloc_spare_link();
-		PairPack spare_pair(1u,spare_link_adr.adr);
-		LinkType&   spare_link     = program._dev_ctx.arena[spare_link_adr];
-		spare_link.id    = disc;
-		spare_link.count = 1;
-		spare_link.next  = GROUP_SIZE - 1;
-		spare_link.promises[0] = promise;
+		LinkAdrType first_link_adr = program.alloc_spare_link();
+		PairPack spare_pair(1u,first_link_adr.adr);
+		LinkType&   start_link     = program._dev_ctx.arena[first_link_adr];
+		start_link.id    = disc;
+		start_link.count = 1;
+		start_link.next  = GROUP_SIZE - 1;
+		start_link.promises[0] = promise;
 		__threadfence();
 
+
+		//printf("Allocated spare link %d.\n",first_link_adr.adr);
+
 		while(true) {
-			PairPack dst_link;
+			PairPack dst_pair;
+
+			LinkAdrType spare_link_adr = spare_pair.get_right();
+			LinkType& spare_link = program._dev_ctx.arena[spare_link_adr];
 
 			//! Attempt to claim a slot in the link just by incrementing
 			//! the index of the index/address pair pack. This is quicker,
 			//! but only works if the incrementation reaches the field before
 			//! other threads claim the remaining promise slots.
 			if ( optimistic ) {
-				dst_link.data   = atomicAdd(&part_slot.data,inc_val);
+				//printf("Today, we choose optimisim.\n");
+				dst_pair.data = atomicAdd(&part_slot.data,inc_val*spare_pair.get_left());
+				printf("{[%d,%d] Optimistic (%d->%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_left()+spare_pair.get_left(),dst_pair.get_right());
 			}
 			//! Gain exclusive access to link via an atomic exchange. This is
 			//! slower, but has guaranteed progress. 
 			else {
-				dst_link.data   = atomicExch(&part_slot.data,spare_pair.data);
+				printf("Today, we resort to pessimism.\n");
+				PairPack null_pair(0,LinkAdrType::null);
+				dst_pair.data = atomicExch(&part_slot.data,spare_pair.data);
+				spare_pair = PairPack(0,LinkAdrType::null);
+				printf("{[%d,%d] Pessimistic (%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_right());
 			}
 
-			AdrType index   = dst_link.get_left ();
-			AdrType address = dst_link.get_right();
+			
+			AdrType dst_index   = dst_pair.get_left ();
+			AdrType dst_address = dst_pair.get_right();
 			//! Handle cases where represented link is null or already full
-			if ( (address == LinkAdrType::null) || (index >= GROUP_SIZE) ){
+			if ( (dst_address == LinkAdrType::null) || (dst_index >= GROUP_SIZE) ){
 				//! Optimistic queuing must retry, but pessimistic
 				//! queueing can get away with leaving its link behind
 				//! and doing nothing else.
 				if ( optimistic ) {
-					optimistic = (dst_link.get_left() % GROUP_SIZE) != 0;
+					optimistic = (dst_index % GROUP_SIZE) != 0;
 					continue;
 				} else {
 					break;
 				}
-			}
-			else {
-				bool owns_dst = merge_links(program,dst_link,spare_pair,!optimistic);
+			} else {
+				bool owns_dst = merge_links(program,dst_pair,spare_pair,!optimistic);
+				optimistic = true;
+				//printf("owns_dst=%d\n",owns_dst);
 				//! If the current thread has custody of the destination link,
 				//! it must handle appending it to the full list if it is full and
 				//! merging it into the partial slot if it is partial.
@@ -885,28 +975,29 @@ struct WorkBarrier {
 					//! DO NOT BREAK FROM THE LOOP. There may be a partial
 					//! source link that still needs to be merged in another
 					//! pass.
-					if ( dst_link.get_left() == GROUP_SIZE ) {
-						append_full(program,dst_link.get_right());
+					if ( dst_pair.get_left() == GROUP_SIZE ) {
+						append_full(program,dst_address);
 					}
 					//! Dump the current spare link and restart the merging
 					//! procedure with our new partial link
-					else if ( dst_link.get_left() != 0 ) {
-						program.dump_spare_link(spare_link.get_right());
-						spare_link = dst_link;
+					else if ( dst_pair.get_left() != 0 ) {
+						program.dump_spare_link(spare_pair.get_right());
+						spare_pair = dst_pair;
 						continue;
 					}
 					//! This case should not happen, but it does not hurt to 
 					//! include a branch to handle it, in case something
 					//! unexpected occurs.
 					else {
-						program.dump_spare_link(spare_link.get_right());
-						program.dump_spare_link(  dst_link.get_right());
+						printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
+						program.dump_spare_link(spare_pair.get_right());
+						program.dump_spare_link(  dst_pair.get_right());
 						break;
 					}
 				}
 				//! If the spare link is empty, dump it rather than try to merge
-				if (spare_link.get_left() == 0) {
-					program.dump_spare_link(spare_link.get_right());
+				if (spare_pair.get_left() == 0) {
+					program.dump_spare_link(spare_pair.get_right());
 					break;
 				}
 			}
@@ -920,10 +1011,13 @@ struct WorkBarrier {
 		//! comes last, we need to assume that, if the append has gotten this far, it
 		//! may be the last append and hence should make sure that no work is left
 		//! behind.
+		__threadfence();
 		unsigned int now_status = atomicAdd(&status,0);
-		if( status != 0 ){
+		if( now_status != 0 ){
+			//printf("[%d,%d]: Last-minute release required!\n",blockIdx.x,threadIdx.x);
 			release_sweep(program);
 		}
+
 
 	}
 
@@ -931,7 +1025,9 @@ struct WorkBarrier {
 	//! it is possible for no append operations to occur after a release operation.
 	template<typename PROGRAM>
 	__device__ void release(PROGRAM program) {
+		printf("%d: Setting release flag.\n",blockIdx.x);
 		atomicExch(&status,1);
+		__threadfence();
 		release_sweep(program);
 	}
 
@@ -1194,7 +1290,7 @@ class HarmonizeProgram
 	// looping
 	*/
 	static const unsigned int PUSH_QUEUE_RETRY_LIMIT         = 32;
-	static const unsigned int FILL_STASH_RETRY_LIMIT         = 1;
+	static const unsigned int FILL_STASH_RETRY_LIMIT         =  1;
 	static const unsigned int FILL_STASH_LINKS_RETRY_LIMIT   = 32;
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -1471,6 +1567,7 @@ class HarmonizeProgram
 	*/
 	 __device__  void init_group(){
 
+		//printf("Initing group\n");
 		unsigned int active = __activemask();
 
 		__syncwarp(active);
@@ -1525,6 +1622,7 @@ class HarmonizeProgram
 	*/
 	 __device__ void init_thread(){
 
+		//printf("Initing thread %d\n",threadIdx.x);
 		_thd_ctx.thread_id   = (blockIdx.x * blockDim.x) + threadIdx.x;
 		_thd_ctx.rand_state  = _thd_ctx.thread_id;
 		_thd_ctx.spare_index = 0;
@@ -1760,6 +1858,7 @@ class HarmonizeProgram
 		#endif
 		{
 			__threadfence();
+			//printf("%d: Pushing queue (%d,%d)\n",blockIdx.x,queue.get_head().adr,queue.get_tail().adr);
 			
 			QueueType swap;
 			swap.pair.data = atomicExch(&dest.pair.data,queue.pair.data);
@@ -1772,7 +1871,7 @@ class HarmonizeProgram
 			// of which attempt from which call will suffer from an incurred failure.
 			*/
 			if( ! swap.is_null() ){
-				q_printf("Ugh. We got queue (%d,%d) when trying to push a queue\n",swap.get_head().adr,swap.get_tail().adr);
+				//printf("%d: We got queue (%d,%d) when trying to push a queue\n",blockIdx.x,swap.get_head().adr,swap.get_tail().adr);
 				QueueType other_swap;
 				if( swap.get_head().is_null() || swap.get_tail().is_null() ){
 					other_swap.pair.data = atomicExch(&dest.pair.data,swap.pair.data);
@@ -1781,10 +1880,10 @@ class HarmonizeProgram
 				} else {
 					other_swap.pair.data = atomicExch(&dest.pair.data,QueueType::null); 
 					queue = join_queues(other_swap,swap);
-					q_printf("Merged it to form queue (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
+					//printf("%d: Merged it to form queue (%d,%d)\n",blockIdx.x,queue.get_head().adr,queue.get_tail().adr);
 				}
 			} else {
-				q_printf("Finally pushed (%d,%d)\n",queue.get_head().adr,queue.get_tail().adr);
+				//printf("%d: Finally pushed (%d,%d)\n",blockIdx.x,queue.get_head().adr,queue.get_tail().adr);
 				break;
 			}
 		}
@@ -2000,19 +2099,29 @@ class HarmonizeProgram
 	__device__ LinkAdrType alloc_spare_link(){
 		if(_thd_ctx.spare_index > 0){
 			_thd_ctx.spare_index--;
-			return _thd_ctx.spare_links[_thd_ctx.spare_index];
+			LinkAdrType result;
+			result = _thd_ctx.spare_links[_thd_ctx.spare_index];
+			//printf("Re-used spare alloc (%d)\n",result.adr);
+			return result;
 		} else {
 			LinkAdrType result = LinkAdrType::null;
 			alloc_links(&result,1);
+			//printf("Fresh spare alloc (%d)\n",result.adr);
 			return result;
 		}
 	}
 
 	__device__ void dump_spare_link(LinkAdrType link_adr){
-		if(_thd_ctx.spare_index < (SPARE_LINK_COUNT-1)){
+		if( link_adr.is_null() ){
+			return;
+		}
+		if(_thd_ctx.spare_index < SPARE_LINK_COUNT){
+			//printf("Saving link (%d) for later\n",link_adr.adr);
 			_thd_ctx.spare_links[_thd_ctx.spare_index] = link_adr;
 			_thd_ctx.spare_index++;
+			//printf("New spare index of %d is %d\n",threadIdx.x,_thd_ctx.spare_index);
 		} else {
+			//printf("Spilling spare link (%d)\n",link_adr.adr);
 			dealloc_links(&link_adr,1);
 		}
 	}
@@ -2197,7 +2306,7 @@ class HarmonizeProgram
 
 
 			_grp_ctx.SM_promise_delta += promise_delta;
-			rc_printf("SM %d-%d: Old count: %d, New count: %d\n",blockIdx.x,threadIdx.x,old_count,new_count);
+			printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
 
 			
 			//rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
@@ -3131,13 +3240,19 @@ class HarmonizeProgram
 		end_time(1);
 
 		beg_time(5);
-		if ( _grp_ctx.can_make_work && (_grp_ctx.full_head == STASH_SIZE) ) {
+		unsigned int make_count = 0;
+		while ( _grp_ctx.can_make_work && (_grp_ctx.full_head == STASH_SIZE) ) {
 			_grp_ctx.can_make_work = PROGRAM_SPEC::make_work(*this);
 			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.stash_count != 0 ) ){
 				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
 				_grp_ctx.busy = true;
 				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 			}
+			make_count++;
+			__syncwarp();
+		}
+		if( util::current_leader() ){
+			printf("Make count = %d\n",make_count);
 		}
 		end_time(5);
 
@@ -3165,6 +3280,10 @@ class HarmonizeProgram
 		#endif
 		// */
 
+		if( util::current_leader() ){
+			unsigned int ch_rs = _dev_ctx.stack->frames[0].children_residents;
+			printf("{group %d children_residents=(%d,%d), can_make_work=%d}\n",blockIdx.x,(ch_rs & 0xFFFF0000)>>16u, ch_rs & 0xFFFF,_grp_ctx.can_make_work);
+		}
 		beg_time(2);
 		if( !advance_stash_iter() ){
 			/*
@@ -3233,7 +3352,11 @@ class HarmonizeProgram
 		//unsigned int active = __activemask();
 		//__syncwarp(active);
 		__syncwarp();
+
 	
+		if(_thd_ctx.spare_index > 0){
+			dealloc_links(_thd_ctx.spare_links,_thd_ctx.spare_index);
+		}	
 
 		if(threadIdx.x == 0){
 

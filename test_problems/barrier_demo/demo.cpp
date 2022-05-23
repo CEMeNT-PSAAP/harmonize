@@ -27,11 +27,11 @@ struct Step {
 	template<typename PROGRAM>
 	__device__ static void eval(PROGRAM prog, unsigned int arg){
 
-		if( arg > 0 ){
-			atomicAdd(prog.device.counter,1);
-			prog.device.barrier->atomic_append(prog,Promise<Step>(4));
-		} else {
-			atomicAdd(prog.device.counter,2);
+		//printf("Arg is %d\n",arg);
+		atomicAdd(prog.device.counter,1);
+		if( arg < 8192 ) {
+			prog.device.barrier->atomic_append(prog,Promise<Step>(8193));
+		} else if( arg == 8192 ){
 			prog.device.barrier->release(prog);
 		}
 
@@ -74,11 +74,13 @@ struct MyProgramSpec {
 		iter::Iter<unsigned int> iter = prog.device.source_id_iter->leap(1);
 		
 		while(iter.step(id)){
+			//printf("Got id %d as thread %d\n",id,threadIdx.x);
 			prog.template sync<Step>(id);
 		}
 
+		
 		// Return whether or not the ID iterator has any IDs left
-		return !prog.device.source_id_iter->done();
+		return !prog.device.source_id_iter->sync_done();
 
 	}
 
@@ -117,6 +119,7 @@ int main(int argc, char *argv[]){
 
 	host::DevBuf<iter::AtomicIter<unsigned int>> source_id_iter;
 	host::DevBuf<unsigned int> counter;
+	host::DevBuf<WorkBarrier<OpUnion<Step>>> barrier;
 
 	Stopwatch watch;
 
@@ -134,7 +137,11 @@ int main(int argc, char *argv[]){
 	// Set the ID iterator to the range from zero to the number of source neutrons
 	source_id_iter<< iter::AtomicIter<unsigned int>(0,args["num"]);
 	dev_state.source_id_iter = source_id_iter;
-
+	
+	WorkBarrier<OpUnion<Step>> barrier_host_copy = WorkBarrier<OpUnion<Step>>::empty();
+	printf("host status is %d\n",barrier_host_copy.status);
+	barrier << barrier_host_copy;
+	dev_state.barrier = barrier;
 
 	// Synchronize for safety and report any errors
 	cudaDeviceSynchronize();
@@ -163,7 +170,9 @@ int main(int argc, char *argv[]){
 		// to perform before halting early, to prevent GPU timeouts
 		exec<AsyncProgram>(instance,wg_count,0x1000000);
 		cudaDeviceSynchronize();
-		check_error();
+		if( check_error() ) {
+			break;
+		}
 		num++;
 	} while(! instance.complete() );
 

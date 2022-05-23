@@ -187,6 +187,17 @@ struct AtomicIter
 		
 	}
 
+	 __device__ bool sync_done() const {
+		
+		__shared__ bool result;
+		if(current_leader()){
+			result = (value>=limit);
+		}
+		__syncwarp();
+
+		return result;
+		
+	}
 
 	 __device__ bool done() const {
 		

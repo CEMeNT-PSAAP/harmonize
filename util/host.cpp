@@ -73,7 +73,9 @@ class DevBuf {
 			sizeof(T)*copy_count,
 			cudaMemcpyDeviceToDevice
 		) );
-		auto_throw( cudaFree(inner->adr) );
+		if( inner->adr != NULL ) {
+			auto_throw( cudaFree(inner->adr) );
+		}
 		inner->size = s;
 		inner->adr = new_adr;
 	}
