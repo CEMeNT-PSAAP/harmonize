@@ -46,6 +46,12 @@
 
 #include "util/util.cpp"
 
+//#define ASYNC_LOADS
+
+#ifdef ASYNC_LOADS
+#include <cuda/barrier>
+#define BARRIER_SPILL
+#endif
 
 
 
@@ -70,8 +76,16 @@ struct PromiseEnum;
 
 struct VoidState {};
 
+struct ReturnOp;
 
+template<typename OP_SET, typename ADR_TYPE = unsigned int>
+struct RemappingBarrier;
 
+template<typename OP_SET, typename ADR_TYPE = unsigned int>
+struct UnitBarrier;
+
+template<typename TYPE, typename BARRIER>
+struct Future;
 
 
 
@@ -113,7 +127,43 @@ struct OpUnionAppend<HEAD,OpUnion<TAIL...>>
 
 
 
+template <typename LEFT, typename RIGHT>
+struct OpUnionPair;
 
+template <>
+struct OpUnionPair<OpUnion<>,OpUnion<>>
+{
+	static const bool LEFT_SUBSET  = true;
+	static const bool RIGHT_SUBSET = true;
+};
+
+template <typename LEFT_HEAD, typename... LEFT_TAIL>
+struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<>>
+{
+	static const bool LEFT_SUBSET  = false;
+	static const bool RIGHT_SUBSET = true;
+};
+
+template <typename RIGHT_HEAD, typename... RIGHT_TAIL>
+struct OpUnionPair<OpUnion<>,OpUnion<RIGHT_HEAD,RIGHT_TAIL...>>
+{
+	static const bool LEFT_SUBSET  = true;
+	static const bool RIGHT_SUBSET = false;
+};
+
+
+template <typename LEFT_HEAD, typename... LEFT_TAIL, typename RIGHT_HEAD, typename... RIGHT_TAIL>
+struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<RIGHT_HEAD,RIGHT_TAIL...>>
+{
+	using Left       = OpUnion<LEFT_HEAD,LEFT_TAIL...>;
+	using LeftTail   = OpUnion<LEFT_TAIL...>;
+	using Right      = OpUnion<RIGHT_HEAD,RIGHT_TAIL...>;
+	using RightTail  = OpUnion<RIGHT_TAIL...>;
+
+	static const bool LEFT_SUBSET  = OpUnionLookup<LEFT_HEAD,Right>::CONTAINED && OpUnionPair<LeftTail,Right>::LEFT_SUBSET;
+	static const bool RIGHT_SUBSET = OpUnionLookup<RIGHT_HEAD,Left>::CONTAINED && OpUnionPair<RightTail,Left>::LEFT_SUBET;
+	static const bool EQUAL = LEFT_SUBSET && RIGHT_SUBSET;
+};
 
 
 
@@ -150,8 +200,53 @@ struct OpReturnFilter<RETURN,OpUnion<HEAD,TAIL...>>
 
 
 
+struct TaggedSemaphore {
+	unsigned int sem;
+	unsigned int tag;
+
+	TaggedSemaphore() = default;
+	__host__ __device__ TaggedSemaphore(unsigned int sem_val, unsigned int tag_val)
+		: sem(sem_val)
+		, tag(tag_val)
+	{}
+};
 
 
+
+
+template <typename TYPE>
+struct LazyLoad {
+	using Type = TYPE;
+	Type& reference;
+
+	__host__ __device__ LazyLoad<TYPE>(Type& ref) : reference(ref) {}
+
+	__host__ __device__ operator TYPE ()
+	{
+		return reference;
+	}
+};
+
+
+
+
+
+template <typename... TYPES>
+__host__ __device__ bool has_load(TYPES...){
+	return false;
+}
+
+
+template <typename HEAD, typename... TAIL>
+__host__ __device__ bool has_load(HEAD head, TAIL... tail){
+	return has_load(tail...);
+}
+
+
+template <typename HEAD, typename... TAIL>
+__host__ __device__ bool has_load(LazyLoad<HEAD> head, TAIL... tail){
+	return true;
+}
 
 
 
@@ -162,6 +257,11 @@ template <>
 struct ArgTuple <>
 {
 	__host__ __device__ ArgTuple<>(){}
+
+	#ifdef ASYNC_LOADS
+	template<typename PROGRAM>
+	__device__ void async_load(PROGRAM prog) {}
+	#endif
 };
 
 template <typename HEAD, typename... TAIL>
@@ -171,12 +271,37 @@ struct ArgTuple <HEAD, TAIL...>
 
 	HEAD head;
 	Tail tail;
-	
+
 	__host__ __device__ ArgTuple<HEAD,TAIL...> (HEAD h, TAIL... t)
 		: head(h)
 		, tail(t...)
-
 	{}
+
+	__host__ __device__ ArgTuple<HEAD,TAIL...> (LazyLoad<HEAD> h, TAIL... t)
+		: head(h)
+		, tail(t...)
+	{}
+
+	template<typename PROGRAM, typename LOAD_HEAD, typename... LOAD_TAIL>
+	__device__ void async_load(PROGRAM prog, LOAD_HEAD, LOAD_TAIL...);
+
+
+	#ifdef ASYNC_LOADS
+	template<typename PROGRAM, typename... LOAD_TAIL>
+	__device__ void async_load(PROGRAM prog, HEAD h, LOAD_TAIL... t)
+	{
+		head = h;
+		tail.async_load(prog,t...);
+	}
+
+	template<typename PROGRAM, typename... LOAD_TAIL>
+	__device__ void async_load(PROGRAM prog, LazyLoad<HEAD> h, LOAD_TAIL... t)
+	{
+		cuda::memcpy_async(&head,&h.reference,sizeof(HEAD),prog._grp_ctx.load_barrier);
+		tail.async_load(prog,t...);
+	}
+	#endif
+
 };
 
 
@@ -192,34 +317,23 @@ struct OpType < RETURN (*) (ARGS...) > {
 
 
 
-template<typename PROGRAM>
-struct AsyncBarrier;
 
 
-template<typename PROGRAM, typename TYPE>
+template<typename TYPE>
 struct ReturnAdr {
 	using Type = TYPE;
 
-	AsyncBarrier<PROGRAM>*  base;
-	Type*                   dest;
+	TaggedSemaphore  *base;
+	Type             *dest;
 };
 
-template<typename PROGRAM>
-struct ReturnAdr<PROGRAM, void> {
+template<>
+struct ReturnAdr<void> {
 	using Type = void;
 
-	AsyncBarrier<PROGRAM>*  base;
+	TaggedSemaphore  *base;
 };
 
-
-template <typename PROGRAM, typename TYPE>
-struct Future {
-	using Type = TYPE;
-
-	AsyncBarrier<PROGRAM> barrier;
-	Type                  data;
-
-};
 
 
 template <typename PROGRAM, typename TYPE>
@@ -227,35 +341,34 @@ struct Return {
 
 	using Type        = TYPE;
 	using ProgramType = PROGRAM;
-	using OpSet       = typename OpReturnFilter<TYPE,typename ProgramType::OpSet>::Type;
+	using ValidSet    = typename OpReturnFilter<TYPE,typename ProgramType::OpSet>::Type;
+	using OpSet       = typename ProgramType::OpSet;
 	using EnumType    = PromiseEnum<OpSet>;
-	using FutureType  = Future<ProgramType,Type>;
+	using RetAdrType  = ReturnAdr<TYPE>;
+	using RFutureType = Future<Type,RemappingBarrier<typename PROGRAM::OpSet>>;
+	using UFutureType = Future<Type,UnitBarrier     <typename PROGRAM::OpSet>>;
 
 	enum Form { VALUE, PROMISE, FUTURE };
 
 	union Data {
-		Type       value;
-		EnumType   promise;
-		FutureType future;
+		Type             value;
+		EnumType         promise;
+		RetAdrType       future;
 
-		Data(Type       val) : value   (val) {}
-		Data(EnumType   prm) : promise (prm) {}
-		Data(FutureType fut) : future  (fut) {}
+		Data(Type        val) : value   (val) {}
+		Data(EnumType    prm) : promise (prm) {}
+		Data(RetAdrType  fut) : future  (fut) {}
 	};
 
 	Form form;
 	Data data;
-
-	__host__ __device__ Return<ProgramType,Type>(Type value)        : form(Form::VALUE) , data(value) {}
-	
-	__host__ __device__ Return<ProgramType,Type>(FutureType future) : form(Form::FUTURE), data(future) {}
 
 
 	template<typename OP_TYPE>
 	__host__ __device__ static constexpr Promise<OP_TYPE> return_guard(Promise<OP_TYPE> promise)
 	{	
 		static_assert(
-			PromiseUnion<OpSet>::template Lookup<OP_TYPE,OpSet>::type::CONTAINED,
+			PromiseUnion<ValidSet>::template Lookup<OP_TYPE>::type::CONTAINED,
 			"\n\nTYPE ERROR: Type of returned promise does not match return type of "
 			"operation.\n\n"
 			"SUGGESTION: Ensure that the operation of the returned promise returns the "
@@ -270,6 +383,36 @@ struct Return {
 		, data(return_guard(promise))
 	{}
 
+	__host__ __device__ Return<ProgramType,Type>(Type value)
+		: form(Form::VALUE)
+		, data(value)
+	{}
+	
+	__host__ __device__ Return<ProgramType,Type>(RetAdrType future)
+		: form(Form::FUTURE)
+		, data(future)
+	{}
+
+
+/*
+	__host__ __device__ void resolve(PROGRAM program, RetAdrType ret){
+		switch(form){
+			case Form::VALUE:
+				ret.resolve(data.value);
+				break;
+			case Form::PROMISE:
+				data.promise.ret = ret;
+				program.async_call(data.promise);
+				break;
+			case Form::Future:
+
+				data.future.await(Promise<ReturnOp>(ret.base,ret.data,));
+				break;
+			default: //impossible
+		}
+	}
+*/
+
 };
 
 
@@ -280,6 +423,7 @@ struct Promise
 	typedef typename OpType< typename OPERATION::Type >::Return Return;
 	typedef typename OpType< typename OPERATION::Type >::Args   Args;
 
+	ReturnAdr<Return> ret;
 	Args args;
 
 	template<typename PROGRAM, typename... TUPLE_ARGS, typename... UNROLL_ARGS>
@@ -304,6 +448,15 @@ struct Promise
 
 	template<typename... ARGS>
 	__host__ __device__ Promise<OPERATION> ( ARGS... a ) : args(a...) {}	
+
+
+
+	#ifdef ASYNC_LOADS
+	template<typename PROGRAM, typename... ARGS>
+	__device__ void async_load ( PROGRAM prog, ARGS... a ) {
+		args.async_load(prog, a...);
+	}
+	#endif
 
 };
 
@@ -339,6 +492,10 @@ union PromiseUnion <OpUnion<>> {
 
 	PromiseUnion<OpUnion<>> () = default;
 
+	#ifdef ASYNC_LOADS
+	template<typename PROGRAM>
+	__device__ void async_load ( PROGRAM prog ) {}
+	#endif
 };
 
 
@@ -595,13 +752,13 @@ struct WorkLink
 
 
 //!
-//! A WorkBarrier coaleces promises into links in a lock-free manner.
+//! A RemappingBarrier coaleces promises into links in a lock-free manner.
 //! Once released, all work in the queue is made available for work groups to
 //! execute and all further appending operations will redirect promises to execution.
 //! After being released, a queue may be reset to a non-released state.
 //!
-template<typename OP_SET, typename ADR_TYPE = unsigned int>
-struct WorkBarrier {
+template<typename OP_SET, typename ADR_TYPE>
+struct RemappingBarrier {
 
 
 	#if 0
@@ -626,7 +783,7 @@ struct WorkBarrier {
 
 	static const size_t TYPE_COUNT = UnionType::Info::COUNT;
 
-	unsigned int status;
+	TaggedSemaphore semaphore;
 	unsigned int count; 
 
 	QueueType full_list; // Head of the linked list of full links
@@ -634,11 +791,12 @@ struct WorkBarrier {
 	PairPack partial_table[UnionType::Info::COUNT]; // Points to partial blocks
 
 
-	WorkBarrier<OP_SET,ADR_TYPE>() = default;
+	RemappingBarrier<OP_SET,ADR_TYPE>() = default;
 
-	static __host__ __device__ WorkBarrier<OP_SET,ADR_TYPE> empty() {
-		WorkBarrier<OP_SET,ADR_TYPE> result;
-		result.status = 0u;
+	static __host__ __device__ RemappingBarrier<OP_SET,ADR_TYPE> blank(unsigned int sem_val)
+	{
+		RemappingBarrier<OP_SET,ADR_TYPE> result;
+		result.semaphore = TaggedSemaphore(sem_val,1);
 		result.count  = 0u;
 		result.full_list.pair.data = QueueType::null;
 		for(int i=0; i<TYPE_COUNT; i++){
@@ -658,7 +816,7 @@ struct WorkBarrier {
 		while( ! iter.is_null() ){
 		       LinkType& the_link = program._dev_ctx.arena[iter.adr];
 		       total += the_link.count;
-		       printf("( [%d,%d] @%d #%d -> %d )",blockIdx.x,threadIdx.x,iter.adr,the_link.count,the_link.next.adr);
+		       //printf("( [%d,%d] @%d #%d -> %d )",blockIdx.x,threadIdx.x,iter.adr,the_link.count,the_link.next.adr);
 		       iter = the_link.next;
 		}
 		return total;
@@ -671,7 +829,7 @@ struct WorkBarrier {
 		using LinkType    = typename ProgramType::LinkType;
 		__threadfence();
 		unsigned int true_count = queue_count(program,queue);
-		printf("[%d,%d]: Releasing queue (%d,%d) with count %d with delta %d\n",blockIdx.x,threadIdx.x,queue.get_head().adr,queue.get_tail().adr,true_count,release_count);
+		//printf("[%d,%d]: Releasing queue (%d,%d) with count %d with delta %d\n",blockIdx.x,threadIdx.x,queue.get_head().adr,queue.get_tail().adr,true_count,release_count);
 		unsigned int index = util::random_uint(program._thd_ctx.rand_state)%ProgramType::FRAME_SIZE;
 		program.push_promises(0, index, queue, release_count);
 	}
@@ -694,7 +852,7 @@ struct WorkBarrier {
 		AdrType address = pair.get_right();
 
 		if( (address == LinkAdrType::null) || (index >= GROUP_SIZE) ){
-			printf("[%d,%d]: Tried to mark invalid pair (%d,@%d) for release\n",blockIdx.x,threadIdx.x,index,address);
+			//printf("[%d,%d]: Tried to mark invalid pair (%d,@%d) for release\n",blockIdx.x,threadIdx.x,index,address);
 			return;
 		}
 		
@@ -707,14 +865,31 @@ struct WorkBarrier {
 		unsigned int delta = index+1;
 		unsigned int checkout = atomicAdd(&link.next.adr,delta);
 		
-		printf("[%d,%d]: Marking pair (%d,@%d) for release. delta(%d->%d)\n",blockIdx.x,threadIdx.x,index,address,checkout,checkout+delta);
+		//printf("[%d,%d]: Marking pair (%d,@%d) for release. delta(%d->%d)\n",blockIdx.x,threadIdx.x,index,address,checkout,checkout+delta);
 
 	       	if( ( (checkout+delta) == (GROUP_SIZE+1) ) && (checkout != 0) ) {
-			printf("[%d,%d]: Instant release of (%d,@%d)\n",blockIdx.x,threadIdx.x,index,address);
+			//printf("[%d,%d]: Instant release of (%d,@%d)\n",blockIdx.x,threadIdx.x,index,address);
 			atomicExch(&link.next.adr,LinkAdrType::null);
 			QueueType queue(address,address);
 			unsigned int total = atomicAdd(&link.count,0);
 			release_queue(program,queue,total);
+		}
+		
+
+	}
+
+
+	template<typename PROGRAM>
+	__device__ void release_full(PROGRAM program) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		
+		QueueType queue;
+		queue.pair.data  = atomicExch(&full_list.pair.data,QueueType::null);
+		AdrType dump_count    = atomicExch(&count,0);
+		__threadfence();
+		if( (dump_count != 0) || (! queue.is_null() ) ){
+			release_queue(program,queue,dump_count);
 		}
 		
 
@@ -728,14 +903,8 @@ struct WorkBarrier {
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
 
-		printf("[%d,%d]: Performing release\n",blockIdx.x,threadIdx.x);	
-		QueueType queue;
-		queue.pair.data  = atomicExch(&full_list.pair.data,QueueType::null);
-		AdrType dump_count    = atomicExch(&count,0);
-		__threadfence();
-		if( (dump_count != 0) || (! queue.is_null() ) ){
-			release_queue(program,queue,dump_count);
-		}
+		//printf("[%d,%d]: Performing release\n",blockIdx.x,threadIdx.x);	
+		release_full(program);
 
 		for( size_t i=0; i<TYPE_COUNT; i++ ) {
 			PairPack null_pair(0,LinkAdrType::null);
@@ -758,7 +927,7 @@ struct WorkBarrier {
 		if( ! address.is_null()	) {
 			LinkType& dst_link = program._dev_ctx.arena[address.adr];
 			unsigned int count = atomicAdd(&dst_link.count,0);
-			printf("[%d,%d]:Appending full link @%d with count %d\n",blockIdx.x,threadIdx.x,address.adr,count);
+			//printf("[%d,%d]:Appending full link @%d with count %d\n",blockIdx.x,threadIdx.x,address.adr,count);
 		}
 		
 		atomicAdd(&count,GROUP_SIZE);
@@ -809,15 +978,15 @@ struct WorkBarrier {
 
 		LinkType& dst_link  = program._dev_ctx.arena[dst_address];
 
-		if( claimed ) {
+		//if( claimed ) {
 			//unsigned int old_next = atomicAdd(&dst_link.next.adr,(AdrType)-dst_empty);
-			printf("{[%d,%d]: claimed @%d}",blockIdx.x,threadIdx.x,dst_address);
-		}
+			//printf("{[%d,%d]: claimed @%d}",blockIdx.x,threadIdx.x,dst_address);
+		//}
 
 		unsigned int dst_offset = atomicAdd(&dst_link.count,dst_delta);
 		unsigned int src_offset = src_index - dst_delta;
 		
-		printf("{[%d,%d]: count(%d->%d)}",blockIdx.x,threadIdx.x,dst_offset,dst_offset+dst_delta);
+		//printf("{[%d,%d]: count(%d->%d)}",blockIdx.x,threadIdx.x,dst_offset,dst_offset+dst_delta);
 
 		//printf("%d: src_offset=%d\tdst_offset=%d\tdst_delta=%d\n",blockIdx.x,src_offset,dst_offset,dst_delta);
 
@@ -830,27 +999,25 @@ struct WorkBarrier {
 			atomicAdd(&src_link.next.adr, dst_delta);
 		}		
 
-		__threadfence();
 		unsigned int checkout_delta = dst_delta;
 		if( claimed ){
 			checkout_delta += GROUP_SIZE - dst_total;
 		}
 		AdrType checkout = atomicAdd(&dst_link.next.adr,-checkout_delta);
-		printf("{[%d,%d]: %d checkout(%d->%d)}",blockIdx.x,threadIdx.x,dst_address,checkout,checkout-checkout_delta);
+		//printf("{[%d,%d]: %d checkout(%d->%d)}",blockIdx.x,threadIdx.x,dst_address,checkout,checkout-checkout_delta);
 		src.set_left(src_total);
-		__threadfence();
 
 		//! If checkout==0, this thread is the last thread to modify the link, and the
 		//! link has not been marked for dumping. This means we have custody of the link
 		//! and must manage getting it into the queue via a partial slot or the full
 		//! list.
 		if( (checkout-checkout_delta) == 0 ){
-			printf("[%d-%d]: Got custody of link @%d for re-insertion.\n",blockIdx.x,threadIdx.x,dst_address);
+			//printf("[%d-%d]: Got custody of link @%d for re-insertion.\n",blockIdx.x,threadIdx.x,dst_address);
 			unsigned int final_count = atomicAdd(&dst_link.count,0);
 			dst.set_left(final_count);
 			unsigned int reset_delta = (GROUP_SIZE-final_count);
 			unsigned int old_next = atomicAdd(&dst_link.next.adr,reset_delta);
-			printf("[%d-%d]: Reset the next field (%d->%d) of link @%d.\n",blockIdx.x,threadIdx.x,old_next,old_next+reset_delta,dst_address);
+			//printf("[%d-%d]: Reset the next field (%d->%d) of link @%d.\n",blockIdx.x,threadIdx.x,old_next,old_next+reset_delta,dst_address);
 			__threadfence();
 			return true;
 		}
@@ -858,7 +1025,7 @@ struct WorkBarrier {
 		//! link, and the link has been marked for dumping. This means we have custody
 		//! of the link and must release it.
 		else if ( (checkout-checkout_delta) == (GROUP_SIZE+1) ) {
-			printf("[%d-%d]: Got custody of link @%d for immediate dumping.\n",blockIdx.x,threadIdx.x,dst_address);
+			//printf("[%d-%d]: Got custody of link @%d for immediate dumping.\n",blockIdx.x,threadIdx.x,dst_address);
 			atomicExch(&dst_link.next.adr,LinkAdrType::null);
 			QueueType queue(dst_address,dst_address);
 			unsigned int total = atomicAdd(&dst_link.count,0);
@@ -876,21 +1043,13 @@ struct WorkBarrier {
 
 	}
 
+
 	
-	template<typename PROGRAM, typename OP_TYPE>
-	__device__ void atomic_append(PROGRAM program, Promise<OP_TYPE> promise) {
+	template<bool CAN_RELEASE=true, typename PROGRAM>
+	__device__ void union_await(PROGRAM program, OpDisc disc, typename PROGRAM::PromiseUnionType promise_union) {
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
 		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
-		
-		//! Guards invocations of the function to make sure invalid promise types
-		//! are not passed in.
-		static_assert(
-			UnionType::template Lookup<OP_TYPE>::type::CONTAINED,
-			"TYPE ERROR: Remapping work queue cannot queue promises of this type."
-		);
-
-		OpDisc disc = UnionType::template Lookup<OP_TYPE>::type::DISC;
 		
 		//printf("Performing atomic append for type with discriminant %d.\n",disc);
 		
@@ -898,13 +1057,13 @@ struct WorkBarrier {
 		PairType inc_val = PairPack::RIGHT_MASK + 1;
 		bool optimistic = true;
 		
-		//! We check the status. If the status is non-zero, the queue has been
+		//! We check the semaphore. If the semaphore is non-zero, the queue has been
 		//! released, and so the promise can be queued normally. This check does not
 		//! force a load with atomics (as is done later) because the benefits of
 		//! a forced load don't seem to make up for the overhead.
-		if( status != 0 ){
-			printf("early exit\n");
-	 		program.async_call_cast(0, promise);
+		if( (semaphore.sem == 0) && CAN_RELEASE ){
+			//printf("early exit\n");
+	 		program.async_call(disc, 0, promise_union);
 			return;
 		}
 
@@ -918,9 +1077,11 @@ struct WorkBarrier {
 		start_link.id    = disc;
 		start_link.count = 1;
 		start_link.next  = GROUP_SIZE - 1;
-		start_link.promises[0] = promise;
+		start_link.promises[0] = promise_union;
 		__threadfence();
 
+		unsigned int opt_fail_count = 0;
+		bool had_custody = true;
 
 		//printf("Allocated spare link %d.\n",first_link_adr.adr);
 
@@ -937,16 +1098,16 @@ struct WorkBarrier {
 			if ( optimistic ) {
 				//printf("Today, we choose optimisim.\n");
 				dst_pair.data = atomicAdd(&part_slot.data,inc_val*spare_pair.get_left());
-				printf("{[%d,%d] Optimistic (%d->%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_left()+spare_pair.get_left(),dst_pair.get_right());
+				//printf("{[%d,%d] Optimistic (%d->%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_left()+spare_pair.get_left(),dst_pair.get_right());
 			}
 			//! Gain exclusive access to link via an atomic exchange. This is
 			//! slower, but has guaranteed progress. 
 			else {
-				printf("Today, we resort to pessimism.\n");
+				//printf("Today, we resort to pessimism.\n");
 				PairPack null_pair(0,LinkAdrType::null);
 				dst_pair.data = atomicExch(&part_slot.data,spare_pair.data);
 				spare_pair = PairPack(0,LinkAdrType::null);
-				printf("{[%d,%d] Pessimistic (%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_right());
+				//printf("{[%d,%d] Pessimistic (%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_right());
 			}
 
 			
@@ -958,14 +1119,17 @@ struct WorkBarrier {
 				//! queueing can get away with leaving its link behind
 				//! and doing nothing else.
 				if ( optimistic ) {
-					optimistic = (dst_index % GROUP_SIZE) != 0;
+					opt_fail_count += 1;
+					optimistic = (dst_index % GROUP_SIZE) > opt_fail_count;
 					continue;
 				} else {
 					break;
 				}
 			} else {
 				bool owns_dst = merge_links(program,dst_pair,spare_pair,!optimistic);
-				optimistic = true;
+				had_custody = owns_dst;
+				optimistic = (dst_index % GROUP_SIZE) != 0;
+				opt_fail_count = 0;
 				//printf("owns_dst=%d\n",owns_dst);
 				//! If the current thread has custody of the destination link,
 				//! it must handle appending it to the full list if it is full and
@@ -989,7 +1153,7 @@ struct WorkBarrier {
 					//! include a branch to handle it, in case something
 					//! unexpected occurs.
 					else {
-						printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
+						//printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
 						program.dump_spare_link(spare_pair.get_right());
 						program.dump_spare_link(  dst_pair.get_right());
 						break;
@@ -1003,8 +1167,9 @@ struct WorkBarrier {
 			}
 
 		}
-		
-		//! Double-check the status at the end. It is very important we do this double
+
+
+		//! Double-check the sememaphore at the end. It is very important we do this double
 		//! check and that we do it at the very end of every append operation. Because
 		//! custody of partial links can be given to any append operation of the
 		//! corresponding operation type, and we don't know which append operation
@@ -1012,8 +1177,160 @@ struct WorkBarrier {
 		//! may be the last append and hence should make sure that no work is left
 		//! behind.
 		__threadfence();
-		unsigned int now_status = atomicAdd(&status,0);
-		if( now_status != 0 ){
+		unsigned int now_semaphore = atomicAdd(&semaphore.sem,0);
+		if( (now_semaphore == 0) && had_custody && CAN_RELEASE ){
+			//printf("[%d,%d]: Last-minute release required!\n",blockIdx.x,threadIdx.x);
+			release_sweep(program);
+		}
+
+
+	}
+	
+	template<bool CAN_RELEASE=true, typename PROGRAM, typename OP_TYPE>
+	__device__ void await(PROGRAM program, Promise<OP_TYPE> promise) {
+		using ProgramType = PROGRAM;
+		using LinkType    = typename ProgramType::LinkType;
+		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+		
+		//! Guards invocations of the function to make sure invalid promise types
+		//! are not passed in.
+		static_assert(
+			UnionType::template Lookup<OP_TYPE>::type::CONTAINED,
+			"TYPE ERROR: Remapping work queue cannot queue promises of this type."
+		);
+
+		OpDisc disc = UnionType::template Lookup<OP_TYPE>::type::DISC;
+		
+		//printf("Performing atomic append for type with discriminant %d.\n",disc);
+		
+		PairPack& part_slot = partial_table[disc];
+		PairType inc_val = PairPack::RIGHT_MASK + 1;
+		bool optimistic = true;
+		
+		//! We check the semaphore. If the semaphore is non-zero, the queue has been
+		//! released, and so the promise can be queued normally. This check does not
+		//! force a load with atomics (as is done later) because the benefits of
+		//! a forced load don't seem to make up for the overhead.
+		if( (semaphore.sem == 0) && CAN_RELEASE ){
+			//printf("early exit\n");
+	 		program.async_call_cast(0, promise);
+			return;
+		}
+
+		//! We start off with a link containing just our input promise. Depending
+		//! upon how merges transpire, this link will either fill up and be
+		//! successfully deposited into the queue, or will have its contents
+		//! drained into a different link and will be stored away for future use.
+		LinkAdrType first_link_adr = program.alloc_spare_link();
+		PairPack spare_pair(1u,first_link_adr.adr);
+		LinkType&   start_link     = program._dev_ctx.arena[first_link_adr];
+		start_link.id    = disc;
+		start_link.count = 1;
+		start_link.next  = GROUP_SIZE - 1;
+		start_link.promises[0] = promise;
+		__threadfence();
+
+		unsigned int opt_fail_count = 0;
+		bool had_custody = true;
+
+		//printf("Allocated spare link %d.\n",first_link_adr.adr);
+
+		while(true) {
+			PairPack dst_pair;
+
+			LinkAdrType spare_link_adr = spare_pair.get_right();
+			LinkType& spare_link = program._dev_ctx.arena[spare_link_adr];
+
+			//! Attempt to claim a slot in the link just by incrementing
+			//! the index of the index/address pair pack. This is quicker,
+			//! but only works if the incrementation reaches the field before
+			//! other threads claim the remaining promise slots.
+			if ( optimistic ) {
+				//printf("Today, we choose optimisim.\n");
+				dst_pair.data = atomicAdd(&part_slot.data,inc_val*spare_pair.get_left());
+				//printf("{[%d,%d] Optimistic (%d->%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_left()+spare_pair.get_left(),dst_pair.get_right());
+			}
+			//! Gain exclusive access to link via an atomic exchange. This is
+			//! slower, but has guaranteed progress. 
+			else {
+				//printf("Today, we resort to pessimism.\n");
+				PairPack null_pair(0,LinkAdrType::null);
+				dst_pair.data = atomicExch(&part_slot.data,spare_pair.data);
+				spare_pair = PairPack(0,LinkAdrType::null);
+				//printf("{[%d,%d] Pessimistic (%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_right());
+			}
+
+			
+			AdrType dst_index   = dst_pair.get_left ();
+			AdrType dst_address = dst_pair.get_right();
+			//! Handle cases where represented link is null or already full
+			if ( (dst_address == LinkAdrType::null) || (dst_index >= GROUP_SIZE) ){
+				//! Optimistic queuing must retry, but pessimistic
+				//! queueing can get away with leaving its link behind
+				//! and doing nothing else.
+				if ( optimistic ) {
+					opt_fail_count += 1;
+					optimistic = (dst_index % GROUP_SIZE) > opt_fail_count;
+					continue;
+				} else {
+					break;
+				}
+			} else {
+				bool owns_dst = merge_links(program,dst_pair,spare_pair,!optimistic);
+				had_custody = owns_dst;
+				optimistic = (dst_index % GROUP_SIZE) != 0;
+				opt_fail_count = 0;
+				//printf("owns_dst=%d\n",owns_dst);
+				//! If the current thread has custody of the destination link,
+				//! it must handle appending it to the full list if it is full and
+				//! merging it into the partial slot if it is partial.
+				if ( owns_dst ){
+					//! Append full destination links to the full list.
+					//! DO NOT BREAK FROM THE LOOP. There may be a partial
+					//! source link that still needs to be merged in another
+					//! pass.
+					if ( dst_pair.get_left() == GROUP_SIZE ) {
+						append_full(program,dst_address);
+					}
+					//! Dump the current spare link and restart the merging
+					//! procedure with our new partial link
+					else if ( dst_pair.get_left() != 0 ) {
+						program.dump_spare_link(spare_pair.get_right());
+						spare_pair = dst_pair;
+						continue;
+					}
+					//! This case should not happen, but it does not hurt to 
+					//! include a branch to handle it, in case something
+					//! unexpected occurs.
+					else {
+						//printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
+						program.dump_spare_link(spare_pair.get_right());
+						program.dump_spare_link(  dst_pair.get_right());
+						break;
+					}
+				}
+				//! If the spare link is empty, dump it rather than try to merge
+				if (spare_pair.get_left() == 0) {
+					program.dump_spare_link(spare_pair.get_right());
+					break;
+				}
+			}
+
+		}
+
+
+
+
+		//! Double-check the sememaphore at the end. It is very important we do this double
+		//! check and that we do it at the very end of every append operation. Because
+		//! custody of partial links can be given to any append operation of the
+		//! corresponding operation type, and we don't know which append operation
+		//! comes last, we need to assume that, if the append has gotten this far, it
+		//! may be the last append and hence should make sure that no work is left
+		//! behind.
+		__threadfence();
+		unsigned int now_semaphore = atomicAdd(&semaphore.sem,0);
+		if( (now_semaphore == 0) && had_custody && CAN_RELEASE ){
 			//printf("[%d,%d]: Last-minute release required!\n",blockIdx.x,threadIdx.x);
 			release_sweep(program);
 		}
@@ -1021,14 +1338,34 @@ struct WorkBarrier {
 
 	}
 
-	//! Sets the release flag and performs a release sweep. The sweep is necessary, because
+	//! Sets the semaphore to zero and performs a release sweep. The sweep is necessary, because
 	//! it is possible for no append operations to occur after a release operation.
 	template<typename PROGRAM>
 	__device__ void release(PROGRAM program) {
-		printf("%d: Setting release flag.\n",blockIdx.x);
-		atomicExch(&status,1);
-		__threadfence();
-		release_sweep(program);
+		unsigned int now_semaphore = atomicExch(&semaphore.sem,0);
+		if( now_semaphore != 0 ) {
+			release_sweep(program);
+		}
+	}
+
+	//! Adds the supplied delta value to the semaphore and performs a release sweep if the
+	//! result value is zero.
+	template<typename PROGRAM>
+	__device__ void add_semaphore(PROGRAM program,unsigned int delta) {
+		unsigned int now_semaphore = atomicAdd(&semaphore.sem,delta);
+		if( (now_semaphore+delta) == 0 ) {
+			release_sweep(program);
+		}
+	}
+
+	//! Subtracts the supplied delta value from  the semaphore and performs a release sweep
+	//! if the result value is zero.
+	template<typename PROGRAM>
+	__device__ void sub_semaphore(PROGRAM program,unsigned int delta) {
+		unsigned int now_semaphore = atomicAdd(&semaphore.sem,(unsigned int) -delta);
+		if( (now_semaphore-delta) == 0 ) {
+			release_sweep(program);
+		}
 	}
 
 };
@@ -1037,18 +1374,115 @@ struct WorkBarrier {
 
 
 
-template<typename PROGRAM>
-struct AsyncBarrier {
+template<typename OP_SET, typename ADR_TYPE>
+struct UnitBarrier {
 	
-	using Semaphore = typename PROGRAM::Semaphore;
-	using AdrType   = typename PROGRAM::AdrType;
+	using AdrType = ADR_TYPE;
 
-	Semaphore semaphore;
-	AdrType   await_head;
-	
+	TaggedSemaphore semaphore;
+	PromiseEnum<OP_SET> promise;
+
+
+	UnitBarrier<OP_SET,ADR_TYPE>() = default;
+
+	UnitBarrier<OP_SET,ADR_TYPE>(PromiseEnum<OP_SET> promise_value, unsigned int semaphore_value)
+		: semaphore(semaphore_value,0)
+		, promise(promise_value)
+	{}
+
+
+
+
+	//! Sets the semaphore value to zero and, if it was not already zero, releases the
+	//! promise for execution
+	template<typename PROGRAM>
+	__device__ void release(PROGRAM program) {
+		unsigned int old_val = atomicExch(&semaphore.sem,0);
+		if( old_val != 0 ) {
+			program.async_call(promise);
+		}
+	}
+
+	//! Adds the supplied delta value to the semaphore and performs a release sweep if the
+	//! result value is zero and the previous value was not zero.
+	template<typename PROGRAM>
+	__device__ void add_semaphore(PROGRAM program,unsigned int delta) {
+		unsigned int old_val = atomicAdd(&semaphore.sem,delta);
+		if( ((old_val+delta) == 0)  && (old_val != 0) ) {
+			program.async_call(promise);
+		}
+	}
+
+	//! Subtracts the supplied delta value from  the semaphore and performs a release sweep
+	//! if the result value is zero and the previous value was not zero.
+	template<typename PROGRAM>
+	__device__ void sub_semaphore(PROGRAM program,unsigned int delta) {
+		unsigned int old_val = atomicAdd(&semaphore.sem,(unsigned int) -delta);
+		if( ((old_val-delta) == 0) && (old_val != 0) ) {
+			program.async_call(promise);
+		}
+	}
+
+
 
 };
 
+
+
+
+template<typename TYPE, typename BARRIER>
+struct Future
+{
+	using BarrierType = BARRIER;
+	using Type        = TYPE;
+
+	BarrierType barrier;
+	Type        data;
+
+	Future<TYPE,BARRIER>() = default;
+
+	__host__ __device__ Future<TYPE,BARRIER>(unsigned int semaphore_value)
+		: barrier(semaphore_value)	
+	{}
+
+	template<typename PROGRAM, typename OP_TYPE>
+	__device__ void await(PROGRAM program, Promise<OP_TYPE> promise) {
+		barrier.await(program,promise);
+	}
+
+	
+	template<typename PROGRAM>
+	__device__ void fulfill(PROGRAM program) {
+		barrier.sub_semaphore(program,1);
+	}
+
+};
+
+
+
+
+struct ReturnOp {
+
+	using Type = void(*)(TaggedSemaphore*,void*,void*,size_t);
+
+	template<typename PROGRAM>
+	__device__ void eval(TaggedSemaphore* sem,void* dst, void* src, size_t size) {
+	
+		using UFuture = typename PROGRAM::UFuture;
+		using RFuture = typename PROGRAM::RFuture;
+
+		memcpy(dst,src,size);
+		__threadfence();
+		if(sem->tag == 0){
+			UFuture* unit_future = sem;
+			unit_future ->fulfill();
+		} else {
+			RFuture* remap_future = sem;
+			remap_future->fulfill();
+		}	
+	}
+
+};
 
 
 
@@ -1258,7 +1692,10 @@ class HarmonizeProgram
 	MEMBER_SWITCH(      OpSet,   OpUnion<>)
 
 	template<typename OP_SET, typename ADR_TYPE>
-	friend class WorkBarrier;
+	friend class RemappingBarrier;
+
+	template<typename... TYPES>
+	friend class ArgTuple;
 
 	MEMBER_SWITCH(DeviceState,   VoidState)
 	MEMBER_SWITCH( GroupState,   VoidState)
@@ -1278,6 +1715,8 @@ class HarmonizeProgram
 	CONST_SWITCH(size_t,GROUP_SIZE,32)
 
 
+	static const size_t        STASH_MARGIN     = 2;
+	static const size_t        STASH_HIGH_WATER = STASH_SIZE-STASH_MARGIN;
 
 	/*
 	// The number of async functions present in the program.
@@ -1324,7 +1763,8 @@ class HarmonizeProgram
 
 
 	static const AdrType       SPARE_LINK_COUNT = 2u;
-	
+
+
 	/*
 	// This struct represents the entire set of data structures that must be stored in thread
 	// memory to track te state of the program defined by the developer as well as the state of
@@ -1339,6 +1779,12 @@ class HarmonizeProgram
 
 	};
 
+
+	struct RemapQueue {
+		unsigned char count;
+		unsigned char full_head;
+		unsigned char partial_map[PART_ENTRY_COUNT];
+	};
 
 
 	/*
@@ -1355,12 +1801,15 @@ class HarmonizeProgram
 		bool				can_make_work;	
 		bool				scarce_work;	
 
-		unsigned char			stash_count;	// Number of filled blocks in stash
 		unsigned char			exec_head;	// Indexes the link that is/will be evaluated next
-		unsigned char			full_head;	// Head of the linked list of full links
 		unsigned char			empty_head;	// Head of the linked list of empty links
 
-		unsigned char			partial_map[FN_ID_COUNT*PART_TABLE_DEPTH]; // Points to partial blocks
+		RemapQueue			main_queue;
+
+		#ifdef ASYNC_LOADS
+		RemapQueue			load_queue;
+		cuda::barrier<cuda::thread_scope_system> load_barrier;
+		#endif
 
 		unsigned char			link_stash_count; // Number of device-space links stored
 
@@ -1370,6 +1819,10 @@ class HarmonizeProgram
 		
 		int				SM_promise_delta;
 		unsigned long long int		work_iterator;
+
+		#ifdef BARRIER_SPILL
+		RemappingBarrier<OpSet>		spill_barrier;
+		#endif
 
 		#ifdef HRM_TIME
 		unsigned long long int		time_totals[HRM_TIME];
@@ -1524,6 +1977,15 @@ class HarmonizeProgram
 
 
 	protected:
+
+
+	__device__ bool stash_overfilled(){
+		#ifdef ASYNC_LOADS
+		return (_grp_ctx.main_queue.count+_grp_ctx.load_queue.count) >= STASH_HIGH_WATER;
+		#else
+		return _grp_ctx.main_queue.count >= STASH_HIGH_WATER;
+		#endif
+	}
 	
 	/*
 	// Returns an index into the partial map of a group based off of a function id and a depth. If
@@ -1580,25 +2042,37 @@ class HarmonizeProgram
 				_grp_ctx.level = StackType::NULL_LEVEL;
 			}
 
-			_grp_ctx.stash_count = 0;
+			_grp_ctx.main_queue.count = 0;
 			_grp_ctx.link_stash_count = 0;
 			_grp_ctx.keep_running = true;
 			_grp_ctx.busy 	 = false;
 			_grp_ctx.can_make_work= true;
 			_grp_ctx.exec_head    = STASH_SIZE;
-			_grp_ctx.full_head    = STASH_SIZE;
+			_grp_ctx.main_queue.full_head    = STASH_SIZE;
 			_grp_ctx.empty_head   = 0;
 			_grp_ctx.work_iterator= 0;
 			_grp_ctx.scarce_work  = false;
 
+			#ifdef BARRIER_SPILL
+			_grp_ctx.spill_barrier = RemappingBarrier<OpSet>::blank(1);
+			#endif
 
 			for(unsigned int i=0; i<STASH_SIZE; i++){
 				_grp_ctx.stash[i].empty(i+1);
 			}
 				
 			for(unsigned int i=0; i<PART_ENTRY_COUNT; i++){
-				_grp_ctx.partial_map[i] = STASH_SIZE;
+				_grp_ctx.main_queue.partial_map[i] = STASH_SIZE;
 			}
+
+			#ifdef ASYNC_LOADS
+			_grp_ctx.load_queue.count = 0;
+			_grp_ctx.load_queue.full_head = STASH_SIZE;
+			for(unsigned int i=0; i<PART_ENTRY_COUNT; i++){
+				_grp_ctx.load_queue.partial_map[i] = STASH_SIZE;
+			}
+			init(&_grp_ctx.load_barrier,WORK_GROUP_SIZE);
+			#endif
 
 			_grp_ctx.SM_promise_delta = 0;
 			
@@ -1963,10 +2437,10 @@ class HarmonizeProgram
 	*/
 	 __device__  unsigned int claim_full_slot(){
 
-		unsigned int slot = _grp_ctx.full_head;
+		unsigned int slot = _grp_ctx.main_queue.full_head;
 		if(slot != STASH_SIZE){
-			_grp_ctx.full_head = _grp_ctx.stash[slot].next.adr;
-			db_printf("FULL : %d << %d\n",slot,_grp_ctx.full_head);
+			_grp_ctx.main_queue.full_head = _grp_ctx.stash[slot].next.adr;
+			db_printf("FULL : %d << %d\n",slot,_grp_ctx.main_queue.full_head);
 		}
 		return slot;
 
@@ -1977,11 +2451,11 @@ class HarmonizeProgram
 	// Inserts a full slot into the stash. This should only be called if there is enough space in
 	// the link stash.
 	*/
-	 __device__  void insert_full_slot(unsigned int slot){
+	 __device__  void insert_full_slot(RemapQueue& queue, unsigned int slot){
 
-		_grp_ctx.stash[slot].next.adr = _grp_ctx.full_head;
-		db_printf("FULL : >> %d -> %d\n",slot,_grp_ctx.full_head);
-		_grp_ctx.full_head = slot;
+		_grp_ctx.stash[slot].next.adr = queue.full_head;
+		db_printf("FULL : >> %d -> %d\n",slot,queue.full_head);
+		queue.full_head = slot;
 
 	}
 
@@ -2306,7 +2780,7 @@ class HarmonizeProgram
 
 
 			_grp_ctx.SM_promise_delta += promise_delta;
-			printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
+			//printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
 
 			
 			//rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
@@ -2418,7 +2892,7 @@ class HarmonizeProgram
 			the_link = _grp_ctx.stash[slot_index];
 			db_printf("Link has count %d and next %d in main memory",the_link.count, the_link.next);
 			result = link_index;
-			_grp_ctx.stash_count -= 1;
+			_grp_ctx.main_queue.count -= 1;
 		//}
 
 		
@@ -2469,10 +2943,10 @@ class HarmonizeProgram
 
 		
 		
-		if(util::current_leader() && (_grp_ctx.stash_count > threashold)){
+		if(util::current_leader() && (_grp_ctx.main_queue.count > threashold)){
 
 
-			unsigned int spill_count = _grp_ctx.stash_count - threashold;
+			unsigned int spill_count = _grp_ctx.main_queue.count - threashold;
 			int delta = 0;
 			fill_stash_links(spill_count);
 			
@@ -2492,8 +2966,8 @@ class HarmonizeProgram
 				if(! has_full_slots){
 					for(;partial_iter < FN_ID_COUNT; partial_iter++){
 						db_printf("%d",partial_iter);
-						if(_grp_ctx.partial_map[partial_iter] != STASH_SIZE){
-							slot = _grp_ctx.partial_map[partial_iter];
+						if(_grp_ctx.main_queue.partial_map[partial_iter] != STASH_SIZE){
+							slot = _grp_ctx.main_queue.partial_map[partial_iter];
 							//printf("{Spilling partial}");
 							partial_iter++;
 							break;
@@ -2509,7 +2983,7 @@ class HarmonizeProgram
 				LinkAdrType link = produce_link(slot);
 				push_back(queue,link);
 				insert_empty_slot(slot);
-				if(_grp_ctx.stash_count <= threashold){
+				if(_grp_ctx.main_queue.count <= threashold){
 					break;
 				}
 			}
@@ -2564,7 +3038,7 @@ class HarmonizeProgram
 			// Determine how much of which type of link needs to be dumped
 			*/
 			unsigned int dump_total = bucket[0];
-			unsigned int dump_count = (_grp_ctx.stash_count > threshold) ? _grp_ctx.stash_count - threshold : 0;
+			unsigned int dump_count = (_grp_ctx.main_queue.count > threshold) ? _grp_ctx.main_queue.count - threshold : 0;
 			dump_count = (dump_count <= bucket[0]) : 0 ? dump_count - bucket[0];
 			for(unsigned int i=1; i< 4; i++){
 				unsigned int delta = (bucket[i] <= dump_count) ? bucket[i] : dump_count;
@@ -2576,7 +3050,7 @@ class HarmonizeProgram
 			/*
 			// Dump the corresponding number of each type of link
 			*/
-			for(unsigned int i=0; i < _grp_ctx.stash_count; i++){
+			for(unsigned int i=0; i < _grp_ctx.main_queue.count; i++){
 				unsigned int depth = _grp_ctx.stash[i].depth;
 				unsigned int size  = _grp_ctx.stash[i].size;
 				unsigned int bucket_idx = (depth != level) ? 0 : 1;
@@ -2617,7 +3091,7 @@ class HarmonizeProgram
 			fill_stash_links(2);
 		}
 
-		if(_grp_ctx.stash_count >= (STASH_SIZE-2)){
+		if(_grp_ctx.main_queue.count >= (STASH_SIZE-2)){
 			spill_stash(STASH_SIZE-3);
 		}
 		#else
@@ -2626,25 +3100,25 @@ class HarmonizeProgram
 		/*
 		unsigned int space = 0;
 		if( left_jump != PART_ENTRY_COUNT ){
-			unsigned int left_idx = _grp_ctx.partial_map[left_jump];	
+			unsigned int left_idx = _grp_ctx.main_queue.partial_map[left_jump];	
 			if( left_idx != STASH_SIZE ){
 				space = WORK_GROUP_SIZE - _grp_ctx.stash[left_idx].count;
 			}
 		}
 		*/
-		if( (_grp_ctx.stash_count >= (STASH_SIZE-2)) ) { //&& (space < delta) ){
-			if(_grp_ctx.link_stash_count < 2){
-				fill_stash_links(2);
+		if( stash_overfilled() ) { //&& (space < delta) ){
+			if(_grp_ctx.link_stash_count < STASH_MARGIN){
+				fill_stash_links(STASH_MARGIN);
 			}
 			//printf("{Spilling for call.}");
-			spill_stash(STASH_SIZE-3);
+			spill_stash(STASH_HIGH_WATER-1);
 		}
 		#endif
 
 	}
 
 
-	 __device__  void async_call_stash_prep(OpDisc func_id, int depth_delta, unsigned int delta,
+	 __device__  void async_call_stash_prep(RemapQueue& dst, OpDisc func_id, int depth_delta, unsigned int delta,
 		unsigned int &left, unsigned int &left_start, unsigned int &right
 	){
 
@@ -2673,39 +3147,39 @@ class HarmonizeProgram
 			// If there is a partially filled link to be filled, assign that to the left index
 			*/
 			if(left_jump != PART_ENTRY_COUNT){
-				//db_printf("A\n");
-				left = _grp_ctx.partial_map[left_jump];
+				db_printf("(%d:A)",blockIdx.x);
+				left = dst.partial_map[left_jump];
 			}
 
 			unsigned int left_count;
 			if(left == STASH_SIZE){
-				//db_printf("B\n");
 				left = claim_empty_slot();
-				_grp_ctx.stash_count += 1;
-				db_printf("Updated stash count: %d\n",_grp_ctx.stash_count);
+				dst.count += 1;
+				db_printf("(%d:B+1->%d)",blockIdx.x,dst.count);
+				db_printf("Updated stash count: %d\n",dst.count);
 				_grp_ctx.stash[left].id    = func_id;
-				_grp_ctx.partial_map[left_jump] = left;
+				dst.partial_map[left_jump] = left;
 				left_count = 0;
 			} else {
 				left_count = _grp_ctx.stash[left].count;
 			}
 
 			if ( (left_count + delta) > WORK_GROUP_SIZE ){
-				//db_printf("C\n");
 				right = claim_empty_slot();
-				_grp_ctx.stash_count += 1;
-				db_printf("Updated stash count: %d\n",_grp_ctx.stash_count);
+				dst.count += 1;
+				db_printf("(%d:C+1->%d)",blockIdx.x,dst.count);
 				_grp_ctx.stash[right].count = left_count+delta - WORK_GROUP_SIZE;
 				_grp_ctx.stash[right].id    = func_id;
-				insert_full_slot(left);
-				_grp_ctx.partial_map[left_jump] = right;
+				insert_full_slot(dst,left);
+				dst.partial_map[left_jump] = right;
 				_grp_ctx.stash[left].count = WORK_GROUP_SIZE;
 			} else if ( (left_count + delta) == WORK_GROUP_SIZE ){
-				//db_printf("D\n");
-				_grp_ctx.partial_map[left_jump] = STASH_SIZE;
-				insert_full_slot(left);
+				db_printf("(%d:D)",blockIdx.x);
+				dst.partial_map[left_jump] = STASH_SIZE;
+				insert_full_slot(dst,left);
 				_grp_ctx.stash[left].count = WORK_GROUP_SIZE;
 			} else {
+				db_printf("(%d:E)",blockIdx.x);
 				_grp_ctx.stash[left].count = left_count + delta;
 			}
 
@@ -2734,12 +3208,21 @@ class HarmonizeProgram
 		unsigned int index = util::warp_inc_scan();
 		unsigned int delta = util::active_count();
 
+
+		#ifdef BARRIER_SPILL
+		if( stash_overfilled() ) { //&& (space < delta) ){
+			_grp_ctx.spill_barrier.union_await<false>(*this,func_id,promise);
+			return;
+		}
+		#else
 		async_call_stash_dump(func_id, depth_delta, delta);
+		#endif
+
 
 		__shared__ unsigned int left, left_start, right;
 
 
-		async_call_stash_prep(func_id,depth_delta,delta,left,left_start,right);
+		async_call_stash_prep(_grp_ctx.main_queue,func_id,depth_delta,delta,left,left_start,right);
 	
 
 		/*
@@ -2760,12 +3243,11 @@ class HarmonizeProgram
 
 	}
 
-
 	/*
 	// Like async_call, but allows for one to hand in the underlying type corresponding to a function id directly
 	*/
-	template<typename TYPE>
-	 __device__  void async_call_cast(int depth_delta, Promise<TYPE> param_value){
+	template<typename TYPE, typename... ARGS>
+	 __device__  void async_call_cast(int depth_delta, ARGS... args){
 
 		beg_time(7);
 		unsigned int active = __activemask();
@@ -2777,15 +3259,30 @@ class HarmonizeProgram
 		unsigned int index = util::warp_inc_scan();
 		unsigned int delta = util::active_count();
 
+		#ifdef BARRIER_SPILL
+		if( stash_overfilled() ) { //&& (space < delta) ){
+			beg_time(8);
+			_grp_ctx.spill_barrier.await<false>(*this,Promise<TYPE>(args...));
+			end_time(8);
+			return;
+		}
+		#else
 		beg_time(8);
 		async_call_stash_dump(Lookup<TYPE>::type::DISC, depth_delta, delta);
 		end_time(8);
+		#endif
 
 		__shared__ unsigned int left, left_start, right;
 
 
+		#ifdef ASYNC_LOADS
+		RemapQueue& dst_queue = has_load(args...) ? _grp_ctx.load_queue : _grp_ctx.main_queue;
+		#else
+		RemapQueue& dst_queue = _grp_ctx.main_queue;
+		#endif
+
 		beg_time(9);
-		async_call_stash_prep(Lookup<TYPE>::type::DISC,depth_delta,delta,left,left_start,right);
+		async_call_stash_prep(dst_queue,Lookup<TYPE>::type::DISC,depth_delta,delta,left,left_start,right);
 		end_time(9);
 		
 		/*
@@ -2795,16 +3292,74 @@ class HarmonizeProgram
 		__syncwarp(active);
 		if( (left_start + index) >= WORK_GROUP_SIZE ){
 			//db_printf("Overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
-			_grp_ctx.stash[right].promises[left_start+index-WORK_GROUP_SIZE].template cast<TYPE>() = param_value;
+			#ifdef ASYNC_LOADS
+			_grp_ctx.stash[right].promises[left_start+index-WORK_GROUP_SIZE].template cast<TYPE>().async_load(*this,args...);
+			#else
+			_grp_ctx.stash[right].promises[left_start+index-WORK_GROUP_SIZE].template cast<TYPE>() = Promise<TYPE>(args...);
+			#endif
 		} else {
 			//db_printf("Non-overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
-			_grp_ctx.stash[left].promises[left_start+index].template cast<TYPE>() = param_value;
+			#ifdef ASYNC_LOADS
+			_grp_ctx.stash[left].promises[left_start+index].template cast<TYPE>().async_load(*this,args...);
+			#else
+			_grp_ctx.stash[left].promises[left_start+index].template cast<TYPE>() = Promise<TYPE>(args...);
+			#endif
 		}
 		__syncwarp(active);	
 		end_time(7);
 
 	}
 
+	
+	template<typename TYPE>
+	 __device__  void async_call_cast(int depth_delta, Promise<TYPE> promise){
+
+		beg_time(7);
+		unsigned int active = __activemask();
+
+		/*
+		// Calculate how many promises are being queued as well as the assigned index of the 
+		// current thread's promise in the write to the stash.
+		*/
+		unsigned int index = util::warp_inc_scan();
+		unsigned int delta = util::active_count();
+
+		#ifdef BARRIER_SPILL
+		if( stash_overfilled() ) { //&& (space < delta) ){
+			beg_time(8);
+			_grp_ctx.spill_barrier.await<false>(*this,promise);
+			end_time(8);
+			return;
+		}
+		#else
+		beg_time(8);
+		async_call_stash_dump(Lookup<TYPE>::type::DISC, depth_delta, delta);
+		end_time(8);
+		#endif
+
+		__shared__ unsigned int left, left_start, right;
+
+
+		beg_time(9);
+		async_call_stash_prep(_grp_ctx.main_queue,Lookup<TYPE>::type::DISC,depth_delta,delta,left,left_start,right);
+		end_time(9);
+		
+		/*
+		// Write the promise into the appropriate part of the stash, writing into the left link 
+		// when possible and spilling over into the right link when necessary.
+		*/
+		__syncwarp(active);
+		if( (left_start + index) >= WORK_GROUP_SIZE ){
+			//db_printf("Overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
+			_grp_ctx.stash[right].promises[left_start+index-WORK_GROUP_SIZE].template cast<TYPE>() = promise;
+		} else {
+			//db_printf("Non-overflow: id: %d, left: %d, left_start: %d, index: %d\n",threadIdx.x,left,left_start,index);
+			_grp_ctx.stash[left].promises[left_start+index].template cast<TYPE>() = promise;
+		}
+		__syncwarp(active);	
+		end_time(7);
+
+	}
 
 
 	template<typename TYPE>
@@ -2893,7 +3448,7 @@ class HarmonizeProgram
 		db_printf("active count: %d, add count: %d\n",acount,add_count);
 
 		
-		db_printf("\n\nprior stash count: %d\n\n\n",_grp_ctx.stash_count);
+		db_printf("\n\nprior stash count: %d\n\n\n",_grp_ctx.main_queue.count);
 		//*
 		for(unsigned int i=0; i< add_count; i++){
 			//PromiseUnionType promise = _dev_ctx.arena[the_index].promises[i];
@@ -2904,7 +3459,7 @@ class HarmonizeProgram
 		//PromiseType promise = _dev_ctx.arena[the_index].data.data[0];
 		//async_call(func_id,0,promise);
 
-		db_printf("\n\nafter stash count: %d\n\n\n",_grp_ctx.stash_count);
+		db_printf("\n\nafter stash count: %d\n\n\n",_grp_ctx.main_queue.count);
 
 
 		insert_stash_link(link_index);
@@ -2954,7 +3509,7 @@ class HarmonizeProgram
 			threashold = (threashold > STASH_SIZE) ? STASH_SIZE : threashold;
 			//printf("{Filling to %d @ %d}",threashold,blockIdx.x);
 			
-			unsigned int gather_count = (threashold < _grp_ctx.stash_count) ? 0  : threashold - _grp_ctx.stash_count;
+			unsigned int gather_count = (threashold < _grp_ctx.main_queue.count) ? 0  : threashold - _grp_ctx.main_queue.count;
 			if( (STASH_SIZE - _grp_ctx.link_stash_count) < gather_count){
 				unsigned int spill_thresh = STASH_SIZE - gather_count;
 				spill_stash_links(spill_thresh);
@@ -3048,7 +3603,7 @@ class HarmonizeProgram
 				#else
 				db_printf("About to pop promises\n");
 				while(	( ! queue.is_null() ) 
-				     && (_grp_ctx.stash_count < threashold)
+				     && (_grp_ctx.main_queue.count < threashold)
 				     && (_grp_ctx.link_stash_count < STASH_SIZE) 
 				){
 					beg_time(13);
@@ -3086,7 +3641,7 @@ class HarmonizeProgram
 					break;
 				}
 				#else
-				if( _grp_ctx.stash_count >= threashold ){
+				if( _grp_ctx.main_queue.count >= threashold ){
 					break;
 				}
 				#endif
@@ -3098,9 +3653,9 @@ class HarmonizeProgram
 
 
 			#ifdef PARACON
-			if(_grp_ctx.busy && (_grp_ctx.stash_count == 0) && (taken == 0) ){
+			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0) && (taken == 0) ){
 			#else
-			if(_grp_ctx.busy && (_grp_ctx.stash_count == 0)){
+			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0)){
 			#endif
 				unsigned int depth_live = atomicSub(&(_dev_ctx.stack->depth_live),1);
 				//printf("{unbusy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
@@ -3172,9 +3727,9 @@ class HarmonizeProgram
 
 		if(util::current_leader()){
 
-			if(_grp_ctx.full_head != STASH_SIZE){
+			if(_grp_ctx.main_queue.full_head != STASH_SIZE){
 				_grp_ctx.exec_head = claim_full_slot();
-				_grp_ctx.stash_count -= 1;
+				_grp_ctx.main_queue.count -= 1;
 				result = true;
 				//db_printf("Found full slot.\n");
 			} else {
@@ -3183,7 +3738,7 @@ class HarmonizeProgram
 				unsigned int best_slot = STASH_SIZE;
 				unsigned int best_count = 0;
 				for(int i=0; i < FN_ID_COUNT; i++){
-					unsigned int slot = _grp_ctx.partial_map[i];
+					unsigned int slot = _grp_ctx.main_queue.partial_map[i];
 					
 					if( (slot != STASH_SIZE) && (_grp_ctx.stash[slot].count > best_count)){
 						best_id = i;
@@ -3197,8 +3752,8 @@ class HarmonizeProgram
 				if(result){
 					//db_printf("Found partial slot.\n");
 					_grp_ctx.exec_head = best_slot;
-					_grp_ctx.partial_map[best_id] = STASH_SIZE;
-					_grp_ctx.stash_count -=1;
+					_grp_ctx.main_queue.partial_map[best_id] = STASH_SIZE;
+					_grp_ctx.main_queue.count -=1;
 				}
 			}
 
@@ -3209,6 +3764,70 @@ class HarmonizeProgram
 
 	}
 
+
+	#ifdef ASYNC_LOADS
+	 __device__ void force_full_async_loads() {
+
+		_grp_ctx.load_barrier.arrive_and_wait();
+		__syncwarp();
+		#if 1
+		if (util::current_leader())  {
+			unsigned char iter = _grp_ctx.load_queue.full_head;
+			if( iter != STASH_SIZE ){
+				unsigned int main_delta = 1;
+				unsigned char next = _grp_ctx.stash[iter].next.adr;
+				while( next != STASH_SIZE ){
+					iter = next;
+					next = _grp_ctx.stash[iter].next.adr;
+					main_delta += 1;
+				}
+				_grp_ctx.stash[iter].next = _grp_ctx.main_queue.full_head;
+				_grp_ctx.main_queue.full_head = _grp_ctx.load_queue.full_head;
+				_grp_ctx.load_queue.full_head = STASH_SIZE;
+				_grp_ctx.main_queue.count += main_delta;
+				_grp_ctx.load_queue.count -= main_delta;
+			}
+			//printf("(%d:f-%d)",blockIdx.x,_grp_ctx.main_queue.count);
+		}
+		#else 
+		if( util::current_leader() ){
+			_grp_ctx.main_queue.full_head = _grp_ctx.load_queue.full_head;
+			_grp_ctx.load_queue.full_head = STASH_SIZE;
+			_grp_ctx.main_queue.count += _grp_ctx.load_queue.count;
+			_grp_ctx.load_queue.count = 0;
+			printf("(%d:f-%d)",blockIdx.x,_grp_ctx.main_queue.count);
+		}
+		#endif
+		__syncwarp();
+
+	 }
+	 __device__ void force_async_loads() {
+
+		force_full_async_loads();
+		
+		for(int i=0; i < FN_ID_COUNT; i++){
+			unsigned char idx = _grp_ctx.load_queue.partial_map[i];
+			if( idx != STASH_SIZE){
+				LinkType& link = _grp_ctx.stash[idx];
+				if( threadIdx.x < link.count ){
+					async_call(0,link.id,link.promises[threadIdx.x]);
+				}
+				__syncwarp();
+				if( util::current_leader() ){
+					insert_empty_slot(idx);
+					_grp_ctx.load_queue.partial_map[i] = STASH_SIZE;
+					//printf("(%d:%d)\n",blockIdx.x,idx);
+				}
+			}
+		}
+		__syncwarp();
+		if(util::current_leader()){
+			init(&_grp_ctx.load_barrier,WORK_GROUP_SIZE);
+			_grp_ctx.load_queue.count = 0;
+		}
+
+	 }
+	#endif
 
 
 
@@ -3231,19 +3850,40 @@ class HarmonizeProgram
 		//*
 
 
-		beg_time(1);
-		
-		if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.full_head == STASH_SIZE) ) { 
-			fill_stash(STASH_SIZE-2,false);
+		if( stash_overfilled() ) {
+			#ifdef BARRIER_SPILL
+			if( util::current_leader() ){
+				_grp_ctx.spill_barrier.release_full(*this);
+			}
+			#endif
+
+			if(_grp_ctx.link_stash_count < STASH_MARGIN){
+				fill_stash_links(STASH_MARGIN);
+			}
+			//printf("{Spilling for call.}");
+			spill_stash(STASH_HIGH_WATER-1);
 		}
-		
+
+
+		beg_time(1);
+
+		#ifdef ASYNC_LOADS
+		if( (_grp_ctx.main_queue.full_head == STASH_SIZE) && (_grp_ctx.load_queue.full_head != STASH_SIZE) ){
+			force_full_async_loads();
+		}
+		#endif
+
+		if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
+			fill_stash(STASH_HIGH_WATER,false);
+		}
+
 		end_time(1);
 
 		beg_time(5);
 		unsigned int make_count = 0;
-		while ( _grp_ctx.can_make_work && (_grp_ctx.full_head == STASH_SIZE) ) {
+		while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
 			_grp_ctx.can_make_work = PROGRAM_SPEC::make_work(*this);
-			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.stash_count != 0 ) ){
+			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
 				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
 				_grp_ctx.busy = true;
 				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
@@ -3251,24 +3891,26 @@ class HarmonizeProgram
 			make_count++;
 			__syncwarp();
 		}
-		if( util::current_leader() ){
-			printf("Make count = %d\n",make_count);
-		}
 		end_time(5);
 
+		#ifdef ASYNC_LOADS
+		if( (_grp_ctx.main_queue.full_head == STASH_SIZE) && (_grp_ctx.load_queue.count > 0) ){
+			force_async_loads();
+		}
+		#endif
 
 		#if 1
 
 		/*
-		if ( _grp_ctx.full_head == STASH_SIZE ) {
+		if ( _grp_ctx.main_queue.full_head == STASH_SIZE ) {
 			fill_stash(STASH_SIZE-2);
 		}
 		*/
 		#else
-		if(_grp_ctx.full_head == STASH_SIZE){
+		if(_grp_ctx.main_queue.full_head == STASH_SIZE){
 			if( !_grp_ctx.scarce_work ){
 				fill_stash(STASH_SIZE-2);
-				if( util::current_leader() && (_grp_ctx.full_head == STASH_SIZE) ){
+				if( util::current_leader() && (_grp_ctx.main_queue.full_head == STASH_SIZE) ){
 					_grp_ctx.scarce_work = true;
 				}
 			}
@@ -3280,17 +3922,19 @@ class HarmonizeProgram
 		#endif
 		// */
 
+		#if 0
 		if( util::current_leader() ){
 			unsigned int ch_rs = _dev_ctx.stack->frames[0].children_residents;
 			printf("{group %d children_residents=(%d,%d), can_make_work=%d}\n",blockIdx.x,(ch_rs & 0xFFFF0000)>>16u, ch_rs & 0xFFFF,_grp_ctx.can_make_work);
 		}
+		#endif
 		beg_time(2);
 		if( !advance_stash_iter() ){
 			/*
 			// No more work exists in the stash, so try to fetch it from the stack.
 			*/
 			beg_time(10);
-			fill_stash(STASH_SIZE-2,true);
+			fill_stash(STASH_HIGH_WATER,true);
 			end_time(10);
 
 			if( _grp_ctx.keep_running && !advance_stash_iter() ){
@@ -3360,6 +4004,10 @@ class HarmonizeProgram
 
 		if(threadIdx.x == 0){
 
+			#ifdef BARRIER_SPILL
+			_grp_ctx.spill_barrier.release(*this);
+			#endif
+
 			q_printf("CLEANING UP\n");
 			clear_exec_head();
 
@@ -3425,7 +4073,7 @@ class HarmonizeProgram
 	// calling the pull_runtime to prevent promise duplication.
 	//
 	*/
-	__device__ void init(){
+	__device__ void init_program(){
 
 		/* Initialize per-thread resources */
 		init_thread();
@@ -3894,9 +4542,12 @@ class HarmonizeProgram
 
 	
 	template<typename TYPE,typename... ARGS>
-	 __device__  void async(ARGS... args){
-		async_call_cast<TYPE>(0,Promise<TYPE>(args...));
+	__device__ void async(ARGS... args){
+		async_call_cast<TYPE>(0,args...);
 	}
+
+
+
 
 	template<typename TYPE,typename... ARGS>
 	__device__  void sync(ARGS... args){
@@ -3935,7 +4586,7 @@ __global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename Pr
 
 	ProgType prog(_dev_ctx,_grp_ctx,_thd_ctx,device,group,thread);
 
-	prog.init();
+	prog.init_program();
 }
 
 
@@ -4321,15 +4972,24 @@ class EventProgram
 
 	}
 
-
 	template<typename TYPE,typename... ARGS>
 	__device__  void async(ARGS... args){
 		async_call_cast<TYPE>(0,Promise<TYPE>(args...));
 	}
 
+	template<typename TYPE>
+	__device__  void async_call(Promise<TYPE> promise){
+		async_call_cast<TYPE>(0,promise);
+	}
+
 	template<typename TYPE,typename... ARGS>
 	__device__  void sync(ARGS... args){
 		immediate_call_cast<TYPE>(Promise<TYPE>(args...));
+	}
+
+	template<typename TYPE>
+	__device__  void sync_call(Promise<TYPE> promise){
+		immediate_call_cast<TYPE>(0,promise);
 	}
 	
 	template<typename TYPE>

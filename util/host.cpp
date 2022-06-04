@@ -82,7 +82,7 @@ class DevBuf {
 
 	__host__ void operator<<(std::vector<T> &other) {
 		if( other.size() != inner->size ){
-			resize(other->size);
+			resize(other.size());
 		}
 		auto_throw( cudaMemcpy(
 			inner->adr,

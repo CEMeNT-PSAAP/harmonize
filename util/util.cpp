@@ -67,13 +67,13 @@ __device__ unsigned long long int leading_zeros(unsigned long long int value) {
 // instructions performed to manage the runtime state.
 */
 #if 1 
-__device__ unsigned int random_uint(unsigned int &state){
+__host__ __device__ unsigned int random_uint(unsigned int &state){
 
 	state = (0x10DCDu * state + 1u);
 	return state;
 
 }
-__device__ unsigned long long int random_uint(unsigned long long int &state){
+__host__ __device__ unsigned long long int random_uint(unsigned long long int &state){
 
 	state = ( 2971215073 * state + 12345u);
 	return state;

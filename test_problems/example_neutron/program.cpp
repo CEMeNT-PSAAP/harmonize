@@ -88,11 +88,11 @@ struct MyProgramSpec {
 
 	// The number of queues used by the asynchronous method to store valid work in main memory.
 	// The current default, if undecleared, is 32
-	static const size_t FRAME_SIZE = 8191;
+	static const size_t FRAME_SIZE = 16069;//8191;
 	
 	// The number of queues used by the asynchronous method to store unused intermediate data storage.
 	// The current default, if undecleared, is 32
-	static const size_t POOL_SIZE  = 8191;
+	static const size_t POOL_SIZE  = 16069;//8191;
 
 
 
