@@ -7,7 +7,7 @@ using namespace util;
 struct Step;
 
 
-const size_t DATA_SIZE = 32;
+const size_t DATA_SIZE = 4;
 
 struct Data {
 	unsigned int values[DATA_SIZE];
@@ -34,7 +34,7 @@ struct IterState {
 };
 
 
-const size_t LOOP_COUNT = 128;
+const size_t LOOP_COUNT = 1;
 
 struct Step {
 
@@ -131,7 +131,10 @@ int main(int argc, char *argv[]){
 
 	using host::check_error;
 
+	const int samp_count = 1;
+	float total = 0;
 
+	for( int i=0; i<samp_count; i++) {
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Gathering Arguments
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -247,9 +250,16 @@ int main(int argc, char *argv[]){
 	for(unsigned int i=0; i<output_size; i++){
 		sum += result[i];
 	}
-	printf("Sum is: %d\n",sum);
+	if( sum == 0 ){
+		printf("Sum is: %d\n",sum);
+	}
+	//printf("Sum is: %d\n",sum);
 
-	printf("\nProcessing took %f milliseconds\n",msec_total);
+	//printf("\nProcessing took %f milliseconds\n",msec_total);
+	total += msec_total;
+	}
+
+	printf("%f",total/samp_count);
 
 	
 

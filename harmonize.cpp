@@ -60,39 +60,67 @@
 //!
 //! Forward declaring the more fundamental types of Harmonize
 //!
+
+//! The type used as a discriminant (identifying value) between operation
+//! types.
 using OpDisc = unsigned int;
 
+//! The `OpUnion` template struct serves to represent a set of operations as a type
+//! so that it may be passed as a template parameter.
 template<typename... TYPES>
 struct OpUnion {};
 
+//! The `Promise` template struct represents all information associated with an async
+//! call to its opertion type, including all passed arguments as well as return
+//! addresses.
 template<typename OPERATION>
 struct Promise;
 
+//! The `PromiseUnion` template struct represents a union across a set of different
+//! promise types. Through this template, a field can generically store data
+//! corresponding to a variety of different async calls.
 template <typename OP_UNION>
 union PromiseUnion;
 
+//! The `PromiseEnum` template struct is simply the combination of a `PromiseUnion` and
+//! a discriminant that annotates the contained type.
 template <typename OP_UNION>
 struct PromiseEnum;
 
+//! The `VoidState` struct is an empty struct, used as a default state type, for states
+//! that are not defined the supplied program specification.
 struct VoidState {};
 
+//! The `ReturnOp` operation type is an internal type used to represent the resolution
+//! of dependencies and the fullfilment of futures.
 struct ReturnOp;
 
+//! The `RamappingBarrier` template struct is a barrier that can store an arbitrary number
+//! of promises with any operation type contained by its operation set, automatically
+//! coalescing promises of equivalent type into work links. 
 template<typename OP_SET, typename ADR_TYPE = unsigned int>
 struct RemappingBarrier;
 
+//! The `UnitBarrier` template struct is a barrier that can hold up to one promise with
+//! an operation type contained by its operation set. 
 template<typename OP_SET, typename ADR_TYPE = unsigned int>
 struct UnitBarrier;
 
+//! The `Future` template struct ties a value field of a certain type to a barrier, allowing
+//! operations to await the definition of the value.
 template<typename TYPE, typename BARRIER>
 struct Future;
 
 
 
-
+//! The `OpUnionLookup` template struct is used to derive type information about
+//! `OpUnion` specializations, particularly whether or not a given type is contained
+//! within the union.
 template <typename QUERY, typename OP_UNION>
 struct OpUnionLookup;
 
+//! The base case of the `OpUnionLookup` template struct. This terminates all recursively
+//! driven definitions from non-base cases.
 template <typename QUERY>
 struct OpUnionLookup <QUERY,OpUnion<>>
 {
@@ -102,6 +130,10 @@ struct OpUnionLookup <QUERY,OpUnion<>>
 	static const OpDisc DISC      = DEPTH;
 };
 
+//! The recursive case of the `OpUnionLookup` template struct. This struct reports information
+//! such as whether or not a type is contained within the supplied `OpUnion` specialization,
+//! how many operations are stored in the `OpUnion`, and what the discriminant value of a
+//! given operation type is for the union.
 template <typename QUERY, typename HEAD, typename... TAIL>
 struct OpUnionLookup <QUERY, OpUnion<HEAD, TAIL...> >
 {
@@ -115,7 +147,9 @@ struct OpUnionLookup <QUERY, OpUnion<HEAD, TAIL...> >
 
 
 
-
+//! The `OpUnionAppend` template struct simply defines an internal type which is the
+//! concatenation of the first type parameter onto the second `OpUnion` specialization
+//! type parameter.
 template<typename HEAD, typename TAIL_UNION>
 struct OpUnionAppend;
 
@@ -126,7 +160,8 @@ struct OpUnionAppend<HEAD,OpUnion<TAIL...>>
 };
 
 
-
+//! The `OpUnionPair` template is used to determine information about pairs of
+//! `OpUnion` specializations at compile time.
 template <typename LEFT, typename RIGHT>
 struct OpUnionPair;
 
@@ -135,6 +170,7 @@ struct OpUnionPair<OpUnion<>,OpUnion<>>
 {
 	static const bool LEFT_SUBSET  = true;
 	static const bool RIGHT_SUBSET = true;
+	static const bool EQUAL        = true;
 };
 
 template <typename LEFT_HEAD, typename... LEFT_TAIL>
@@ -142,6 +178,7 @@ struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<>>
 {
 	static const bool LEFT_SUBSET  = false;
 	static const bool RIGHT_SUBSET = true;
+	static const bool EQUAL        = false;
 };
 
 template <typename RIGHT_HEAD, typename... RIGHT_TAIL>
@@ -149,8 +186,8 @@ struct OpUnionPair<OpUnion<>,OpUnion<RIGHT_HEAD,RIGHT_TAIL...>>
 {
 	static const bool LEFT_SUBSET  = true;
 	static const bool RIGHT_SUBSET = false;
+	static const bool EQUAL        = false;
 };
-
 
 template <typename LEFT_HEAD, typename... LEFT_TAIL, typename RIGHT_HEAD, typename... RIGHT_TAIL>
 struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<RIGHT_HEAD,RIGHT_TAIL...>>
@@ -162,12 +199,14 @@ struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<RIGHT_HEAD,RIGHT_TAIL
 
 	static const bool LEFT_SUBSET  = OpUnionLookup<LEFT_HEAD,Right>::CONTAINED && OpUnionPair<LeftTail,Right>::LEFT_SUBSET;
 	static const bool RIGHT_SUBSET = OpUnionLookup<RIGHT_HEAD,Left>::CONTAINED && OpUnionPair<RightTail,Left>::LEFT_SUBET;
-	static const bool EQUAL = LEFT_SUBSET && RIGHT_SUBSET;
+	static const bool EQUAL        = LEFT_SUBSET && RIGHT_SUBSET;
 };
 
 
 
-
+//! The `OpReturnFilter` tempalate struct is used to find the subset of a given
+//! operation union that has a given return type. This is useful for checking
+//! the validity of promises being used as return values for an operation.
 template<typename RETURN, typename OP_UNION>
 struct OpReturnFilter;
 
@@ -200,6 +239,9 @@ struct OpReturnFilter<RETURN,OpUnion<HEAD,TAIL...>>
 
 
 
+//! A `TaggedSemaphore` is a semaphore that is tagged with information
+//! identifying the type that contains the tag. This is useful for determining
+//! the type of a barrier/future that contains the semaphore.
 struct TaggedSemaphore {
 	unsigned int sem;
 	unsigned int tag;
@@ -213,7 +255,10 @@ struct TaggedSemaphore {
 
 
 
-
+//! The `LazyLoad` template struct wraps a reference to a value of a type mathcing
+//! its type parameter. Instances of this template struct represent a parameter
+//! to an asynchronous call that should be filled in by an asynchronous load from
+//! a location in global memory.
 template <typename TYPE>
 struct LazyLoad {
 	using Type = TYPE;
@@ -230,18 +275,18 @@ struct LazyLoad {
 
 
 
-
+//! The `has_load` template function returns true if and only if the supplied
+//! parameters contains at least one argument that specializes the `LazyLoad`
+//! template struct.
 template <typename... TYPES>
 __host__ __device__ bool has_load(TYPES...){
 	return false;
 }
 
-
 template <typename HEAD, typename... TAIL>
 __host__ __device__ bool has_load(HEAD head, TAIL... tail){
 	return has_load(tail...);
 }
-
 
 template <typename HEAD, typename... TAIL>
 __host__ __device__ bool has_load(LazyLoad<HEAD> head, TAIL... tail){
@@ -250,6 +295,9 @@ __host__ __device__ bool has_load(LazyLoad<HEAD> head, TAIL... tail){
 
 
 
+//! The `ArgTuple` template struct represents the storage of an arbitrary
+//! number of fields of arbitrary type, and is used to store the argument
+//! data of asynchonous calls inside promises.
 template <typename... TAIL>
 struct ArgTuple;
 
@@ -287,6 +335,11 @@ struct ArgTuple <HEAD, TAIL...>
 
 
 	#ifdef ASYNC_LOADS
+	//! If asynchronous loading is enabled, an `ArgTuple` can be filled in with a
+	//! mixture of direct value write and asynchronous loads. This is done through
+	//! the async_load funtion, which direcctly writes all arguments passed in by
+	//! value and initiates async loads for all arguments passed in as `LazyLoad`
+	//! structs.
 	template<typename PROGRAM, typename... LOAD_TAIL>
 	__device__ void async_load(PROGRAM prog, HEAD h, LOAD_TAIL... t)
 	{
@@ -305,6 +358,10 @@ struct ArgTuple <HEAD, TAIL...>
 };
 
 
+
+//! The `OpType` template struct is used to deduce the arguments and return
+//! type of the supplied template argument. This is used to determine information
+//! about the function signatures of operations.
 template<typename TYPE>
 struct OpType;
 
@@ -318,7 +375,13 @@ struct OpType < RETURN (*) (ARGS...) > {
 
 
 
-
+//! The `ReturnAdr` template struct is used to represent the destination
+//! semaphore and (if applicable) future values that must be decremented
+//! or filled in to resolve an operation. For void return types, only
+//! a semaphore address is stored. In cases where there is no destination
+//! value field, the value address is set to NULL. Likewise, promises
+//! that have no barrier/future to resolve into are given a NULL semaphore
+//! address.
 template<typename TYPE>
 struct ReturnAdr {
 	using Type = TYPE;
@@ -336,6 +399,11 @@ struct ReturnAdr<void> {
 
 
 
+//! The `Return` template struct is used to represent the set of all types
+//! that can be returned from an operation's `eval` function. This includes
+//! returning by value, returning with a promise that returns the appropriate
+//! type, or returning a future that will eventually define a value of the
+//! appropriate type.
 template <typename PROGRAM, typename TYPE>
 struct Return {
 
@@ -363,7 +431,10 @@ struct Return {
 	Form form;
 	Data data;
 
-
+	//! The `return_guard` function causes a compile time error when promises that do
+	//! not belong in the operation set of a `Return` are passed in as initializing
+	//! arguments. This helps to replace the more cryptic errors that come about when
+	//! trying to pass in an inappropriate `Promise` type.
 	template<typename OP_TYPE>
 	__host__ __device__ static constexpr Promise<OP_TYPE> return_guard(Promise<OP_TYPE> promise)
 	{	
@@ -416,6 +487,8 @@ struct Return {
 };
 
 
+//! The `Promise` template struct represents the arguments and return information associated
+//! with an asynchronous call to the input operation type parameter.
 template<typename OPERATION>
 struct Promise
 {
@@ -426,6 +499,9 @@ struct Promise
 	ReturnAdr<Return> ret;
 	Args args;
 
+	//! The `inner_eval` template function is responsible for unpacking the components of an
+	//! `arg_tuple` so that they may be passed to an operation's `eval` function as individual
+	//! arguments.
 	template<typename PROGRAM, typename... TUPLE_ARGS, typename... UNROLL_ARGS>
 	__device__ Return inner_eval(PROGRAM program, ArgTuple<TUPLE_ARGS...> tuple_args, UNROLL_ARGS... unroll_args)
 	{
@@ -440,18 +516,24 @@ struct Promise
 	}
 
 
+	//! The call operator accepts the executing program as its only input and passes its
+	//! argument values alongside the program into the operation's `eval` function.
 	template<typename PROGRAM>
 	__device__ Return operator() (PROGRAM program) {
 		return inner_eval(program,args);
 	}
 
-
+	//! Instances of any given `Promise` specialization are constructed by passing in the
+	//! values of all arguments in the corresponding operation's `eval` function signature.
 	template<typename... ARGS>
 	__host__ __device__ Promise<OPERATION> ( ARGS... a ) : args(a...) {}	
 
 
-
 	#ifdef ASYNC_LOADS
+	//! If asynchronous loading is enabled, a `Promise` can be filled in (after default
+	//! initialization) with a pack of argument values intermixed with appropriate
+	//! `LazyLoad` values. This fills in all arguments passed in by value and initiates
+	//! the asynchronous loading of all arguments replaced with `LazyLoad` structs.
 	template<typename PROGRAM, typename... ARGS>
 	__device__ void async_load ( PROGRAM prog, ARGS... a ) {
 		args.async_load(prog, a...);
@@ -520,6 +602,10 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	public:
 
+	//! For some compilers, a union cannot diretly contain static const values.
+	//! To get around this, we wrap our compile time type information for PromiseUnions
+	//! with internl types such as the `Info` struct type or the `Looup` template
+	//! struct.
 	struct Info {
 		static const OpDisc COUNT = sizeof...(TAIL) + 1;
 		static const OpDisc INDEX = OpUnionLookup<HEAD,OpSet>::DISC;
@@ -529,6 +615,9 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 	struct Lookup { typedef OpUnionLookup<TYPE,OpSet> type; };
 
 
+	//! The `cast` template function allows a `PromiseUnion` to be cast to any `Promise`
+	//! specialization with a corresponding operation type contained by the union's
+	//! operation set.
 	template <typename TYPE>
 	__host__  __device__ typename std::enable_if<
 		std::is_same<TYPE,HEAD>::value, 
@@ -547,6 +636,9 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 		return tail_form.template cast<TYPE>();
 	}
 
+	//! This specialization of the `cast` template function provide a useful compiler
+	//! error for cases when the supplied operation type is not contained by the operation
+	//! set of the `PromiseUnion`
 	template <typename TYPE>
 	__host__  __device__ typename std::enable_if<
 		(!std::is_same<TYPE,HEAD>::value) && (!OpUnionLookup<TYPE,TailOpSet>::CONTAINED),
@@ -560,6 +652,10 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 	}
 
 
+	//! The `rigid_eval` template function evaluates the contained union as a `Promise`
+	//! corresponding to the supplied operation type. This allows the compiler to deduce
+	//! which type of operation is being performed and optimize out branches it knows
+	//! will never be taken.
 	template <typename PROGRAM, typename TYPE >
 	__host__  __device__ typename std::enable_if<
 		std::is_same<TYPE,HEAD>::value, 
@@ -597,6 +693,10 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 	}
 
 
+	//! The `loose_eval` template function evaluates the contained union as a `Promise`
+	//! corresponding to an operation with the supplied discriminant value. This should
+	//! be used only in situations where the type of the operation is not known at
+	//! compile time.
 	template <typename PROGRAM>
 	__host__  __device__ void loose_eval (
 		PROGRAM program,
@@ -610,6 +710,9 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	}
 
+
+	//! The copy_as and dyn_copy_as functions copy data from one union to another
+	//! as a particular type of `Promise`.
 	template <typename TYPE>
 	__host__ __device__ void copy_as(PromiseUnion<OpSet>& other){
 		cast<TYPE>() = other.template cast<TYPE>();
@@ -626,6 +729,9 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 	__host__ __device__ PromiseUnion<OpSet> () : tail_form() {}
 
+	//! A `PromiseUnion` can be intialized by a `Promise` of any type contained by
+	//! its operation set. All other `Promise` types cause a compile time error to
+	//! be thrown alongside the helpful message below.
 	template< typename OP_TYPE>
 	__host__ __device__ PromiseUnion<OpSet> ( Promise<OP_TYPE> prom ) {
 		static_assert(
@@ -646,7 +752,9 @@ union PromiseUnion<OpUnion<HEAD, TAIL...>>
 
 
 
-
+//! A `PromiseEnum` is just a tagged version of a `PromiseUnion`, combining the
+//! union type with a discriminant that annotates the type of `Promise` contained
+//! by the union.
 template <typename OP_SET>
 struct PromiseEnum {
 
@@ -711,10 +819,8 @@ struct WorkLink
 	OpDisc         id;
 
 
-	/*
-	// Zeros out a link, giving it a promise count of zero, a null function ID, and sets next
-	// to the given input.
-	*/
+	//! Zeros out a link, giving it a promise count of zero, a null function ID, and sets next
+	//! to the given input.
 	__host__ __device__ void empty(AdrType next_adr){
 
 		next	= next_adr;
@@ -738,7 +844,9 @@ struct WorkLink
 		return promise;
 	}
 
-	
+	//! Appends to the `WorkLink` by an atomic addition to the count field. This is only
+	//! safe if it is already known that the `WorkLink` will have enough space to begin
+	//! with.
 	template<typename OP_TYPE>
 	__device__ bool atomic_append(Promise<OP_TYPE> promise) {
 		unsigned int index = atomicAdd(&count,1);
@@ -752,7 +860,7 @@ struct WorkLink
 
 
 //!
-//! A RemappingBarrier coaleces promises into links in a lock-free manner.
+//! A `RemappingBarrier` coaleces promises into links in a lock-free manner.
 //! Once released, all work in the queue is made available for work groups to
 //! execute and all further appending operations will redirect promises to execution.
 //! After being released, a queue may be reset to a non-released state.
@@ -781,18 +889,27 @@ struct RemappingBarrier {
 	using PairType    = typename PairPack::PairType;
 	#endif
 
+	//! The number of operations contained within the barrier's
+	//! operation set.
 	static const size_t TYPE_COUNT = UnionType::Info::COUNT;
 
+	//! A tagged semaphore that communicates both the release state of the
+	//! barrier, but the type of the barrier as well.
 	TaggedSemaphore semaphore;
 	unsigned int count; 
 
-	QueueType full_list; // Head of the linked list of full links
+	//! A queue that contains all full links created by coalescing promises
+	//! awaiting the release of the barrier.
+	QueueType full_list;
 
-	PairPack partial_table[UnionType::Info::COUNT]; // Points to partial blocks
+	//! A table used to mediate the coalescing of links
+	PairPack partial_table[UnionType::Info::COUNT];
 
 
 	RemappingBarrier<OP_SET,ADR_TYPE>() = default;
 
+	//! Creates a new `RemappingBarrier` with an empty full queue and partial table
+	//! and with a semaphore value initialized to the supplied value.
 	static __host__ __device__ RemappingBarrier<OP_SET,ADR_TYPE> blank(unsigned int sem_val)
 	{
 		RemappingBarrier<OP_SET,ADR_TYPE> result;
@@ -806,6 +923,7 @@ struct RemappingBarrier {
 	}
 
 
+	//! Counts the number of links in the given queue. This is only used for debugging purposes.
 	template<typename PROGRAM>
 	__device__ unsigned int queue_count(PROGRAM program, QueueType queue) {
 		using ProgramType = PROGRAM;
@@ -823,12 +941,13 @@ struct RemappingBarrier {
 	}
 
 
+	//! Releases a queue for execution.
 	template<typename PROGRAM>
 	__device__ void release_queue(PROGRAM program, QueueType queue, AdrType release_count) {
 		using ProgramType = PROGRAM;
 		using LinkType    = typename ProgramType::LinkType;
 		__threadfence();
-		unsigned int true_count = queue_count(program,queue);
+		//unsigned int true_count = queue_count(program,queue);
 		//printf("[%d,%d]: Releasing queue (%d,%d) with count %d with delta %d\n",blockIdx.x,threadIdx.x,queue.get_head().adr,queue.get_tail().adr,true_count,release_count);
 		unsigned int index = util::random_uint(program._thd_ctx.rand_state)%ProgramType::FRAME_SIZE;
 		program.push_promises(0, index, queue, release_count);
@@ -879,6 +998,7 @@ struct RemappingBarrier {
 	}
 
 
+	//! Releases the links in the full list.
 	template<typename PROGRAM>
 	__device__ void release_full(PROGRAM program) {
 		using ProgramType = PROGRAM;
@@ -1044,7 +1164,8 @@ struct RemappingBarrier {
 	}
 
 
-	
+	//! Awaits the barrier with a promise union, using the provided discriminant to determine
+	//! the type of the contained promise.
 	template<bool CAN_RELEASE=true, typename PROGRAM>
 	__device__ void union_await(PROGRAM program, OpDisc disc, typename PROGRAM::PromiseUnionType promise_union) {
 		using ProgramType = PROGRAM;
@@ -1186,6 +1307,8 @@ struct RemappingBarrier {
 
 	}
 	
+
+	//! Awaits the barrier with th supplied promise.
 	template<bool CAN_RELEASE=true, typename PROGRAM, typename OP_TYPE>
 	__device__ void await(PROGRAM program, Promise<OP_TYPE> promise) {
 		using ProgramType = PROGRAM;
@@ -1373,7 +1496,8 @@ struct RemappingBarrier {
 
 
 
-
+//! The `UnitBarrier` template struct acts as a barrier for a single await. This is useful for
+//! setting up additional layers of resolution for multi-dependency awaits.
 template<typename OP_SET, typename ADR_TYPE>
 struct UnitBarrier {
 	
@@ -1429,7 +1553,7 @@ struct UnitBarrier {
 
 
 
-
+//! A `Future` is a value tied to a barrier.
 template<typename TYPE, typename BARRIER>
 struct Future
 {
@@ -1460,7 +1584,8 @@ struct Future
 
 
 
-
+//! The `ReturnOp` operation is used to resolve dependencies between barriers and peform
+//! the data transfers required to fill in future values.
 struct ReturnOp {
 
 	using Type = void(*)(TaggedSemaphore*,void*,void*,size_t);
@@ -1526,7 +1651,10 @@ struct WorkPool
 
 
 
-
+//! The `WorkFrame` template struct accepts a queue type and and a `size_t`, which is used to
+//! define its iternal work pool. A `WorkFrame` represents a pool that tracks the current number
+//! of contained promises as well as the number of "child" promises that could eventually return
+//! to the frame. 
 template <typename QUEUE_TYPE, size_t QUEUE_COUNT>
 struct WorkFrame
 {
@@ -1538,7 +1666,8 @@ struct WorkFrame
 
 
 
-
+//! The `WorkStack` template struct represents a series of `WorkFrames` following a heirarchy
+//! of call depths. Currently, only a `STACK_SIZE` of zero is supported.
 template<typename FRAME_TYPE, size_t STACK_SIZE = 0>
 struct WorkStack {
 	static const bool   FLAT       = false;
@@ -1571,7 +1700,8 @@ struct WorkStack<FRAME_TYPE, 0>
 };
 
 
-
+//! A set of templates used to detect the presence of internal types
+//! and constants.
 namespace detector {
 
 	template <class... TYPES>
@@ -1606,9 +1736,13 @@ namespace detector {
 
 }
 
+//! Returns a type that communicates whether or not a certain templat can be
+//! instantiated with the given set of arguments
 template<template<class...> class LOOKUP, class... ARGS>
 using is_detected = typename detector::is_detected<LOOKUP,void,ARGS...>;
 
+//! Switches an internal type between the first and last type argument based upon whether or not
+//! the second, template parameter can be instantiated with the last type argument.
 template<class DEFAULT, template<class> class LOOKUP, class TYPE>
 using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::value ,TYPE,DEFAULT>::type;
 
@@ -1645,28 +1779,36 @@ using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::val
 ////////////////////////////////////////////////////////////////////////////////////
 
 
-
+//! Switches whether or not lazy allocation is enabled for the allocation of a `WorkLink`
 #define LAZY_LINK
 
 
-
+//! This macro is currently unused and partially implemented. When finished, it will
+//! operate like the `MEMBER_SWITCH` macro, but for internal templates.
 #define TEMPLATE_MEMBER_SWITCH(NAME,DEFAULT_TYPE) \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (int)  -> DEFAULT; \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (bool) -> typename Specializer<typename PROG::NAME>::Type; \
 	typedef decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_TYPE>(true)) NAME;
 
+
+//! This macro inserts code that detects whether or not an internal type is defined by
+//! the type `PROGRAM_SPEC` (the parameter name used to refer to a program specification)
+//! and either defines an internal type that duplicates the internal type of `PROGRAM_SPEC`
+//! or defines an internal type based off of a default.
 #define MEMBER_SWITCH(NAME,DEFAULT_TYPE) \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (int)  -> DEFAULT; \
 	template<class PROG,class DEFAULT> static auto NAME##Lookup (bool) -> typename PROG::NAME; \
 	typedef decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_TYPE>(true)) NAME;
 
-
+//! This macro behaves the same as `MEMBER_SWITCH`, but for internal static constants,
+//! rather than for types
 #define CONST_SWITCH(TYPE,NAME,DEFAULT_VAL) \
 	template<class PROG,TYPE DEFAULT> static auto NAME##Lookup (int)  -> std::integral_constant<TYPE,    DEFAULT>; \
 	template<class PROG,TYPE DEFAULT> static auto NAME##Lookup (bool) -> std::integral_constant<TYPE, PROG::NAME>; \
 	static const size_t NAME = decltype(NAME##Lookup<PROGRAM_SPEC,DEFAULT_VAL>(true))::value;
 
 
+//! The class that defines an asynchronous program and all of its types.
 template< typename PROGRAM_SPEC >
 class HarmonizeProgram
 {
@@ -1676,6 +1818,7 @@ class HarmonizeProgram
 
 	typedef HarmonizeProgram<PROGRAM_SPEC> ProgramType;
 
+	//! Templates for use by `TEMPLATE_MEMBER_SWITCH`
 	template<typename BASE>
 	struct Specializer
 	{
@@ -1688,7 +1831,9 @@ class HarmonizeProgram
 		using Type = BASE<ProgramType>;
 	};
 
+	//! Define the type used to address work links
 	MEMBER_SWITCH(    AdrType,unsigned int)
+	//! Define the set of operations
 	MEMBER_SWITCH(      OpSet,   OpUnion<>)
 
 	template<typename OP_SET, typename ADR_TYPE>
@@ -1697,17 +1842,22 @@ class HarmonizeProgram
 	template<typename... TYPES>
 	friend class ArgTuple;
 
+	//! Define the states stored in global, shared, and private memory
 	MEMBER_SWITCH(DeviceState,   VoidState)
 	MEMBER_SWITCH( GroupState,   VoidState)
 	MEMBER_SWITCH(ThreadState,   VoidState)
 
 
+	//! Define the type of `PromiseUnion` used by the program.
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 
+	//! Used to look up information about the primary `PromiseUnion` type used
 	template<typename TYPE>
 	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
 	
+	//! Define internal constants based off of the program specification, or
+	//! fall back onto defaults.
 	CONST_SWITCH(size_t,STASH_SIZE,16)
 	CONST_SWITCH(size_t,FRAME_SIZE,32)
 	CONST_SWITCH(size_t, POOL_SIZE,32)
@@ -1715,34 +1865,30 @@ class HarmonizeProgram
 	CONST_SWITCH(size_t,GROUP_SIZE,32)
 
 
+	//! Constants used to determine when to spill or fill the stash, and
+	//! by how much
 	static const size_t        STASH_MARGIN     = 2;
 	static const size_t        STASH_HIGH_WATER = STASH_SIZE-STASH_MARGIN;
 
-	/*
-	// The number of async functions present in the program.
-	*/
+	//! The number of async functions present in the program.
 	static const unsigned char FN_ID_COUNT = PromiseUnionType::Info::COUNT;
 
 
-	/*
-	// During system verification/debugging, this will be used as a cutoff to prevent infinite
-	// looping
-	*/
+	//! During system verification/debugging, this will be used as a cutoff to prevent infinite
+	//! looping
 	static const unsigned int PUSH_QUEUE_RETRY_LIMIT         = 32;
 	static const unsigned int FILL_STASH_RETRY_LIMIT         =  1;
 	static const unsigned int FILL_STASH_LINKS_RETRY_LIMIT   = 32;
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
 
-	/*
-	// A set of halting condition flags
-	*/
+	//! A set of halting condition flags
 	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
 	static const unsigned int STASH_FAIL_FLAG	= 0x00000002;
 	static const unsigned int COMPLETION_FLAG	= 0x80000000;
 	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 
-
+	//! Defining a set of internal short-hand names for the specializaions used by the class
 	typedef util::mem::Adr       <AdrType>             LinkAdrType;
 	typedef util::mem::PoolQueue <LinkAdrType>         QueueType;
 	typedef WorkFrame       <QueueType,FRAME_SIZE>     FrameType;
@@ -1755,9 +1901,7 @@ class HarmonizeProgram
 
 
 
-	/*
-	// The depth of the partial table (1 if stack is flat, 3 otherwise).
-	*/
+	//! The depth of the partial table (1 if stack is flat, 3 otherwise).
 	static const unsigned char PART_TABLE_DEPTH = StackType::PART_MULT;
 	static const unsigned char PART_ENTRY_COUNT = FN_ID_COUNT*PART_TABLE_DEPTH;
 
@@ -1765,11 +1909,9 @@ class HarmonizeProgram
 	static const AdrType       SPARE_LINK_COUNT = 2u;
 
 
-	/*
-	// This struct represents the entire set of data structures that must be stored in thread
-	// memory to track te state of the program defined by the developer as well as the state of
-	// the context which is driving exection.
-	*/
+	//! This struct represents the entire set of data structures that must be stored in thread
+	//! memory to track te state of the program defined by the developer as well as the state of
+	//! the context which is driving exection.
 	struct ThreadContext {
 
 		unsigned int thread_id;	
@@ -1780,6 +1922,8 @@ class HarmonizeProgram
 	};
 
 
+	//! A non-atomic promise coalescing structure used to track information about full and
+	//! partial work links.
 	struct RemapQueue {
 		unsigned char count;
 		unsigned char full_head;
@@ -1787,11 +1931,9 @@ class HarmonizeProgram
 	};
 
 
-	/*
-	// This struct represents the entire set of data structures that must be stored in group
-	// memory to track te state of the program defined by the developer as well as the state of
-	// the context which is driving exection.
-	*/
+	//! This struct represents the entire set of data structures that must be stored in group
+	//! memory to track te state of the program defined by the developer as well as the state of
+	//! the context which is driving exection.
 	struct GroupContext {
 
 		size_t				level;		// Current level being run
@@ -1832,11 +1974,9 @@ class HarmonizeProgram
 	};
 
 
-	/*
-	// This struct represents the entire set of data structures that must be stored in device
-	// memory to track the state of the program defined by the developer as well as the state
-	// of the context which is driving execution.
-	*/
+	//! This struct represents the entire set of data structures that must be stored in device
+	//! memory to track the state of the program defined by the developer as well as the state
+	//! of the context which is driving execution.
 	struct DeviceContext {
 
 		typedef		ProgramType	ParentProgramType;
@@ -1890,11 +2030,9 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Instances wrap around their program scope's DeviceContext. These differ from a program's
-	// DeviceContext object in that they perform automatic deallocation as soon as they drop
-	// out of scope.
-	*/
+	//! Instances wrap around their program scope's DeviceContext. These differ from a program's
+	//! DeviceContext object in that they perform automatic deallocation as soon as they drop
+	//! out of scope.
 	struct Instance {
 
 
@@ -1978,7 +2116,7 @@ class HarmonizeProgram
 
 	protected:
 
-
+	//! Returns true only if the stash cannot support the allocation of any more work links
 	__device__ bool stash_overfilled(){
 		#ifdef ASYNC_LOADS
 		return (_grp_ctx.main_queue.count+_grp_ctx.load_queue.count) >= STASH_HIGH_WATER;
@@ -1987,10 +2125,8 @@ class HarmonizeProgram
 		#endif
 	}
 	
-	/*
-	// Returns an index into the partial map of a group based off of a function id and a depth. If
-	// an invalid depth or function id is used, PART_ENTRY_COUNT is returned.
-	*/
+	//! Returns an index into the partial map of a group based off of a function id and a depth. If
+	//! an invalid depth or function id is used, PART_ENTRY_COUNT is returned.
 	 __device__  unsigned int partial_map_index(
 		OpDisc     func_id,
 		unsigned int depth,
@@ -2022,11 +2158,9 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Initializes the shared state of a work group, which is stored as a ctx_shared struct. This
-	// is mainly done by initializing handles to the arena, pool, and stack, setting the current
-	// level to null, setting the stash iterator to null, and zeroing the stash.
-	*/
+	//! Initializes the shared state of a work group, which is stored as a ctx_shared struct. This
+	//! is mainly done by initializing handles to the arena, pool, and stack, setting the current
+	//! level to null, setting the stash iterator to null, and zeroing the stash.
 	 __device__  void init_group(){
 
 		//printf("Initing group\n");
@@ -2089,11 +2223,9 @@ class HarmonizeProgram
 
 	}
 
-	/*
-	// Initializes the local state of a thread, which is just the device id of the thread and the
-	// state used by the thread to generate random numbers for stochastic choices needed to manage
-	// the runtime state.
-	*/
+	//! Initializes the local state of a thread, which is just the device id of the thread and the
+	//! state used by the thread to generate random numbers for stochastic choices needed to manage
+	//! the runtime state.
 	 __device__ void init_thread(){
 
 		//printf("Initing thread %d\n",threadIdx.x);
@@ -2107,9 +2239,7 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Sets the bits in the status_flags field of the stack according to the given flag bits.
-	*/
+	//! Sets the bits in the status_flags field of the stack according to the given flag bits.
 	 __device__  void set_flags(unsigned int flag_bits){
 
 		atomicOr(&_dev_ctx.stack->status_flags,flag_bits);
@@ -2117,21 +2247,17 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Unsets the bits in the status_flags field of the stack according to the given flag bits.
-	*/
+	//! Unsets the bits in the status_flags field of the stack according to the given flag bits.
 	 __device__  void unset_flags(unsigned int flag_bits){
 
 		atomicAnd(&_dev_ctx.stack->status_flags,~flag_bits);
 
 	}
 
-	/*
-	// Returns the current highest level in the stack. Given that this program is highly parallel,
-	// this number inherently cannot be trusted. By the time the value is fetched, the stack could
-	// have a different height or the thread that set the height may not have deposited links in the
-	// corresponding level yet.
-	*/
+	//! Returns the current highest level in the stack. Given that this program is highly parallel,
+	//! this number inherently cannot be trusted. By the time the value is fetched, the stack could
+	//! have a different height or the thread that set the height may not have deposited links in the
+	//! corresponding level yet.
 	 __device__  unsigned int highest_level(){
 
 		return left_half(_dev_ctx.stack->depth_live);
@@ -2139,9 +2265,7 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Returns a reference to the frame at the requested level in the stack.
-	*/
+	//! Returns a reference to the frame at the requested level in the stack.
 	 __device__  FrameType& get_frame(unsigned int level){
 
 		return _dev_ctx.stack->frames[level];
@@ -2149,13 +2273,11 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Joins two queues such that the right queue is now at the end of the left queue.
-	//
-	// WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
-	// atomically. If not, one of the queues manipulated with this function will almost certainly
-	// become malformed at some point. Woe betide those that do not heed this dire message.
-	*/
+	//! Joins two queues such that the right queue is now at the end of the left queue.
+	//!
+	//! WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
+	//! atomically. If not, one of the queues manipulated with this function will almost certainly
+	//! become malformed at some point.
 	 __device__  QueueType join_queues(QueueType left_queue, QueueType right_queue){
 
 		QueueType result;
@@ -2173,18 +2295,14 @@ class HarmonizeProgram
 			LinkAdrType right_head_adr = right_queue.get_head();
 			LinkAdrType right_tail_adr = right_queue.get_tail();
 
-			/*
-			// Find last link in the queue referenced by left_queue.
-			*/
+			//! Find last link in the queue referenced by left_queue.
 			LinkType& left_tail = _dev_ctx.arena[left_tail_adr];
 
-			/*
-			// Set the index for the tail's successor to the head of the queue referenced by
-			// right_queue.
-			*/
+			//! Set the index for the tail's successor to the head of the queue referenced by
+			//! right_queue.
 			left_tail.next = right_head_adr;
 
-			/* Set the right half of the left_queue handle to index the new tail. */
+			//! Set the right half of the left_queue handle to index the new tail.
 			left_queue.set_tail(right_tail_adr);
 			
 			result = left_queue;
@@ -2196,20 +2314,17 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Takes the first link off of the queue and returns the index of the link in the arena. If the
-	// queue is empty, a null address is returned instead.
-	//
-	// WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
-	// atomically. If not, one of the queues manipulated with this function will almost certainly
-	// become malformed at some point. Woe betide those that do not heed this dire message.
-	*/
+	//! Takes the first link off of the queue and returns the index of the link in the arena. If the
+	//! queue is empty, a null address is returned instead.
+	//!
+	//! WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
+	//! atomically. If not, one of the queues manipulated with this function will almost certainly
+	//! become malformed at some point.
 	 __device__  LinkAdrType pop_front(QueueType& queue){
 
 		LinkAdrType result;
-		/*
-		// Don't try unless the queue is non-null
-		*/
+		
+		//! Don't try unless the queue is non-null
 		if( queue.is_null() ){
 			result.adr = LinkAdrType::null;
 		} else {
@@ -2229,15 +2344,13 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Adds the given link to the end of the given queue. This link can NOT be part of another queue,
-	// and its next pointer will be automatically nulled before it is appended. If you need to merge
-	// two queues together, use join_queues.
-	//
-	// WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
-	// atomically. If not, one of the queues manipulated with this function will almost certainly
-	// become malformed at some point. Woe betide those that do not heed this dire message.
-	*/
+	//! Adds the given link to the end of the given queue. This link can NOT be part of another queue,
+	//! and its next pointer will be automatically nulled before it is appended. If you need to merge
+	//! two queues together, use join_queues.
+	//!
+	//! WARNING: NOT THREAD SAFE. Only use this on queues that have been claimed from the stack
+	//! atomically. If not, one of the queues manipulated with this function will almost certainly
+	//! become malformed at some point.
 	 __device__  void push_back(QueueType& queue, LinkAdrType link_adr){
 
 		_dev_ctx.arena[link_adr].next = LinkAdrType::null;
@@ -2254,21 +2367,17 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Attempts to pull a queue from a range of queue slots, trying each slot starting from the given
-	// starting index onto the end of the range and then looping back from the beginning. If, after
-	// trying every slot in the range, no non-null queue was obtained, a QueueType::null value is returned.
-	*/
+	//! Attempts to pull a queue from a range of queue slots, trying each slot starting from the given
+	//! starting index onto the end of the range and then looping back from the beginning. If, after
+	//! trying every slot in the range, no non-null queue was obtained, a QueueType::null value is returned.
 	 __device__  QueueType pull_queue(QueueType* src, unsigned int start_index, unsigned int range_size, unsigned int& src_index){
 
 		QueueType result;
 		
 		__threadfence();
-		/*
-		// First iterate from the starting index to the end of the queue range, attempting to
-		// claim a non-null queue until either there are no more slots to try, or the atomic
-		// swap successfuly retrieves something.
-		*/
+		//! First iterate from the starting index to the end of the queue range, attempting to
+		//! claim a non-null queue until either there are no more slots to try, or the atomic
+		//! swap successfuly retrieves something.
 		for(unsigned int i=start_index; i < range_size; i++){
 			if( src[i].pair.data != QueueType::null ) {
 				result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
@@ -2280,10 +2389,8 @@ class HarmonizeProgram
 			}
 		}
 
-		/*
-		// Continue searching from the beginning of the range to just before the beginning of the
-		// previous scan.
-		*/
+		//! Continue searching from the beginning of the range to just before the beginning of the
+		//! previous scan.
 		for(unsigned int i=0; i < start_index; i++){
 			if( src[i].pair.data != QueueType::null ) {
 				result.pair.data = atomicExch(&(src[i].pair.data),QueueType::null);
@@ -2296,9 +2403,7 @@ class HarmonizeProgram
 		}
 
 		q_printf("COULD NOT PULL QUEUE\n");
-		/*
-		// Return QueueType::null if nothing is found
-		*/
+		//! Return QueueType::null if nothing is found
 		result.pair.data = QueueType::null;
 		return result;
 
@@ -2308,18 +2413,13 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Repeatedly tries to push a queue to a destination queue slot by atomic exchanges. If a non
-	// null queue is ever returned by the exchange, it attempts to merge with a subsequent exchange.
-	// For now, until correctness is checked, this process repeats a limited number of times. In
-	// production, this will be an infinite loop, as the function should not fail if correctly 
-	// implemented.
-	//
-	// If an invalid queue (one half null, the other half non-null) is ever found at the destination,
-	// the value of that invalid queue is returned, the invalid value is replaced into the queue, and
-	// any work gathered from the replacement is assigned to the second argument. Otherwise, the second
-	// argument is set to a null state.
-	*/
+	//! Repeatedly tries to push a queue to a destination queue slot by atomic exchanges. If a non
+	//! null queue is ever returned by the exchange, it attempts to merge with a subsequent exchange.
+	//!
+	//! If an invalid queue (one half null, the other half non-null) is ever found at the destination,
+	//! the value of that invalid queue is returned, the invalid value is replaced into the queue, and
+	//! any work gathered from the replacement is assigned to the second argument. Otherwise, the second
+	//! argument is set to a null state.
 	 __device__  QueueType push_queue(QueueType& dest, QueueType& queue){
 
 		if( queue.is_null() ){
@@ -2336,14 +2436,12 @@ class HarmonizeProgram
 			
 			QueueType swap;
 			swap.pair.data = atomicExch(&dest.pair.data,queue.pair.data);
-			/*
-			// If our swap returns a non-null queue, we are still stuck with a queue that
-			// needs to be offloaded to the stack. In this case, claim the queue from the 
-			// slot just swapped with, merge the two, and attempt again to place the queue
-			// back. With this method, swap failures are bounded by the number of pushes to
-			// the queue slot, with at most one failure per push_queue call, but no guarantee
-			// of which attempt from which call will suffer from an incurred failure.
-			*/
+			//! If our swap returns a non-null queue, we are still stuck with a queue that
+			//! needs to be offloaded to the stack. In this case, claim the queue from the 
+			//! slot just swapped with, merge the two, and attempt again to place the queue
+			//! back. With this method, swap failures are bounded by the number of pushes to
+			//! the queue slot, with at most one failure per push_queue call, but no guarantee
+			//! of which attempt from which call will suffer from an incurred failure.
 			if( ! swap.is_null() ){
 				//printf("%d: We got queue (%d,%d) when trying to push a queue\n",blockIdx.x,swap.get_head().adr,swap.get_tail().adr);
 				QueueType other_swap;
@@ -2368,9 +2466,7 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Claims a link from the link stash. If no link exists in the stash, LinkAdrType::null is returned.
-	*/
+	//! Claims a link from the link stash. If no link exists in the stash, LinkAdrType::null is returned.
 	 __device__  LinkAdrType claim_stash_link(){
 
 		LinkAdrType link = LinkAdrType::null;
@@ -2386,10 +2482,8 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Inserts an empty slot into the stash. This should only be called if there is enough space in
-	// the link stash.
-	*/
+	//! Inserts an empty slot into the stash. This should only be called if there is enough space in
+	//! the link stash.
 	 __device__  void insert_stash_link(LinkAdrType link){
 
 		unsigned int count = _grp_ctx.link_stash_count;
@@ -2402,10 +2496,8 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Claims an empty slot from the stash and returns its index. If no empty slot exists in the stash,
-	// then STASH_SIZE is returned.
-	*/
+	//! Claims an empty slot from the stash and returns its index. If no empty slot exists in the stash,
+	//! then STASH_SIZE is returned.
 	 __device__  unsigned int claim_empty_slot(){
 
 		unsigned int slot = _grp_ctx.empty_head;
@@ -2418,10 +2510,8 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Inserts an empty slot into the stash. This should only be called if there is enough space in
-	// the link stash.
-	*/
+	//! Inserts an empty slot into the stash. This should only be called if there is enough space in
+	//! the link stash.
 	 __device__  void insert_empty_slot(unsigned int slot){
 
 		_grp_ctx.stash[slot].next.adr = _grp_ctx.empty_head;
@@ -2431,10 +2521,8 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Claims a full slot from the stash and returns its index. If no empty slot exists in the stash,
-	// then STASH_SIZE is returned.
-	*/
+	//! Claims a full slot from the stash and returns its index. If no empty slot exists in the stash,
+	//! then STASH_SIZE is returned.
 	 __device__  unsigned int claim_full_slot(){
 
 		unsigned int slot = _grp_ctx.main_queue.full_head;
@@ -2447,10 +2535,8 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Inserts a full slot into the stash. This should only be called if there is enough space in
-	// the link stash.
-	*/
+	//! Inserts a full slot into the stash. This should only be called if there is enough space in
+	//! the link stash.
 	 __device__  void insert_full_slot(RemapQueue& queue, unsigned int slot){
 
 		_grp_ctx.stash[slot].next.adr = queue.full_head;
@@ -2466,18 +2552,14 @@ class HarmonizeProgram
 		QueueType queue;
 		queue.pair.data = QueueType::null;
 
-		/*
-		// Connect all links into a queue
-		*/
+		//! Connect all links into a queue
 		for(unsigned int i=0; i < count; i++){
 			
 			push_back(queue,src[i]);
 
 		}
 
-		/*
-		// Push out the queue to the pool
-		*/
+		//! Push out the queue to the pool
 		q_printf("Pushing queue (%d,%d) to pool\n",queue.get_head().adr,queue.get_tail().adr);
 		unsigned int dest_idx = util::random_uint(_thd_ctx.rand_state) % POOL_SIZE;
 		push_queue(_dev_ctx.pool->queues[dest_idx],queue);
@@ -2535,21 +2617,17 @@ class HarmonizeProgram
 			if(alloc_count >= req_count){
 				break;
 			}
-			/*	
-			// Attempt to pull a queue from the pool. This should be very unlikely to fail unless
-			// almost all links have been exhausted or the pool size is disproportionately small
-			// relative to the number of work groups. In the worst case, this should simply not 
-			// al_thd_ctxate any links, and the return value shall report this.
-			*/
+			//! Attempt to pull a queue from the pool. This should be very unlikely to fail unless
+			//! almost all links have been exhausted or the pool size is disproportionately small
+			//! relative to the number of work groups. In the worst case, this should simply not 
+			//! al_thd_ctxate any links, and the return value shall report this.
 			unsigned int src_index = LinkAdrType::null;
 			unsigned int start = util::random_uint(_thd_ctx.rand_state)%POOL_SIZE;
 			QueueType queue = pull_queue(_dev_ctx.pool->queues,start,POOL_SIZE,src_index);
 			q_printf("Pulled queue (%d,%d) from pool %d\n",queue.get_head().adr,queue.get_tail().adr,src_index);
 
-			/*
-			// Keep popping links from the queue until the full number of links have been added or
-			// the queue runs out of links.
-			*/
+			//! Keep popping links from the queue until the full number of links have been added or
+			//! the queue runs out of links.
 			for(int i=alloc_count; i < req_count; i++){
 				LinkAdrType link = pop_front(queue);
 				if( ! link.is_null() ){
@@ -2600,10 +2678,8 @@ class HarmonizeProgram
 		}
 	}
 
-	/*
-	// Attempts to fill the link stash to the given threshold with links. This should only ever
-	// be called in a single-threaded manner.
-	*/
+	//! Attempts to fill the link stash to the given threshold with links. This should only ever
+	//! be called in a single-threaded manner.
 	 __device__  void fill_stash_links(unsigned int threashold){
 
 		unsigned int active = __activemask();
@@ -2631,31 +2707,23 @@ class HarmonizeProgram
 
 
 
-	/*
-	// If the number of links in the link stash exceeds the given threshold value, this function frees
-	// enough links to bring the number of links down to the threshold. This should only ever be
-	// called in a single_threaded manner.
-	*/
+	//! If the number of links in the link stash exceeds the given threshold value, this function frees
+	//! enough links to bring the number of links down to the threshold. This should only ever be
+	//! called in a single_threaded manner.
 	 __device__  void spill_stash_links(unsigned int threashold){
 
-		/*
-		// Do not even try if no links can be or need to be removed
-		*/
+		//! Do not even try if no links can be or need to be removed
 		if(threashold >= _grp_ctx.link_stash_count){
 			q_printf("Nothing to spill...\n");
 			return;
 		}
 
-		/*
-		// Find where in the link stash to begin removing links
-		*/
+		//! Find where in the link stash to begin removing links
 
 		QueueType queue;
 		queue.pair.data = QueueType::null;
 
-		/*
-		// Connect all links into a queue
-		*/
+		//! Connect all links into a queue
 		unsigned int spill_count = _grp_ctx.link_stash_count - threashold;
 		for(unsigned int i=0; i < spill_count; i++){
 			
@@ -2668,9 +2736,7 @@ class HarmonizeProgram
 		_grp_ctx.link_stash_count = threashold;
 
 
-		/*
-		// Push out the queue to the pool
-		*/
+		//! Push out the queue to the pool
 		q_printf("Pushing queue (%d,%d) to pool\n",queue.get_head().adr,queue.get_tail().adr);
 		unsigned int dest_idx = util::random_uint(_thd_ctx.rand_state) % POOL_SIZE;
 		push_queue(_dev_ctx.pool->queues[dest_idx],queue);
@@ -2682,15 +2748,13 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Decrements the child and resident counter of each frame corresponding to a call at level
-	// start_level in the stack returning to a continuation at level end_level in the stack. To reduce
-	// overall contention, decrementations are first pooled through a shared atomic operation before
-	// being applied to the stack.
+	//! Decrements the child and resident counter of each frame corresponding to a call at level
+	//! start_level in the stack returning to a continuation at level end_level in the stack. To reduce
+	//! overall contention, decrementations are first pooled through a shared atomic operation before
+	//! being applied to the stack.
 	//
-	// A call without a continuation should use this function with start_level == end_level, which
-	// simply decrements the resident counter at the call's frame.
-	*/
+	//! A call without a continuation should use this function with start_level == end_level, which
+	//! simply decrements the resident counter at the call's frame.
 	 __device__  void pop_frame_counters(unsigned int start_level, unsigned int end_level){
 
 
@@ -2700,9 +2764,7 @@ class HarmonizeProgram
 
 		FrameType& frame = _dev_ctx.stack->frames[start_level];
 
-		/*
-		// Decrement the residents counter for the start level
-		*/
+		//! Decrement the residents counter for the start level
 		delta = util::active_count();
 		if(util::current_leader()){
 			result = atomicSub(&frame.children_residents,delta);
@@ -2711,9 +2773,7 @@ class HarmonizeProgram
 			}
 		}	
 
-		/*
-		// Decrement the children counter for the remaining levels
-		*/
+		//! Decrement the children counter for the remaining levels
 		for(int d=(start_level-1); d >= end_level; d--){
 			FrameType& frame = _dev_ctx.stack->frames[d];
 			delta = util::active_count();
@@ -2725,9 +2785,7 @@ class HarmonizeProgram
 			}
 		}
 
-		/*
-		// Update the stack base once all other counters have been updated.
-		*/
+		//! Update the stack base once all other counters have been updated.
 		if(util::current_leader()){
 			result = atomicSub(&(_dev_ctx.stack->depth_live),depth_dec);
 			if(result == 0){
@@ -2738,28 +2796,22 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Repetitively tries to merge the given queue of promises with the queue at the given index in the
-	// frame at the given level on the stack. This function currently aborts if an error flag is set
-	// or if too many merge failures occur, however, once its correctness is verified, this function
-	// will run forever until the merge is successful, as success is essentially guaranteed by
-	// the nature of the process.
-	*/
+	//! Repetitively tries to merge the given queue of promises with the queue at the given index in the
+	//! frame at the given level on the stack. This function currently aborts if an error flag is set
+	//! or if too many merge failures occur, however, once its correctness is verified, this function
+	//! will run forever until the merge is successful, as success is essentially guaranteed by
+	//! the nature of the process.
 	 __device__  void push_promises(unsigned int level, unsigned int index, QueueType queue, int promise_delta) {
 
 
 		LinkAdrType tail = queue.get_tail();
 		LinkAdrType head = queue.get_head();
 		rc_printf("SM %d: push_promises(level:%d,index:%d,queue:(%d,%d),delta:%d)\n",threadIdx.x,level,index,tail.adr,head.adr,promise_delta);
-		/*
-		// Do not bother pushing a null queue if there is no delta to report
-		*/
+		//! Do not bother pushing a null queue if there is no delta to report
 		if( ( ! queue.is_null() ) || (promise_delta != 0) ){
 
-			/*
-			// Change the resident counter of the destination frame by the number of promises
-			// that have been added to or removed from the given queue
-			*/
+			//! Change the resident counter of the destination frame by the number of promises
+			//! that have been added to or removed from the given queue
 			FrameType &dest = get_frame(level);		
 			unsigned int old_count;
 			unsigned int new_count;
@@ -2780,14 +2832,12 @@ class HarmonizeProgram
 
 
 			_grp_ctx.SM_promise_delta += promise_delta;
-			//printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
+			rc_printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
 
 			
-			//rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
-			/*
-			// If the addition caused a frame to change from empty to non-empty or vice-versa,
-			// make an appropriate incrementation or decrementation at the stack base.
-			*/
+			rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
+			//! If the addition caused a frame to change from empty to non-empty or vice-versa,
+			//! make an appropriate incrementation or decrementation at the stack base.
 			if( (old_count == 0) && (new_count != 0) ){
 				atomicAdd(&(_dev_ctx.stack->depth_live),0x00010000u);
 			} else if( (old_count != 0) && (new_count == 0) ){
@@ -2796,14 +2846,12 @@ class HarmonizeProgram
 				rc_printf("SM %d: No change!\n",threadIdx.x);
 			}
 
-			/*
-			// Finally, push the queues
-			*/
+			//! Finally, push the queues
 			push_queue(dest.pool.queues[index],queue);
 			rc_printf("SM %d: Pushed queue (%d,%d) to stack at index %d\n",threadIdx.x,queue.get_head().adr,queue.get_tail().adr,index);
 		
 			if( (_dev_ctx.stack->frames[0].children_residents % 0x1000000 ) == 0 ) {
-				//printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
+				rc_printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
 			}
 
 		}
@@ -2813,11 +2861,9 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Attempts to pull a queue of promises from the frame in the stack of the given level, starting the 
-	// pull attempt at the given index in the frame. If no queue could be pulled after attempting a 
-	// pull at each queue in the given frame, a QueueType::null value is returned.
-	*/
+	//! Attempts to pull a queue of promises from the frame in the stack of the given level, starting the 
+	//! pull attempt at the given index in the frame. If no queue could be pulled after attempting a 
+	//! pull at each queue in the given frame, a QueueType::null value is returned.
 	 __device__  QueueType pull_promises(unsigned int level, unsigned int& source_index) {
 
 
@@ -2840,10 +2886,8 @@ class HarmonizeProgram
 	}
 
 
-	/*
-	// Attempts to pull a queue from any frame in the stack, starting from the highest and working
-	// its way down. If no queue could be pulled, a QueueType::null value is returned.
-	*/
+	//! Attempts to pull a queue from any frame in the stack, starting from the highest and working
+	//! its way down. If no queue could be pulled, a QueueType::null value is returned.
 	 __device__  QueueType pull_promises_any_level(unsigned int& level, unsigned int& source_index){
 
 
@@ -2867,12 +2911,10 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Adds the contents of the stash slot at the given index to a link and returns the index of the 
-	// link in the arena. This should only ever be called if there is both a link available to store
-	// the data and if the index is pointing at a non-empty slot. This also should only ever be
-	// called in a single-threaded context.
-	*/
+	//! Adds the contents of the stash slot at the given index to a link and returns the index of the 
+	//! link in the arena. This should only ever be called if there is both a link available to store
+	//! the data and if the index is pointing at a non-empty slot. This also should only ever be
+	//! called in a single-threaded context.
 	 __device__  LinkAdrType produce_link(unsigned int slot_index ){
 
 
@@ -2908,10 +2950,8 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Removes all promises in the stash that do not correspond to the given level, or to the levels
-	// immediately above or below (level+1) and (level-1).
-	*/
+	//! Removes all promises in the stash that do not correspond to the given level, or to the levels
+	//! immediately above or below (level+1) and (level-1).
 	 __device__  void relevel_stash(unsigned int level){
 
 		if( ! StackType::FLAT ){
@@ -2926,12 +2966,10 @@ class HarmonizeProgram
 
 
 
-	/*
-	// Dumps all full links not corresponding to the current execution level. Furthermore, should the
-	// remaining links still put the stash over the given threshold occupancy, links will be further
-	// removed in the order: full links at the current level, partial links not at the current level,
-	// partial links at the current level. 
-	*/
+	//! Dumps all full links not corresponding to the current execution level. Furthermore, should the
+	//! remaining links still put the stash over the given threshold occupancy, links will be further
+	//! removed in the order: full links at the current level, partial links not at the current level,
+	//! partial links at the current level. 
 	 __device__  void spill_stash(unsigned int threashold){
 
 		unsigned int active =__activemask();
@@ -2954,7 +2992,7 @@ class HarmonizeProgram
 			queue.pair.data = QueueType::null;
 			unsigned int partial_iter = 0;
 			bool has_full_slots = true;
-			//printf("{Spilling to %d}",threashold);
+			q_printf("{Spilling to %d}",threashold);
 			for(unsigned int i=0; i < spill_count; i++){
 				unsigned int slot = STASH_SIZE;
 				if(has_full_slots){
@@ -2968,7 +3006,7 @@ class HarmonizeProgram
 						db_printf("%d",partial_iter);
 						if(_grp_ctx.main_queue.partial_map[partial_iter] != STASH_SIZE){
 							slot = _grp_ctx.main_queue.partial_map[partial_iter];
-							//printf("{Spilling partial}");
+							q_printf("{Spilling partial}");
 							partial_iter++;
 							break;
 						}
@@ -3080,7 +3118,7 @@ class HarmonizeProgram
 	}
 
 
-
+	//! Spills from stash in advance of inserting more work
 	 __device__  void async_call_stash_dump(OpDisc func_id, int depth_delta, unsigned int delta){
 
 		/*
@@ -3118,6 +3156,7 @@ class HarmonizeProgram
 	}
 
 
+	//! Prepares the stash for the insertion of work
 	 __device__  void async_call_stash_prep(RemapQueue& dst, OpDisc func_id, int depth_delta, unsigned int delta,
 		unsigned int &left, unsigned int &left_start, unsigned int &right
 	){
@@ -4957,9 +4996,7 @@ class EventProgram
 
 		if( threadIdx.x == 0 ){
 			unsigned int checkout_index = atomicAdd(_dev_ctx.checkout,1);
-			//printf("{%d}",checkout_index);
 			if( checkout_index == (gridDim.x - 1) ){
-				//printf("{Final}");
 				atomicExch(_dev_ctx.checkout,0);
 				 for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					 _dev_ctx.event_io[i]->flip();
@@ -5008,10 +5045,9 @@ class EventProgram
 
 
 
-/*
-// These functions unwrap an instance into its device context and passes it to the responsible
-// kernel.
-*/
+
+//! These functions unwrap an instance into its device context and passes it to the responsible
+//! kernel.
 template<typename ProgType>
 __host__ void init(typename ProgType::Instance& instance,size_t group_count) {
 	_dev_init<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state);

@@ -7,7 +7,6 @@ using namespace util;
 struct Step;
 
 
-//template<typename PROGRAM>
 struct MyDeviceState {
 
 	size_t dep_count;
