@@ -69,7 +69,6 @@ struct PairPack
 
 
 
-
 template <typename ADR_INNER_TYPE>
 struct Adr
 {
@@ -186,7 +185,6 @@ __host__ void mempool_check(T* arena, size_t arena_size, PoolQueue<AdrType>* poo
 	
 	
 
-
 }
 
 
@@ -224,8 +222,8 @@ struct MemPool {
 	AdrType  claim_count;
 	#endif
 
-	Link*    arena;
-	AdrType  arena_size;
+	Link*     arena;
+	AdrType   arena_size;
 
 	QueueType* pool;
 	AdrType    pool_size;
@@ -536,6 +534,7 @@ struct MemPool {
 				return adr.adr;
 			}
 		}
+		printf("{Alloc fail}");
 		return AdrType::null;
 	}
 
@@ -574,57 +573,67 @@ struct MemPool {
 	}
 
 
+
+	__device__ void serial_init(){
+		parallel_init(0,1);
+	}
+
+
+
+	__device__ void parallel_init(Index thread_index, Index thread_count){
+
+		typedef MemPool<T,INDEX> PoolType;
+		typedef INDEX Index;
+		
+		#ifdef LAZY_MEM
+		claim_count = 0;
+
+		for(Index i=thread_index; i<pool_size.adr; i+=thread_count){
+			pool [i] = QueueType(AdrType::null,AdrType::null);
+			//printf("{%d:(%d,%d)}",i,pool[i].get_head().adr,pool[i].get_tail().adr);
+		}
+
+		#else
+		
+		Index span = arena_size.adr / pool_size.adr;
+
+		Index limit = arena_size.adr;
+		for(Index i=thread_index; i<limit; i+=thread_count){
+			if( ( (i%span) == (span-1) ) || ( i == (limit-1) ) ){
+				arena[i].next = AdrType::null;
+			} else {
+				arena[i].next = i+1;
+			}
+			//printf("(%d:%d)",i,arena[i].next.adr);
+		}
+
+		for(Index i=thread_index; i<pool_size.adr; i+=thread_count){
+			Index last;
+			if( ((i+1)*span-1) >= arena_size.adr ) {
+				last = arena_size.adr - 1;
+			} else {
+				last = (i+1)*span-1;
+			}
+			pool [i] = QueueType(AdrType(i*span),AdrType(last));
+			//printf("{%d:(%d,%d)}",i,pool[i].get_head().adr,pool[i].get_tail().adr);
+		}
+
+		#endif
+	}
+
 };
 
 
 
 template<typename T, typename INDEX>
 __global__ void mempool_init(MemPool<T,INDEX> mempool){
-
-	typedef MemPool<T,INDEX> PoolType;
+		
 	typedef INDEX Index;
-	
-	typedef typename PoolType::AdrType   AdrType;
-	typedef typename PoolType::QueueType QueueType;
 
 	Index thread_count = blockDim.x * gridDim.x;
 	Index thread_index = blockDim.x * blockIdx.x + threadIdx.x;
 
-	
-	#ifdef LAZY_MEM
-
-	for(Index i=thread_index; i<mempool.pool_size.adr; i+=thread_count){
-		mempool.pool [i] = QueueType(AdrType::null,AdrType::null);
-		//printf("{%d:(%d,%d)}",i,mempool.pool[i].get_head().adr,mempool.pool[i].get_tail().adr);
-	}
-
-	#else
-	
-	Index span = mempool.arena_size.adr / mempool.pool_size.adr;
-
-	Index limit = mempool.arena_size.adr;
-	for(Index i=thread_index; i<limit; i+=thread_count){
-		if( ( (i%span) == (span-1) ) || ( i == (limit-1) ) ){
-			mempool.arena[i].next = AdrType::null;
-		} else {
-			mempool.arena[i].next = i+1;
-		}
-		//printf("(%d:%d)",i,mempool.arena[i].next.adr);
-	}
-
-	for(Index i=thread_index; i<mempool.pool_size.adr; i+=thread_count){
-		Index last;
-		if( ((i+1)*span-1) >= mempool.arena_size.adr ) {
-			last = mempool.arena_size.adr - 1;
-		} else {
-			last = (i+1)*span-1;
-		}
-		mempool.pool [i] = QueueType(AdrType(i*span),AdrType(last));
-		//printf("{%d:(%d,%d)}",i,mempool.pool[i].get_head().adr,mempool.pool[i].get_tail().adr);
-	}
-
-	#endif
-
+	mempool.parallel_init(thread_index,thread_count);
 }
 
 

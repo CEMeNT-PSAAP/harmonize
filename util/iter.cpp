@@ -120,8 +120,14 @@ struct AtomicIter
 	IterType limit;
 
 	 __device__ void reset(IterType start_val, IterType limit_val) {
-		value = start_val;
-		limit = limit_val;
+		IterType old_limit = atomicAdd(&limit,0);
+		if( old_limit > limit_val ){
+			atomicExch(&limit,limit_val);
+		} else if ( old_limit < limit_val ) {
+			atomicExch(&value,limit_val);
+			atomicExch(&limit,limit_val);
+		}
+		atomicExch(&value,start_val);
 	}
 
 
@@ -170,7 +176,7 @@ struct AtomicIter
 
 
 	 __device__ bool step(IterType& iter_val) {
-	
+
 		if( value >= limit ){
 			return false;
 		}

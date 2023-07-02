@@ -1997,12 +1997,12 @@ class HarmonizeProgram
 
 
 	protected:
+	public:
 
 	DeviceContext & _dev_ctx;
 	GroupContext  & _grp_ctx;
 	ThreadContext & _thd_ctx;
 
-	public:
 
 	DeviceState   &   device;
 	GroupState    &    group;
@@ -3133,9 +3133,9 @@ class HarmonizeProgram
 			spill_stash(STASH_SIZE-3);
 		}
 		#else
+		/*
 		unsigned int depth = (unsigned int) (_grp_ctx.level + depth_delta);
 		unsigned int left_jump = partial_map_index(func_id,depth,_grp_ctx.level);
-		/*
 		unsigned int space = 0;
 		if( left_jump != PART_ENTRY_COUNT ){
 			unsigned int left_idx = _grp_ctx.main_queue.partial_map[left_jump];	
@@ -3352,7 +3352,6 @@ class HarmonizeProgram
 	
 	template<typename TYPE>
 	 __device__  void async_call_cast(int depth_delta, Promise<TYPE> promise){
-
 		beg_time(7);
 		unsigned int active = __activemask();
 
@@ -3362,6 +3361,9 @@ class HarmonizeProgram
 		*/
 		unsigned int index = util::warp_inc_scan();
 		unsigned int delta = util::active_count();
+
+
+
 
 		#ifdef BARRIER_SPILL
 		if( stash_overfilled() ) { //&& (space < delta) ){
@@ -3888,8 +3890,9 @@ class HarmonizeProgram
 		*/
 		//*
 
-
+		
 		if( stash_overfilled() ) {
+			printf("{Stash overfilled}");
 			#ifdef BARRIER_SPILL
 			if( util::current_leader() ){
 				_grp_ctx.spill_barrier.release_full(*this);
@@ -3899,7 +3902,7 @@ class HarmonizeProgram
 			if(_grp_ctx.link_stash_count < STASH_MARGIN){
 				fill_stash_links(STASH_MARGIN);
 			}
-			//printf("{Spilling for call.}");
+			printf("{Spilling for call.}");
 			spill_stash(STASH_HIGH_WATER-1);
 		}
 
@@ -3919,15 +3922,13 @@ class HarmonizeProgram
 		end_time(1);
 
 		beg_time(5);
-		unsigned int make_count = 0;
 		while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
-			_grp_ctx.can_make_work = PROGRAM_SPEC::make_work(*this);
+			_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
 			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
 				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
 				_grp_ctx.busy = true;
 				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 			}
-			make_count++;
 			__syncwarp();
 		}
 		end_time(5);
@@ -3978,7 +3979,7 @@ class HarmonizeProgram
 
 			if( _grp_ctx.keep_running && !advance_stash_iter() ){
 				/*
-				// REALLY BAD: The fill_stash function successfully, however 
+				// REALLY BAD: The fill_stash function was successful, however 
 				// the stash still has no work to perform. In this situation,
 				// we set an error flag and halt.
 				*/
@@ -4160,8 +4161,14 @@ class HarmonizeProgram
 			unsigned int frame_index  = index % threads_per_frame;
 			if( frame_index == FRAME_SIZE ){
 				_dev_ctx.stack->frames[target_level].children_residents = 0u;
+				if( _dev_ctx.stack->frames[target_level].children_residents != 0u ){
+					printf("BAD A!\n");
+				}
 			} else {
 				_dev_ctx.stack->frames[target_level].pool.queues[frame_index].pair.data = QueueType::null;
+				if( _dev_ctx.stack->frames[target_level].pool.queues[frame_index].pair.data != QueueType::null ) {
+					printf("BAD B!\n");
+				}
 			}
 
 		}
@@ -4169,12 +4176,19 @@ class HarmonizeProgram
 
 		#ifdef LAZY_LINK
 
+		if(_thd_ctx.thread_id == 0){
+			(*_dev_ctx.claim_count) = 0;
+		}
+
 		/*
 		// Initialize the pool, assigning empty queues to each queue slot.
 		*/
 		for(unsigned int index = _thd_ctx.thread_id; index < POOL_SIZE; index+=worker_count ){	
 			
 			_dev_ctx.pool->queues[index].pair.data = QueueType::null;
+			if( _dev_ctx.pool->queues[index].pair.data != QueueType::null ){
+				printf("BAD C!\n");
+			}
 
 		}
 
@@ -4330,7 +4344,7 @@ class HarmonizeProgram
 		PROGRAM_SPEC::initialize(*this);
 
 		if(util::current_leader()){
-			//printf("\n\n\nInitial frame zero resident count is: %d\n\n\n",_dev_ctx.stack->frames[0].children_residents);
+			printf("\n\n\nInitial frame zero resident count is: %d\n\n\n",_dev_ctx.stack->frames[0].children_residents);
 		}	
 
 		/* The execution loop. */
@@ -4607,13 +4621,12 @@ class HarmonizeProgram
 };
 
 
-
 /*
 // These functions are here just to trampoline into the actual main functions for a given program.
-// This is done because structs/classes may not have global member functions.
+// This additonal layer of calls is present to allow for linking to these calls as device functions.
 */
 template<typename ProgType>
-__global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device) {
+__device__ void _inner_dev_init(typename ProgType::DeviceContext& _dev_ctx, typename ProgType::DeviceState& device) {
 	
 		
 	__shared__ typename ProgType::GroupContext _grp_ctx;
@@ -4626,11 +4639,12 @@ __global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename Pr
 	ProgType prog(_dev_ctx,_grp_ctx,_thd_ctx,device,group,thread);
 
 	prog.init_program();
+
 }
 
 
 template<typename ProgType>
-__global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device, size_t cycle_count) {
+__device__ void _inner_dev_exec(typename ProgType::DeviceContext& _dev_ctx, typename ProgType::DeviceState& device, size_t cycle_count) {
 	
 	__shared__ typename ProgType::GroupContext _grp_ctx;
 	__shared__ typename ProgType::GroupState   group;
@@ -4640,7 +4654,30 @@ __global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename Pr
 
 	ProgType prog(_dev_ctx,_grp_ctx,_thd_ctx,device,group,thread);
 
+	printf("(ctx%p)",&prog._dev_ctx);
+	printf("(sta%p)",&prog.device);
+	printf("(pre%p)",((void**)&prog.device)[-1]);
+	printf("(gtx%p)",(&prog._grp_ctx));
 	prog.exec(cycle_count);
+}
+
+/*
+// These functions are here just to trampoline into the device trampoline functions for a given program.
+// This is done because structs/classes may not have global member functions.
+*/
+template<typename ProgType>
+__global__ void _dev_init(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device) {
+	
+	_inner_dev_init<ProgType>(_dev_ctx, device);
+		
+}
+
+
+template<typename ProgType>
+__global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename ProgType::DeviceState device, size_t cycle_count) {
+	
+	_inner_dev_exec<ProgType>(_dev_ctx, device,cycle_count);
+
 }
 
 
@@ -4808,12 +4845,12 @@ class EventProgram
 
 
 	protected:
+	public:
 
 	DeviceContext & _dev_ctx;
 	GroupContext  & _grp_ctx;
 	ThreadContext & _thd_ctx;
 
-	public:
 
 	DeviceState   &   device;
 	GroupState    &    group;
@@ -4917,6 +4954,10 @@ class EventProgram
 
 
 	public:
+
+	__device__ void init_program() {
+
+	}
 
 	/*
 	// The workhorse of the program. This function executes until either a halting condition 
