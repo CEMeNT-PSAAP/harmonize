@@ -1,0 +1,198 @@
+.version	7.3	.target	sm_86	.address_size	64	.extern	.func(.param	.b32	func_retval0)access_device(.param	.b64	access_device_param_0,	.param	.b64	access_device_param_1);
+.extern	.func(.param	.b32	func_retval0)dispatch_even_async(.param	.b64	dispatch_even_async_param_0,	.param	.b64	dispatch_even_async_param_1,	.param	.b64	dispatch_even_async_param_2);
+.extern	.func(.param	.b32	func_retval0)dispatch_odd_async(.param	.b64	dispatch_odd_async_param_0,	.param	.b64	dispatch_odd_async_param_1,	.param	.b64	dispatch_odd_async_param_2);
+.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE;
+.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__11should_haltB2v6B90cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB0oA_2bQZA1mwYAFyQa6q1QQAE6RecordILi442EE;
+ .visible	.func(.param	.b32	func_retval0)_even(.param	.b64	_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_0,	.param	.b64	_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_1,	.param	.b64	_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_2){
+	.local	.align	8	.b8	__local_depot0[24];
+	.reg	.b64	%SP;
+	.reg	.b64	%SPL;
+	.reg	.pred	%p<11>;
+	.reg	.b32	%r<7>;
+	.reg	.f64	%fd<3>;
+	.reg	.b64	%rd<93>;
+	mov.u64	%SPL,	__local_depot0;
+	cvta.local.u64	%SP,	%SPL;
+	ld.param.u64	%rd7,	[_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_0];
+	ld.param.u64	%rd8,	[_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_1];
+	ld.param.u64	%rd9,	[_ZN8__main__4evenB2v5B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy6RecordILi442EE_param_2];
+	add.u64	%rd10,	%SP,	0;
+	add.u64	%rd1,	%SPL,	0;
+	mov.u64	%rd11,	0;
+	st.local.u64[%rd1],	%rd11;
+	add.u64	%rd12,	%SP,	8;
+	add.u64	%rd2,	%SPL,	8;
+	st.local.u64[%rd2],	%rd11;
+	add.u64	%rd13,	%SP,	16;
+	add.u64	%rd3,	%SPL,	16;
+	st.local.u64[%rd3],	%rd11;
+	ld.u8	%rd14,	[%rd9];
+	ld.u8	%rd15,	[%rd9+1];
+	bfi.b64	%rd16,	%rd15,	%rd14,	8,	8;
+	ld.u8	%rd17,	[%rd9+2];
+	ld.u8	%rd18,	[%rd9+3];
+	bfi.b64	%rd19,	%rd18,	%rd17,	8,	8;
+	bfi.b64	%rd20,	%rd19,	%rd16,	16,	16;
+	ld.u8	%rd21,	[%rd9+4];
+	ld.u8	%rd22,	[%rd9+5];
+	bfi.b64	%rd23,	%rd22,	%rd21,	8,	8;
+	ld.u8	%rd24,	[%rd9+6];
+	ld.u8	%rd25,	[%rd9+7];
+	bfi.b64	%rd26,	%rd25,	%rd24,	8,	8;
+	bfi.b64	%rd27,	%rd26,	%rd23,	16,	16;
+	bfi.b64	%rd5,	%rd27,	%rd20,	32,	32;
+	setp.gt.s64	%p1,	%rd5,	1;
+	ld.u8	%rd28,	[%rd9+16];
+	ld.u8	%rd29,	[%rd9+17];
+	bfi.b64	%rd30,	%rd29,	%rd28,	8,	8;
+	ld.u8	%rd31,	[%rd9+18];
+	ld.u8	%rd32,	[%rd9+19];
+	bfi.b64	%rd33,	%rd32,	%rd31,	8,	8;
+	bfi.b64	%rd34,	%rd33,	%rd30,	16,	16;
+	ld.u8	%rd35,	[%rd9+20];
+	ld.u8	%rd36,	[%rd9+21];
+	bfi.b64	%rd37,	%rd36,	%rd35,	8,	8;
+	ld.u8	%rd38,	[%rd9+22];
+	ld.u8	%rd39,	[%rd9+23];
+	bfi.b64	%rd40,	%rd39,	%rd38,	8,	8;
+	bfi.b64	%rd41,	%rd40,	%rd37,	16,	16;
+	bfi.b64	%rd6,	%rd41,	%rd34,	32,	32;
+	@%p1	bra	$L__BB0_4;
+	bra.uni	$L__BB0_1;
+	$L__BB0_4:
+	add.s64	%rd66,	%rd6,	1;
+	st.u8[%rd9+16],	%rd66;
+	shr.u64	%rd67,	%rd66,	56;
+	st.u8[%rd9+23],	%rd67;
+	shr.u64	%rd68,	%rd66,	48;
+	st.u8[%rd9+22],	%rd68;
+	shr.u64	%rd69,	%rd66,	40;
+	st.u8[%rd9+21],	%rd69;
+	shr.u64	%rd70,	%rd66,	32;
+	st.u8[%rd9+20],	%rd70;
+	shr.u64	%rd71,	%rd66,	24;
+	st.u8[%rd9+19],	%rd71;
+	shr.u64	%rd72,	%rd66,	16;
+	st.u8[%rd9+18],	%rd72;
+	shr.u64	%rd73,	%rd66,	8;
+	st.u8[%rd9+17],	%rd73;
+	cvt.rn.f64.s64	%fd1,	%rd5;
+	mul.f64	%fd2,	%fd1,	0d3FE0000000000000;
+	cvt.rzi.s64.f64	%rd74,	%fd2;
+	st.u8[%rd9],	%rd74;
+	shr.u64	%rd75,	%rd74,	56;
+	st.u8[%rd9+7],	%rd75;
+	shr.u64	%rd76,	%rd74,	48;
+	st.u8[%rd9+6],	%rd76;
+	shr.u64	%rd77,	%rd74,	40;
+	st.u8[%rd9+5],	%rd77;
+	shr.u64	%rd78,	%rd74,	32;
+	st.u8[%rd9+4],	%rd78;
+	shr.u64	%rd79,	%rd74,	24;
+	st.u8[%rd9+3],	%rd79;
+	shr.u64	%rd80,	%rd74,	16;
+	st.u8[%rd9+2],	%rd80;
+	shr.u64	%rd81,	%rd74,	8;
+	st.u8[%rd9+1],	%rd81;
+	shr.u64	%rd82,	%rd74,	63;
+	add.s64	%rd83,	%rd74,	%rd82;
+	and.b64	%rd84,	%rd83,	-2;
+	sub.s64	%rd85,	%rd74,	%rd84;
+	setp.lt.s64	%p5,	%rd85,	0;
+	add.s64	%rd86,	%rd85,	2;
+	selp.b64	%rd87,	%rd86,	%rd85,	%p5;
+	setp.eq.s64	%p6,	%rd87,	0;
+	@%p6	bra	$L__BB0_8;
+	st.local.u64[%rd3],	%rd11;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd13;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd8;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd9;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_odd_async,	(param0,	param1,	param2);
+		ld.param.b32	%r6,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p7,	%r6,	-2;
+	@%p7	bra	$L__BB0_10;
+	setp.eq.s32	%p8,	%r6,	0;
+	@%p8	bra	$L__BB0_10;
+	bra.uni	$L__BB0_7;
+	$L__BB0_1:
+	st.local.u64[%rd1],	%rd11;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd10;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd8;
+		.param	.b32	retval0;
+		call(retval0),	access_device,	(param0,	param1);
+		ld.param.b32	%r6,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p2,	%r6,	0;
+	@%p2	bra	$L__BB0_3;
+	setp.ne.s32	%p3,	%r6,	-2;
+	@%p3	bra	$L__BB0_7;
+	$L__BB0_3:
+	ld.u8	%rd46,	[%rd9+8];
+	ld.u8	%rd47,	[%rd9+9];
+	bfi.b64	%rd48,	%rd47,	%rd46,	8,	8;
+	ld.u8	%rd49,	[%rd9+10];
+	ld.u8	%rd50,	[%rd9+11];
+	bfi.b64	%rd51,	%rd50,	%rd49,	8,	8;
+	bfi.b64	%rd52,	%rd51,	%rd48,	16,	16;
+	ld.u8	%rd53,	[%rd9+12];
+	ld.u8	%rd54,	[%rd9+13];
+	bfi.b64	%rd55,	%rd54,	%rd53,	8,	8;
+	ld.u8	%rd56,	[%rd9+14];
+	ld.u8	%rd57,	[%rd9+15];
+	bfi.b64	%rd58,	%rd57,	%rd56,	8,	8;
+	bfi.b64	%rd59,	%rd58,	%rd55,	16,	16;
+	bfi.b64	%rd60,	%rd59,	%rd52,	32,	32;
+	setp.lt.s64	%p4,	%rd60,	-1;
+	selp.b64	%rd61,	131073,	0,	%p4;
+	ld.local.u64	%rd62,	[%rd1];
+	add.s64	%rd63,	%rd60,	%rd61;
+	shl.b64	%rd64,	%rd63,	3;
+	add.s64	%rd65,	%rd62,	%rd64;
+	st.u64[%rd65+8],	%rd6;
+	$L__BB0_10:
+	st.u64[%rd7],	%rd11;
+	mov.u32	%r5,	0;
+	st.param.b32[func_retval0+0],	%r5;
+	ret;
+	$L__BB0_8:
+	st.local.u64[%rd2],	%rd11;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd12;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd8;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd9;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_even_async,	(param0,	param1,	param2);
+		ld.param.b32	%r6,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p9,	%r6,	0;
+	@%p9	bra	$L__BB0_10;
+	setp.ne.s32	%p10,	%r6,	-2;
+	@%p10	bra	$L__BB0_7;
+	bra.uni	$L__BB0_10;
+	$L__BB0_7:
+	st.param.b32[func_retval0+0],	%r6;
+	ret;
+	
+}
+

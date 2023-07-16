@@ -1,0 +1,139 @@
+.version	7.3	.target	sm_86	.address_size	64	.extern	.func(.param	.b32	func_retval0)access_device(.param	.b64	access_device_param_0,	.param	.b64	access_device_param_1);
+.extern	.func(.param	.b32	func_retval0)dispatch_even_async(.param	.b64	dispatch_even_async_param_0,	.param	.b64	dispatch_even_async_param_1,	.param	.b64	dispatch_even_async_param_2);
+.extern	.func(.param	.b32	func_retval0)dispatch_odd_async(.param	.b64	dispatch_odd_async_param_0,	.param	.b64	dispatch_odd_async_param_1,	.param	.b64	dispatch_odd_async_param_2);
+.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__9make_workB2v3B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy;
+ .visible	.func(.param	.b32	func_retval0)_make_work(.param	.b64	_ZN8__main__9make_workB2v3B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy_param_0,	.param	.b64	_ZN8__main__9make_workB2v3B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy_param_1){
+	.local	.align	8	.b8	__local_depot0[48];
+	.reg	.b64	%SP;
+	.reg	.b64	%SPL;
+	.reg	.pred	%p<13>;
+	.reg	.b16	%rs<4>;
+	.reg	.b32	%r<8>;
+	.reg	.b64	%rd<39>;
+	mov.u64	%SPL,	__local_depot0;
+	cvta.local.u64	%SP,	%SPL;
+	ld.param.u64	%rd10,	[_ZN8__main__9make_workB2v3B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy_param_0];
+	ld.param.u64	%rd11,	[_ZN8__main__9make_workB2v3B96cw51cXTLSUwHBinCqbbgUAAGBlq82ILSCEQYkgSQBFCjFSaBZJtttTo4sahbKUBDUB3kNVDaQRKChQ_2bSEFA_2fkGdcqwkAEy_param_1];
+	add.u64	%rd12,	%SP,	0;
+	add.u64	%rd13,	%SPL,	0;
+	add.u64	%rd14,	%SP,	8;
+	add.u64	%rd15,	%SPL,	8;
+	mov.u64	%rd16,	0;
+	mov.u16	%rs1,	0;
+	st.local.v4.u16[%rd15],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	add.s64	%rd1,	%rd15,	8;
+	st.local.v4.u16[%rd15+8],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	st.local.v4.u16[%rd15+16],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	add.u64	%rd17,	%SP,	32;
+	add.u64	%rd2,	%SPL,	32;
+	st.local.u64[%rd2],	%rd16;
+	add.u64	%rd18,	%SP,	40;
+	add.u64	%rd3,	%SPL,	40;
+	st.local.u64[%rd3],	%rd16;
+	st.local.u64[%rd13],	%rd16;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd12;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd11;
+		.param	.b32	retval0;
+		call(retval0),	access_device,	(param0,	param1);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p1,	%r7,	0;
+	@%p1	bra	$L__BB0_2;
+	setp.ne.s32	%p2,	%r7,	-2;
+	@%p2	bra	$L__BB0_7;
+	$L__BB0_2:
+	ld.local.u64	%rd21,	[%rd13];
+	atom.add.u64	%rd4,	[%rd21],	4;
+	setp.gt.u64	%p3,	%rd4,	131071;
+	@%p3	bra	$L__BB0_12;
+	bra.uni	$L__BB0_3;
+	$L__BB0_12:
+	st.u8[%rd10],	%rs1;
+	mov.u32	%r6,	0;
+	st.param.b32[func_retval0+0],	%r6;
+	ret;
+	$L__BB0_3:
+	mov.u64	%rd37,	%rd4;
+	mov.u64	%rd38,	%rd16;
+	$L__BB0_4:
+	st.local.u64[%rd15],	%rd37;
+	st.local.u64[%rd1],	%rd37;
+	st.local.u64[%rd1+8],	%rd16;
+	shr.u64	%rd25,	%rd37,	63;
+	add.s64	%rd26,	%rd37,	%rd25;
+	and.b64	%rd27,	%rd26,	-2;
+	sub.s64	%rd28,	%rd37,	%rd27;
+	setp.lt.s64	%p4,	%rd28,	0;
+	add.s64	%rd29,	%rd28,	2;
+	selp.b64	%rd30,	%rd29,	%rd28,	%p4;
+	setp.eq.s64	%p5,	%rd30,	0;
+	@%p5	bra	$L__BB0_8;
+	mov.u64	%rd31,	0;
+	st.local.u64[%rd3],	%rd31;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd18;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd11;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd14;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_odd_async,	(param0,	param1,	param2);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p6,	%r7,	-2;
+	@%p6	bra	$L__BB0_10;
+	setp.eq.s32	%p7,	%r7,	0;
+	@%p7	bra	$L__BB0_10;
+	bra.uni	$L__BB0_7;
+	$L__BB0_8:
+	mov.u64	%rd34,	0;
+	st.local.u64[%rd2],	%rd34;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd17;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd11;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd14;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_even_async,	(param0,	param1,	param2);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p8,	%r7,	0;
+	@%p8	bra	$L__BB0_10;
+	setp.ne.s32	%p9,	%r7,	-2;
+	@%p9	bra	$L__BB0_7;
+	$L__BB0_10:
+	add.s64	%rd38,	%rd38,	1;
+	add.s64	%rd37,	%rd38,	%rd4;
+	setp.lt.s64	%p10,	%rd37,	131072;
+	setp.lt.u64	%p11,	%rd38,	4;
+	and.pred	%p12,	%p11,	%p10;
+	@%p12	bra	$L__BB0_4;
+	mov.u16	%rs2,	1;
+	st.u8[%rd10],	%rs2;
+	mov.u32	%r5,	0;
+	st.param.b32[func_retval0+0],	%r5;
+	ret;
+	$L__BB0_7:
+	st.param.b32[func_retval0+0],	%r7;
+	ret;
+	
+}
+

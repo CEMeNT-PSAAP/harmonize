@@ -3892,7 +3892,7 @@ class HarmonizeProgram
 
 		
 		if( stash_overfilled() ) {
-			printf("{Stash overfilled}");
+			//printf("{Stash overfilled}");
 			#ifdef BARRIER_SPILL
 			if( util::current_leader() ){
 				_grp_ctx.spill_barrier.release_full(*this);
@@ -3902,7 +3902,7 @@ class HarmonizeProgram
 			if(_grp_ctx.link_stash_count < STASH_MARGIN){
 				fill_stash_links(STASH_MARGIN);
 			}
-			printf("{Spilling for call.}");
+			//printf("{Spilling for call.}");
 			spill_stash(STASH_HIGH_WATER-1);
 		}
 
@@ -3915,7 +3915,8 @@ class HarmonizeProgram
 		}
 		#endif
 
-		if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
+		//if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
+		if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > 0x8000 ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
 			fill_stash(STASH_HIGH_WATER,false);
 		}
 
@@ -4020,7 +4021,7 @@ class HarmonizeProgram
 				//do_async(func_id,promise);
 				promise.template loose_eval(*this,func_id);
 			}
-		}
+		} 
 
 		__syncwarp(active);
 		end_time(4);
@@ -4343,9 +4344,11 @@ class HarmonizeProgram
 
 		PROGRAM_SPEC::initialize(*this);
 
+		/*
 		if(util::current_leader()){
 			printf("\n\n\nInitial frame zero resident count is: %d\n\n\n",_dev_ctx.stack->frames[0].children_residents);
-		}	
+		}
+		*/
 
 		/* The execution loop. */
 		#ifdef RACE_COND_PRINT
@@ -4609,10 +4612,9 @@ class HarmonizeProgram
 
 
 	template<typename TYPE>
-	__device__ float queue_fill_fraction()
+	__device__ float load_fraction()
 	{
 		return NAN;
-
 	}
 
 
@@ -4654,10 +4656,10 @@ __device__ void _inner_dev_exec(typename ProgType::DeviceContext& _dev_ctx, type
 
 	ProgType prog(_dev_ctx,_grp_ctx,_thd_ctx,device,group,thread);
 
-	printf("(ctx%p)",&prog._dev_ctx);
-	printf("(sta%p)",&prog.device);
-	printf("(pre%p)",((void**)&prog.device)[-1]);
-	printf("(gtx%p)",(&prog._grp_ctx));
+	//printf("(ctx%p)",&prog._dev_ctx);
+	//printf("(sta%p)",&prog.device);
+	//printf("(pre%p)",((void**)&prog.device)[-1]);
+	//printf("(gtx%p)",(&prog._grp_ctx));
 	prog.exec(cycle_count);
 }
 
@@ -4789,8 +4791,9 @@ class EventProgram
 
 		typedef		ProgramType       ParentProgramType;
 
-		unsigned int*                               checkout;
-		util::iter::IOBuffer<PromiseUnionType,AdrType>*   event_io[PromiseUnionType::Info::COUNT];
+		unsigned int  *checkout;
+		unsigned int   load_margin; 
+		util::iter::IOBuffer<PromiseUnionType,AdrType> *event_io[PromiseUnionType::Info::COUNT];
 	};
 
 
@@ -4937,6 +4940,14 @@ class EventProgram
 	__device__  void async_call_cast(int depth_delta, Promise<TYPE> param_value){
 		AdrType promise_index = 0;
 		AdrType io_index = static_cast<AdrType>(Lookup<TYPE>::type::DISC);
+		/*
+		printf("Event io at index %d is at %p with buffers at %p and %p\n",
+			io_index,
+			_dev_ctx.event_io[io_index],
+			_dev_ctx.event_io[io_index]->data_a,
+			_dev_ctx.event_io[io_index]->data_b
+		);
+		*/
 		if( _dev_ctx.event_io[io_index]->push_idx(promise_index) ){
 			_dev_ctx.event_io[io_index]->output_ptr()[promise_index].template cast<TYPE>() = param_value;
 		}
@@ -4949,7 +4960,6 @@ class EventProgram
 		promise.template cast<TYPE>() = param_value;
 		promise.template rigid_eval<ProgramType,TYPE>(*this);
 		//promise_eval<ProgramType,FUNC_ID>(param_value);
-
 	}
 
 
@@ -4988,11 +4998,11 @@ class EventProgram
 		}
 		__syncthreads();
 
+
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
 		while(true){
-			
 			__syncthreads();
 			if( util::current_leader() ) {
 				done = true;
@@ -5006,23 +5016,40 @@ class EventProgram
 				}
 			}
 			__syncthreads();
-
 			if( done ){
-				while(PROGRAM_SPEC::make_work(*this)){}
+				__shared__ bool should_make_work;
+				if( util::current_leader() ) {
+					should_make_work = true;
+				}
+				__syncthreads();
+				while(should_make_work){
+					if( util::current_leader() ) {
+						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
+							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
+							if(load >= _dev_ctx.load_margin){
+								should_make_work = false;
+							}
+						}
+					}
+					if(should_make_work){
+						should_make_work = PROGRAM_SPEC::make_work(*this);
+					}
+				}
 				break;
-			}
-
-			util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
-			thread_work = group_work.leap(chunk_size);
-			PromiseUnionType promise;
-			while( thread_work.step_val(promise) ){
-				promise.template loose_eval<ProgramType>(*this,func_id);
-			}
-
-			if(loop_count < loop_lim){
-				loop_count++;
 			} else {
-				break;
+
+				util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
+				thread_work = group_work.leap(chunk_size);
+				PromiseUnionType promise;
+				while( thread_work.step_val(promise) ){
+					promise.template loose_eval<ProgramType>(*this,func_id);
+				}
+
+				if(loop_count < loop_lim){
+					loop_count++;
+				} else {
+					break;
+				}
 			}
 
 		}
@@ -5071,10 +5098,9 @@ class EventProgram
 	}
 	
 	template<typename TYPE>
-	__device__ float queue_fill_fraction()
+	__device__ float load_fraction()
 	{
 		return _dev_ctx.event_io[Lookup<TYPE>::type::DISC]->output_fill_fraction_sync();
-
 	}
 
 };
