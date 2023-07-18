@@ -1,9 +1,0 @@
-var searchData=
-[
-  ['neighbor_5falloc',['neighbor_alloc',['../structMemPoolBank.html#a9b0e449e66be305417d76d036462b20a',1,'MemPoolBank::neighbor_alloc()'],['../structutil_1_1MemPoolBank.html#a9f2f47881e85697be8f078e12368877d',1,'util::MemPoolBank::neighbor_alloc()']]],
-  ['next',['next',['../structWorkLink.html#a12cf1c876e6e92a05f0eeef007d5015a',1,'WorkLink::next()'],['../unionMemPool_1_1Link.html#a85a1558923c9837986fb2ee6908e9a29',1,'MemPool::Link::next()'],['../unionutil_1_1MemPool_1_1Link.html#ac092328a1ceb399fe376c9960bc40506',1,'util::MemPool::Link::next()']]],
-  ['next_5fprint',['next_print',['../structMemPool.html#a470b68b4976333111773be8751b24a9a',1,'MemPool::next_print()'],['../structutil_1_1MemPool.html#abc51b8cea537c2acf9ebf79778a483a1',1,'util::MemPool::next_print()']]],
-  ['null',['null',['../structAdr.html#aa33d488b824b4f0b3a77928a9dec5dba',1,'Adr::null()'],['../structPoolQueue_3_01Adr_3_01ADR__TYPE_01_4_01_4.html#a4a6129865e35984b1e36ecfee31cc74c',1,'PoolQueue&lt; Adr&lt; ADR_TYPE &gt; &gt;::null()'],['../structutil_1_1Adr.html#a9a09c97d346a91e3ede256eafd6c79dd',1,'util::Adr::null()'],['../structutil_1_1PoolQueue_3_01Adr_3_01ADR__TYPE_01_4_01_4.html#a53b042698b3c546222bbd78fb47a40d3',1,'util::PoolQueue&lt; Adr&lt; ADR_TYPE &gt; &gt;::null()']]],
-  ['null_5flevel',['NULL_LEVEL',['../structWorkStack.html#a5b5d945dac8430553d7b57dab4104f61',1,'WorkStack::NULL_LEVEL()'],['../structWorkStack_3_01FRAME__TYPE_00_010_01_4.html#a4dba375e780fda0633898060162a9161',1,'WorkStack&lt; FRAME_TYPE, 0 &gt;::NULL_LEVEL()']]],
-  ['null_5fqueue',['null_queue',['../structPoolQueue_3_01Adr_3_01ADR__TYPE_01_4_01_4.html#a9d9e19909b0e6d53360ae59ff6c056fd',1,'PoolQueue&lt; Adr&lt; ADR_TYPE &gt; &gt;::null_queue()'],['../structutil_1_1PoolQueue_3_01Adr_3_01ADR__TYPE_01_4_01_4.html#a4fd4e4f45f8d62e4e32526a37c0f5e64',1,'util::PoolQueue&lt; Adr&lt; ADR_TYPE &gt; &gt;::null_queue()']]]
-];

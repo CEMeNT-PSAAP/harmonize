@@ -1650,6 +1650,9 @@ struct WorkPool
 };
 
 
+typedef unsigned int PromiseCount;
+typedef typename util::mem::PairEquivalent<PromiseCount>::Type PromiseCountPair;
+//typedef unsigned long long int PromiseCountPair;
 
 //! The `WorkFrame` template struct accepts a queue type and and a `size_t`, which is used to
 //! define its iternal work pool. A `WorkFrame` represents a pool that tracks the current number
@@ -1659,7 +1662,7 @@ template <typename QUEUE_TYPE, size_t QUEUE_COUNT>
 struct WorkFrame
 {
 
-	unsigned int children_residents;
+	util::mem::PairPack<PromiseCount> children_residents;
 	WorkPool<QUEUE_TYPE, QUEUE_COUNT> pool;
 
 };
@@ -2759,15 +2762,15 @@ class HarmonizeProgram
 
 
 		unsigned int depth_dec = 0;
-		unsigned int delta;
-		unsigned int result;
+		PromiseCountPair delta;
+		PromiseCountPair result;
 
 		FrameType& frame = _dev_ctx.stack->frames[start_level];
 
 		//! Decrement the residents counter for the start level
 		delta = util::active_count();
 		if(util::current_leader()){
-			result = atomicSub(&frame.children_residents,delta);
+			result = atomicSub(&frame.children_residents.data,delta);
 			if(result == 0u){
 				depth_dec += 1;
 			}
@@ -2778,7 +2781,7 @@ class HarmonizeProgram
 			FrameType& frame = _dev_ctx.stack->frames[d];
 			delta = util::active_count();
 			if(util::current_leader()){
-				result = atomicSub(&frame.children_residents,delta);
+				result = atomicSub(&frame.children_residents.data,delta);
 				if(result == 0u){
 					depth_dec += 1;
 				}
@@ -2816,14 +2819,14 @@ class HarmonizeProgram
 			unsigned int old_count;
 			unsigned int new_count;
 			if(promise_delta >= 0) {
-				old_count = atomicAdd(&dest.children_residents,(unsigned int) promise_delta);
+				old_count = atomicAdd(&dest.children_residents.data,(PromiseCountPair) promise_delta);
 				new_count = old_count + (unsigned int) promise_delta;
 				if(old_count > new_count){
 					rc_printf("\n\nOVERFLOW\n\n");
 				}
 			} else {
-				unsigned int neg_delta = - promise_delta;
-				old_count = atomicSub(&dest.children_residents,neg_delta);
+				PromiseCountPair neg_delta = -((PromiseCountPair) (-promise_delta));
+				old_count = atomicAdd(&dest.children_residents.data,neg_delta);
 				new_count = old_count - neg_delta; 
 				if(old_count < new_count){
 					rc_printf("\n\nUNDERFLOW\n\n");
@@ -2835,7 +2838,7 @@ class HarmonizeProgram
 			rc_printf("SM %d-%d: Old count: %d, New count: %d, Delta: %d\n",blockIdx.x,threadIdx.x,old_count,new_count,promise_delta);
 
 			
-			rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
+			rc_printf("SM %d-%d: frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents.data);
 			//! If the addition caused a frame to change from empty to non-empty or vice-versa,
 			//! make an appropriate incrementation or decrementation at the stack base.
 			if( (old_count == 0) && (new_count != 0) ){
@@ -2849,9 +2852,9 @@ class HarmonizeProgram
 			//! Finally, push the queues
 			push_queue(dest.pool.queues[index],queue);
 			rc_printf("SM %d: Pushed queue (%d,%d) to stack at index %d\n",threadIdx.x,queue.get_head().adr,queue.get_tail().adr,index);
-		
-			if( (_dev_ctx.stack->frames[0].children_residents % 0x1000000 ) == 0 ) {
-				rc_printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents);
+
+			if( (_dev_ctx.stack->frames[0].children_residents.get_right()) == 0 ) {
+				rc_printf("SM %d-%d: After queue pushed to stack, frame zero resident count is: %d\n",blockIdx.x,threadIdx.x,_dev_ctx.stack->frames[0].children_residents.data);
 			}
 
 		}
@@ -3587,7 +3590,7 @@ class HarmonizeProgram
 			
 				db_printf("STACK MODE ZERO\n");	
 				q_printf("%dth try pulling promises for fill\n",i+1);
-				if( get_frame(_grp_ctx.level).children_residents != 0 ){
+				if( get_frame(_grp_ctx.level).children_residents.data != 0 ){
 					queue = pull_promises(_grp_ctx.level,src_index);
 				} else {
 					queue.pair.data = QueueType::null;
@@ -3601,7 +3604,7 @@ class HarmonizeProgram
 				bool pull_any = (depth < _grp_ctx.level);
 				FrameType &current_frame = get_frame(depth);
 				if(!pull_any){
-					pull_any = (right_half(current_frame.children_residents) == 0);
+					pull_any = ((current_frame.children_residents.get_right()) == 0);
 				}
 
 
@@ -3915,8 +3918,9 @@ class HarmonizeProgram
 		}
 		#endif
 
+		const PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
 		//if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
-		if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > 0x8000 ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
+		if ( ( ((_dev_ctx.stack->frames[0].children_residents.get_right()) ) > GLOBAL_WORK_THRESHOLD ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
 			fill_stash(STASH_HIGH_WATER,false);
 		}
 
@@ -3965,8 +3969,8 @@ class HarmonizeProgram
 
 		#if 0
 		if( util::current_leader() ){
-			unsigned int ch_rs = _dev_ctx.stack->frames[0].children_residents;
-			printf("{group %d children_residents=(%d,%d), can_make_work=%d}\n",blockIdx.x,(ch_rs & 0xFFFF0000)>>16u, ch_rs & 0xFFFF,_grp_ctx.can_make_work);
+			PairPack<PromiseCount> cr = _dev_ctx.stack->frames[0].children_residents;
+			printf("{group %d children_residents=(%d,%d), can_make_work=%d}\n",blockIdx.x,cr.get_left(),cr.get_right(),_grp_ctx.can_make_work);
 		}
 		#endif
 		beg_time(2);
@@ -4161,8 +4165,8 @@ class HarmonizeProgram
 			unsigned int target_level = index / threads_per_frame;
 			unsigned int frame_index  = index % threads_per_frame;
 			if( frame_index == FRAME_SIZE ){
-				_dev_ctx.stack->frames[target_level].children_residents = 0u;
-				if( _dev_ctx.stack->frames[target_level].children_residents != 0u ){
+				_dev_ctx.stack->frames[target_level].children_residents.data = 0u;
+				if( _dev_ctx.stack->frames[target_level].children_residents.data != 0u ){
 					printf("BAD A!\n");
 				}
 			} else {
@@ -4565,9 +4569,9 @@ class HarmonizeProgram
 
 			printf("STACK:\t(status_flags: %#010x\tdepth: %d\tlive: %d)\t{\n",status_flags,depth,live);
 			for(int i=0; i < STACK_SIZE; i++){
-				unsigned int children_residents = host_stack->frames[i].children_residents;
-				unsigned int children  = (children_residents >> 16) & 0xFFFF;
-				unsigned int residents = children_residents & 0xFFFF;
+				util::mem::PairPack<PromiseCount> child_res = host_stack->frames[i].children_residents.data;
+				PromiseCount children  = child_res.get_left();
+				PromiseCount residents = child_res.get_right();
 				printf("(children: %d\t residents: %d)\t[",children,residents);
 				for(int j=0; j < FRAME_SIZE; j++){
 					unsigned int index = i*FRAME_SIZE + j;

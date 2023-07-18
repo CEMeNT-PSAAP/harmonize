@@ -14,6 +14,16 @@ HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))
 HARMONIZE_ROOT_CPP = HARMONIZE_ROOT_DIR+"/harmonize.cpp"
 
 
+# Uses nvidia-smi to query the compute level of the GPUs on the system. This
+# compute level is what is used for compling PTX.
+def native_cuda_compute_level():
+    query_cmd = "nvidia-smi --query-gpu compute_cap --format=csv,noheader"
+    completed = subprocess.run(query_cmd.split(),shell=False,check=True, capture_output=True)
+    output = completed.stdout.decode("utf-8").strip().replace(".","")
+    return output
+
+
+
 DEBUG = False
 
 # Injects `value` as the value of the global variable named `name` in the module
@@ -1512,8 +1522,9 @@ class RuntimeSpec():
             spec_file.close()
 
             # Compile the specialization to ptx
-            comp_cmd = "nvcc "+spec_filename+".cu -arch=native -rdc true " \
-                    "-c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
+            compute_level = native_cuda_compute_level()
+            comp_cmd = "nvcc "+spec_filename+".cu -arch=compute_"+compute_level+  \
+                    " -rdc true -c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
                     "-o "+spec_filename+".ptx"
             if DEBUG:
                 comp_cmd += " -g"

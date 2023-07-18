@@ -1,0 +1,138 @@
+.version	7.5	.target	sm_75	.address_size	64	.extern	.func(.param	.b32	func_retval0)access_device(.param	.b64	access_device_param_0,	.param	.b64	access_device_param_1);
+.extern	.func(.param	.b32	func_retval0)dispatch_even_async(.param	.b64	dispatch_even_async_param_0,	.param	.b64	dispatch_even_async_param_1,	.param	.b64	dispatch_even_async_param_2);
+.extern	.func(.param	.b32	func_retval0)dispatch_odd_async(.param	.b64	dispatch_odd_async_param_0,	.param	.b64	dispatch_odd_async_param_1,	.param	.b64	dispatch_odd_async_param_2);
+.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy;
+ .visible	.func(.param	.b32	func_retval0)_make_work(.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0,	.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1){
+	.local	.align	8	.b8	__local_depot0[48];
+	.reg	.b64	%SP;
+	.reg	.b64	%SPL;
+	.reg	.pred	%p<13>;
+	.reg	.b16	%rs<4>;
+	.reg	.b32	%r<8>;
+	.reg	.b64	%rd<33>;
+	mov.u64	%SPL,	__local_depot0;
+	cvta.local.u64	%SP,	%SPL;
+	ld.param.u64	%rd8,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0];
+	ld.param.u64	%rd9,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1];
+	add.u64	%rd10,	%SP,	0;
+	add.u64	%rd1,	%SPL,	0;
+	add.u64	%rd11,	%SP,	8;
+	add.u64	%rd2,	%SPL,	8;
+	mov.u64	%rd12,	0;
+	mov.u16	%rs1,	0;
+	st.local.v4.u16[%rd2],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	st.local.v4.u16[%rd2+8],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	st.local.v4.u16[%rd2+16],	{%rs1,	%rs1,	%rs1,	%rs1};
+	
+	add.u64	%rd13,	%SP,	32;
+	add.u64	%rd3,	%SPL,	32;
+	st.local.u64[%rd3],	%rd12;
+	add.u64	%rd14,	%SP,	40;
+	add.u64	%rd4,	%SPL,	40;
+	st.local.u64[%rd4],	%rd12;
+	st.local.u64[%rd1],	%rd12;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd10;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd9;
+		.param	.b32	retval0;
+		call(retval0),	access_device,	(param0,	param1);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p1,	%r7,	0;
+	@%p1	bra	$L__BB0_2;
+	setp.ne.s32	%p2,	%r7,	-2;
+	@%p2	bra	$L__BB0_12;
+	$L__BB0_2:
+	ld.local.u64	%rd15,	[%rd1];
+	atom.add.u64	%rd5,	[%rd15],	4;
+	setp.gt.u64	%p3,	%rd5,	655359;
+	@%p3	bra	$L__BB0_11;
+	bra.uni	$L__BB0_3;
+	$L__BB0_11:
+	st.u8[%rd8],	%rs1;
+	mov.u32	%r6,	0;
+	st.param.b32[func_retval0+0],	%r6;
+	ret;
+	$L__BB0_3:
+	mov.u64	%rd32,	%rd12;
+	$L__BB0_4:
+	add.s64	%rd18,	%rd32,	%rd5;
+	st.local.u64[%rd2],	%rd18;
+	st.local.u64[%rd2+8],	%rd18;
+	st.local.u64[%rd2+16],	%rd12;
+	shr.u64	%rd19,	%rd18,	63;
+	add.s64	%rd20,	%rd18,	%rd19;
+	and.b64	%rd21,	%rd20,	-2;
+	sub.s64	%rd22,	%rd18,	%rd21;
+	setp.lt.s64	%p4,	%rd22,	0;
+	add.s64	%rd23,	%rd22,	2;
+	selp.b64	%rd24,	%rd23,	%rd22,	%p4;
+	setp.eq.s64	%p5,	%rd24,	0;
+	@%p5	bra	$L__BB0_7;
+	mov.u64	%rd25,	0;
+	st.local.u64[%rd4],	%rd25;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd14;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd9;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd11;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_odd_async,	(param0,	param1,	param2);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p6,	%r7,	-2;
+	@%p6	bra	$L__BB0_9;
+	setp.eq.s32	%p7,	%r7,	0;
+	@%p7	bra	$L__BB0_9;
+	bra.uni	$L__BB0_12;
+	$L__BB0_7:
+	mov.u64	%rd28,	0;
+	st.local.u64[%rd3],	%rd28;
+	
+	{
+		.reg	.b32	temp_param_reg;
+		.param	.b64	param0;
+		st.param.b64[param0+0],	%rd13;
+		.param	.b64	param1;
+		st.param.b64[param1+0],	%rd9;
+		.param	.b64	param2;
+		st.param.b64[param2+0],	%rd11;
+		.param	.b32	retval0;
+		call(retval0),	dispatch_even_async,	(param0,	param1,	param2);
+		ld.param.b32	%r7,	[retval0+0];
+		
+	}
+	setp.eq.s32	%p8,	%r7,	0;
+	@%p8	bra	$L__BB0_9;
+	setp.ne.s32	%p9,	%r7,	-2;
+	@%p9	bra	$L__BB0_12;
+	$L__BB0_9:
+	add.s64	%rd32,	%rd32,	1;
+	add.s64	%rd31,	%rd32,	%rd5;
+	setp.lt.s64	%p10,	%rd31,	655360;
+	setp.lt.u64	%p11,	%rd32,	4;
+	and.pred	%p12,	%p11,	%p10;
+	@%p12	bra	$L__BB0_4;
+	mov.u16	%rs2,	1;
+	st.u8[%rd8],	%rs2;
+	mov.u32	%r5,	0;
+	st.param.b32[func_retval0+0],	%r5;
+	ret;
+	$L__BB0_12:
+	st.param.b32[func_retval0+0],	%r7;
+	ret;
+	
+}
+
