@@ -53,7 +53,9 @@
 #define BARRIER_SPILL
 #endif
 
-
+#if __CUDA_ARCH__ < 700
+#define __nanosleep(...) ;
+#endif
 
 
 
@@ -1084,7 +1086,7 @@ struct RemappingBarrier {
 		AdrType src_address = src.get_right();
 		
 		if( src_index >= GROUP_SIZE ){
-			printf("\n\n\nVERY BAD\n\n\n");
+			printf("Error: Link merge encountered. src_index >= GROUP_SIZE");
 		}
 
 		unsigned int total = dst_index + src_index;
@@ -1945,6 +1947,7 @@ class HarmonizeProgram
 		bool				busy;
 		bool				can_make_work;	
 		bool				scarce_work;	
+		bool 				has_worked;
 
 		unsigned char			exec_head;	// Indexes the link that is/will be evaluated next
 		unsigned char			empty_head;	// Head of the linked list of empty links
@@ -1964,6 +1967,8 @@ class HarmonizeProgram
 		
 		int				SM_promise_delta;
 		unsigned long long int		work_iterator;
+
+		long long int       clock_start;
 
 		#ifdef BARRIER_SPILL
 		RemappingBarrier<OpSet>		spill_barrier;
@@ -2189,6 +2194,8 @@ class HarmonizeProgram
 			_grp_ctx.empty_head   = 0;
 			_grp_ctx.work_iterator= 0;
 			_grp_ctx.scarce_work  = false;
+			_grp_ctx.clock_start  = clock64();
+			_grp_ctx.has_worked   = false;
 
 			#ifdef BARRIER_SPILL
 			_grp_ctx.spill_barrier = RemappingBarrier<OpSet>::blank(1);
@@ -2376,7 +2383,7 @@ class HarmonizeProgram
 	 __device__  QueueType pull_queue(QueueType* src, unsigned int start_index, unsigned int range_size, unsigned int& src_index){
 
 		QueueType result;
-		
+
 		__threadfence();
 		//! First iterate from the starting index to the end of the queue range, attempting to
 		//! claim a non-null queue until either there are no more slots to try, or the atomic
@@ -2578,6 +2585,10 @@ class HarmonizeProgram
 	 //!
 	 __device__ size_t alloc_links(LinkAdrType* dst, size_t req_count) {
 
+
+		//if(util::current_leader()){
+		//	printf("{Allocating links @ %d}",blockIdx.x);
+		//}	
 		size_t alloc_count = 0;
 		#ifdef LAZY_LINK
 
@@ -2699,6 +2710,7 @@ class HarmonizeProgram
 			} else {
 				count = threashold - _grp_ctx.link_stash_count;
 			}
+			//printf("{Filling links @ %d from %d to %d}",blockIdx.x, _grp_ctx.link_stash_count, threashold);
 			size_t        added = alloc_links(dst,count);
 			_grp_ctx.link_stash_count += added;
 
@@ -2717,9 +2729,10 @@ class HarmonizeProgram
 
 		//! Do not even try if no links can be or need to be removed
 		if(threashold >= _grp_ctx.link_stash_count){
-			q_printf("Nothing to spill...\n");
+			//q_printf("Nothing to spill...\n");
 			return;
 		}
+		//printf("{Spilling links @ %d from %d to %d}",blockIdx.x, _grp_ctx.link_stash_count, threashold);
 
 		//! Find where in the link stash to begin removing links
 
@@ -2995,7 +3008,7 @@ class HarmonizeProgram
 			queue.pair.data = QueueType::null;
 			unsigned int partial_iter = 0;
 			bool has_full_slots = true;
-			q_printf("{Spilling to %d}",threashold);
+			//printf("{Spilling @ %d from %d to %d}",blockIdx.x, _grp_ctx.main_queue.count, threashold);
 			for(unsigned int i=0; i < spill_count; i++){
 				unsigned int slot = STASH_SIZE;
 				if(has_full_slots){
@@ -3009,7 +3022,7 @@ class HarmonizeProgram
 						db_printf("%d",partial_iter);
 						if(_grp_ctx.main_queue.partial_map[partial_iter] != STASH_SIZE){
 							slot = _grp_ctx.main_queue.partial_map[partial_iter];
-							q_printf("{Spilling partial}");
+							//q_printf("{Spilling partial}");
 							partial_iter++;
 							break;
 						}
@@ -3538,6 +3551,31 @@ class HarmonizeProgram
 		__shared__ LinkAdrType links[STASH_SIZE];
 		#endif
 
+		if (halt_on_fail && _grp_ctx.busy) {
+
+			__shared__ unsigned int depth_live;
+			if(util::current_leader()){
+				depth_live = atomicSub(&(_dev_ctx.stack->depth_live),1) - 1;
+				_grp_ctx.busy = false;
+			}
+			__syncwarp(active);
+			int wait_count = 0;
+			int duration   = 1024;
+			long long int wait_start = clock64();
+			while((depth_live <= 0xFFFF) && (depth_live > 0)){
+				__nanosleep(duration);
+				wait_count++;
+				if(duration < 0x10000){
+					duration *= 2;
+				}
+				depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),0);
+				__syncwarp(active);
+			}
+			if(util::current_leader()){
+				db_printf("-%lld @ %d\n",clock64()-wait_start,blockIdx.x);
+			}
+		}
+
 		/*
 		// Currently implemented in a single-threaded manner per work group to simplify the initial
 		// correctness checking process. This can later be changed to take advantage of in-group
@@ -3551,7 +3589,6 @@ class HarmonizeProgram
 	
 			beg_time(12);	
 			threashold = (threashold > STASH_SIZE) ? STASH_SIZE : threashold;
-			//printf("{Filling to %d @ %d}",threashold,blockIdx.x);
 			
 			unsigned int gather_count = (threashold < _grp_ctx.main_queue.count) ? 0  : threashold - _grp_ctx.main_queue.count;
 			if( (STASH_SIZE - _grp_ctx.link_stash_count) < gather_count){
@@ -3580,6 +3617,7 @@ class HarmonizeProgram
 					}
 					break;
 				}
+				//printf("{Filling @ %d from %d to %d}",blockIdx.x,_grp_ctx.main_queue.count,threashold);
 
 
 				unsigned int src_index;
@@ -4018,6 +4056,7 @@ class HarmonizeProgram
 			*/
 			if(util::current_leader()){
 				db_printf("Executing slot %d, which is %d promises of type %d\n",_grp_ctx.exec_head,promise_count,func_id);
+				_grp_ctx.has_worked = true;
 			}
 			if( threadIdx.x < promise_count ){
 				//db_printf("Executing...\n");
@@ -4104,6 +4143,8 @@ class HarmonizeProgram
 			}
 			#endif
 
+			db_printf("%lld @ %d - %d\n",clock64()-_grp_ctx.clock_start,blockIdx.x,(int)_grp_ctx.has_worked);
+
 		}
 
 	}
@@ -4167,12 +4208,12 @@ class HarmonizeProgram
 			if( frame_index == FRAME_SIZE ){
 				_dev_ctx.stack->frames[target_level].children_residents.data = 0u;
 				if( _dev_ctx.stack->frames[target_level].children_residents.data != 0u ){
-					printf("BAD A!\n");
+					printf("ERROR: Stack frame counter not zeroed during intialization.\n");
 				}
 			} else {
 				_dev_ctx.stack->frames[target_level].pool.queues[frame_index].pair.data = QueueType::null;
 				if( _dev_ctx.stack->frames[target_level].pool.queues[frame_index].pair.data != QueueType::null ) {
-					printf("BAD B!\n");
+					printf("ERROR: Stack frame queue not zeroed during intialization.\n");
 				}
 			}
 
@@ -4192,7 +4233,7 @@ class HarmonizeProgram
 			
 			_dev_ctx.pool->queues[index].pair.data = QueueType::null;
 			if( _dev_ctx.pool->queues[index].pair.data != QueueType::null ){
-				printf("BAD C!\n");
+				printf("ERROR: Pool queue not NULL'd during initialization.\n");
 			}
 
 		}
@@ -4347,6 +4388,7 @@ class HarmonizeProgram
 		init_thread();
 
 		PROGRAM_SPEC::initialize(*this);
+
 
 		/*
 		if(util::current_leader()){
