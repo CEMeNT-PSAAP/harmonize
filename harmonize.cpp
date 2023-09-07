@@ -90,7 +90,7 @@ template <typename OP_UNION>
 struct PromiseEnum;
 
 //! The `VoidState` struct is an empty struct, used as a default state type, for states
-//! that are not defined the supplied program specification.
+//! that are not defined in the supplied program specification.
 struct VoidState {};
 
 //! The `ReturnOp` operation type is an internal type used to represent the resolution
@@ -206,7 +206,7 @@ struct OpUnionPair<OpUnion<LEFT_HEAD,LEFT_TAIL...>,OpUnion<RIGHT_HEAD,RIGHT_TAIL
 
 
 
-//! The `OpReturnFilter` tempalate struct is used to find the subset of a given
+//! The `OpReturnFilter` template struct is used to find the subset of a given
 //! operation union that has a given return type. This is useful for checking
 //! the validity of promises being used as return values for an operation.
 template<typename RETURN, typename OP_UNION>
@@ -2433,7 +2433,7 @@ class HarmonizeProgram
 	 __device__  QueueType push_queue(QueueType& dest, QueueType& queue){
 
 		if( queue.is_null() ){
-			return;
+			return queue;
 		}
 		#ifdef INF_LOOP_SAFE
 		while(true)
@@ -2470,6 +2470,7 @@ class HarmonizeProgram
 			}
 		}
 
+		return queue;
 
 	}
 
@@ -3008,7 +3009,7 @@ class HarmonizeProgram
 			queue.pair.data = QueueType::null;
 			unsigned int partial_iter = 0;
 			bool has_full_slots = true;
-			//printf("{Spilling @ %d from %d to %d}",blockIdx.x, _grp_ctx.main_queue.count, threashold);
+			q_printf("{Spilling from %d to %d @ %d}",_grp_ctx.main_queue.count,threashold,blockIdx.x);
 			for(unsigned int i=0; i < spill_count; i++){
 				unsigned int slot = STASH_SIZE;
 				if(has_full_slots){
@@ -3589,6 +3590,7 @@ class HarmonizeProgram
 	
 			beg_time(12);	
 			threashold = (threashold > STASH_SIZE) ? STASH_SIZE : threashold;
+			//printf("{Filling from %d to %d @ %d}",_grp_ctx.main_queue.count,threashold,blockIdx.x);
 			
 			unsigned int gather_count = (threashold < _grp_ctx.main_queue.count) ? 0  : threashold - _grp_ctx.main_queue.count;
 			if( (STASH_SIZE - _grp_ctx.link_stash_count) < gather_count){
@@ -3923,7 +3925,7 @@ class HarmonizeProgram
 	 __device__  void exec_cycle(){
 
 
-
+		
 		clear_exec_head();
 
 		/*
@@ -3956,23 +3958,33 @@ class HarmonizeProgram
 		}
 		#endif
 
-		const PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
 		//if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
-		if ( ( ((_dev_ctx.stack->frames[0].children_residents.get_right()) ) > GLOBAL_WORK_THRESHOLD ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) { 
-			fill_stash(STASH_HIGH_WATER,false);
-		}
 
 		end_time(1);
 
 		beg_time(5);
-		while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
-			_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
-			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
-				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
-				_grp_ctx.busy = true;
-				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
+
+		if (_grp_ctx.main_queue.full_head == STASH_SIZE){
+
+
+			#ifdef EAGER_FILLING
+			const PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
+			if( ((_dev_ctx.stack->frames[0].children_residents.get_right()) ) > GLOBAL_WORK_THRESHOLD ) { 
+				fill_stash(STASH_HIGH_WATER,false);
+			} else {
+			#endif
+				while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
+					_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
+					if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
+						unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
+						_grp_ctx.busy = true;
+						//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
+					}
+					__syncwarp();
+				}
+			#ifdef EAGER_FILLING
 			}
-			__syncwarp();
+			#endif
 		}
 		end_time(5);
 
@@ -4381,6 +4393,7 @@ class HarmonizeProgram
 	*/
 	 __device__ void exec(unsigned int cycle_count){
 
+		//printf("Test");
 		/* Initialize per-warp resources */
 		init_group();
 		

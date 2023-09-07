@@ -1,5 +1,5 @@
 import numpy as np
-from os.path import getmtime, exists, dirname, abspath
+from os.path import getmtime, exists, dirname, abspath, isfile
 from os      import makedirs, getcwd
 from numba import njit, cuda
 import numba
@@ -12,16 +12,42 @@ import sys
 
 HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))
 HARMONIZE_ROOT_CPP = HARMONIZE_ROOT_DIR+"/harmonize.cpp"
-
+CACHING = False
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
 def native_cuda_compute_level():
-    query_cmd = "nvidia-smi --query-gpu compute_cap --format=csv,noheader"
-    completed = subprocess.run(query_cmd.split(),shell=False,check=True, capture_output=True)
-    output = completed.stdout.decode("utf-8").strip().replace(".","")
+    query_cmd = "nvidia-smi --query-gpu=compute_cap --format=csv,noheader"
+    completed = subprocess.run(
+        query_cmd.split(),
+        shell=False,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    output = completed.stdout.decode("utf-8").splitlines()[0].strip().replace(".","")
     return output
 
+
+# Writes content to filepath and returns True if the written content differs from
+# the original content
+def cached_write(filepath, content):
+    outfile = None
+    if isfile(filepath):
+        outfile = open(filepath,'r+')
+        original = outfile.read()
+        if original == content:
+            print(f"{filepath} has not changed!")
+            return False
+    else:
+        outfile = open(filepath,'w')
+
+    print(f"{filepath} has changed!")
+    outfile.seek(0)
+    outfile.write(content)
+    outfile.truncate()
+    outfile.close()
+    return True
 
 
 DEBUG = False
@@ -1485,7 +1511,6 @@ class RuntimeSpec():
         return preamble + dispatch_defs + accessor_defs #+ fn_query_defs + query_defs
 
 
-
     # Generates the CUDA/C++ code specifying the structure of the program, for later
     # specialization to a specific program type, and compiles the ptx for each async
     # function supplied to the specfication. Both this cuda code and the ptx are 
@@ -1499,9 +1524,13 @@ class RuntimeSpec():
         # Generate and save generic program specification
         base_code = self.generate_specification_code()
         base_filename = cache_path+self.spec_name
-        base_file = open(base_filename+".cu",mode='w')
-        base_file.write(base_code)
-        base_file.close()
+        changed  = True
+        if CACHING:
+            changed  = cached_write(base_filename+".cu",base_code)
+        else:
+            base_file = open(base_filename+".cu",mode='w')
+            base_file.write(base_code)
+            base_file.close()
         
         # Compile the async function definitions to ptx
 
@@ -1522,11 +1551,18 @@ class RuntimeSpec():
             if fn in base_fns:
                 file_name = self.spec_name + "_" + file_name
             file_name = cache_path + file_name
-            ptx_file  = open(file_name,mode='w')
-            ptx_file.write(extern_device_ptx(fn,self.type_map))
             # Record the path of the generated ptx
             self.fn_def_link_list.append(file_name)
-            ptx_file.close()
+
+            ptx_text  = extern_device_ptx(fn,self.type_map)
+
+            if CACHING:
+                ptx_new = cached_write(file_name,ptx_text)
+                changed = changed or ptx_new
+            else:
+                ptx_file  = open(file_name,mode='w')
+                ptx_file.write(extern_device_ptx(fn,self.type_map))
+                ptx_file.close()
         
         self.init_dispatcher = {}
         self.exec_dispatcher = {}
@@ -1537,10 +1573,15 @@ class RuntimeSpec():
             # Generate the cuda code implementing the specialization
             spec_code = self.generate_specialization_code(kind,shortname)
             # Save the code to an appropriately named file
+
+            spec_new = True
             spec_filename = cache_path+self.spec_name+"_"+shortname
-            spec_file = open(spec_filename+".cu",mode='w')
-            spec_file.write(spec_code)
-            spec_file.close()
+            if CACHING:
+                spec_new  = cached_write(spec_filename+".cu",spec_code)
+            else:
+                spec_file = open(spec_filename+".cu",mode='w')
+                spec_file.write(spec_code)
+                spec_file.close()
 
             # Compile the specialization to ptx
             compute_level = native_cuda_compute_level()
@@ -1579,16 +1620,16 @@ class RuntimeSpec():
                 device=False,
                 link=link_list,
                 debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
+                opt=(not DEBUG)
+                #,cache=True
             )
             self.exec_dispatcher[kind] = cuda.jit(
                 exec_kernel,
                 device=False,
                 link=link_list,
                 debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
+                opt=(not DEBUG)
+                #,cache=True
             )
 
 
