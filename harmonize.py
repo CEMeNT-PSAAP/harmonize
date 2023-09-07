@@ -1585,7 +1585,7 @@ class RuntimeSpec():
 
             # Compile the specialization to ptx
             compute_level = native_cuda_compute_level()
-            comp_cmd = "nvcc "+spec_filename+".cu -arch=compute_"+compute_level+  \
+            comp_cmd = "nvcc "+spec_filename+".cu --std=c++11 -arch=compute_"+compute_level+  \
                     " -rdc true -c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
                     "-o "+spec_filename+".ptx --restrict --extra-device-vectorization"
             if DEBUG:
