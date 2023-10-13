@@ -1587,7 +1587,7 @@ class RuntimeSpec():
             compute_level = native_cuda_compute_level()
             comp_cmd = "nvcc "+spec_filename+".cu --std=c++11 -arch=compute_"+compute_level+  \
                     " -rdc true -c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
-                    "-o "+spec_filename+".ptx --restrict --extra-device-vectorization"
+                    "-o "+spec_filename+".ptx --restrict"
             if DEBUG:
                 comp_cmd += " -g"
             subprocess.run(comp_cmd.split(),shell=False,check=True)

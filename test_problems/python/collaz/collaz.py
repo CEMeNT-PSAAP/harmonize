@@ -57,10 +57,22 @@ def finalize(prog: numba.uintp):
     pass
 
 def make_work(prog: numba.uintp) -> numba.boolean:
-    step_max = 4
-    old = numba.cuda.atomic.add(device(prog)['val'],0,step_max)
+    step_max = 2
+
+    index_array = numba.cuda.shared.array(1,numba.uint64)
+
+
+    if numba.cuda.threadIdx.x == 0:
+        index_array[0] = numba.cuda.atomic.add(device(prog)['val'],0,step_max*32)
+
+    numba.cuda.syncthreads()
+
+    old = numba.cuda.atomic.add(index_array,0,step_max)
+
     if old >= val_count:
         return False
+
+    numba.cuda.atomic.add(device(prog)['val'],old+1,1)
 
     iter = numba.cuda.local.array(1,collaz_iter)
     step = 0
@@ -96,7 +108,7 @@ collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 if mode == "async":
     runtime = collaz_spec.harmonize_instance()
     runtime.init(4096)
-    runtime.exec(65536,4096)
+    runtime.exec(65536,288)
 else:
     runtime = collaz_spec.event_instance(io_capacity=65536*4,load_margin=1024)
     runtime.init(4096)

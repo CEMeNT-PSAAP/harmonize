@@ -28,8 +28,8 @@ struct Even {
 };
 struct collaz{
 	static const size_t STASH_SIZE = 8;
-	static const size_t FRAME_SIZE = 8192;
-	static const size_t POOL_SIZE = 8192;
+	static const size_t FRAME_SIZE = 8191;
+	static const size_t POOL_SIZE = 8191;
 	typedef OpUnion<Odd,Even> OpSet;
 	typedef _524296b8* DeviceState;
 	typedef _0b8* GroupState;
