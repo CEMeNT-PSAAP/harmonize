@@ -45,7 +45,9 @@
 #endif
 
 #if   defined(__NVCC__) || HIPIFY
-	#include "util/util.h"
+	
+#include <hip/hip_runtime.h>
+#include "util/util.h"
 #elif defined(__HIP__)
 	#include "util/util.h.hip"
 #endif
@@ -2074,7 +2076,7 @@ class HarmonizeProgram
 			#endif
 		{
 			#ifdef HRM_TIME
-			cudaMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
+			hipMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
 			#endif
 		}
 
@@ -2115,7 +2117,7 @@ class HarmonizeProgram
 
 			unsigned int* base_cr_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  base_cr = 0;
-			cudaMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			hipMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),hipMemcpyDeviceToHost);
 			check_error();
 			return (base_cr != 0);
 		}
@@ -4325,10 +4327,10 @@ class HarmonizeProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		hipError_t status = hipGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != hipSuccess){
+			const char* err_str = hipGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -4569,9 +4571,9 @@ class HarmonizeProgram
 
 		LinkAdrType link_total = 0;
 
-		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,cudaMemcpyDeviceToHost);
+		hipMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,hipMemcpyDeviceToHost);
+		hipMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,hipMemcpyDeviceToHost);
+		hipMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,hipMemcpyDeviceToHost);
 
 
 		for(AdrType i = 0; i < runtime.arena_size; i++){
@@ -4989,10 +4991,10 @@ class EventProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		hipError_t status = hipGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != hipSuccess){
+			const char* err_str = hipGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -5058,15 +5060,18 @@ class EventProgram
 		the_iter.reset(0,0);
 		__syncthreads();
 		if( util::current_leader() ){
+			done = false;
 			group_work = util::iter::GroupArrayIter<PromiseUnionType,unsigned int> (NULL,the_iter);
 		}
 		__syncthreads();
+
 
 
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
 		while(true){
+			/*
 			__syncthreads();
 			if( util::current_leader() ) {
 				done = true;
@@ -5078,9 +5083,12 @@ class EventProgram
 						break;
 					}
 				}
-			}
+			}*/
+
 			__syncthreads();
 			if( done ){
+				printf("A");
+				return;
 				__shared__ bool should_make_work;
 				if( util::current_leader() ) {
 					should_make_work = true;
@@ -5095,13 +5103,17 @@ class EventProgram
 							}
 						}
 					}
+					__syncthreads();
 					if(should_make_work){
-						should_make_work = PROGRAM_SPEC::make_work(*this);
+						__syncthreads();
+						should_make_work = __any(PROGRAM_SPEC::make_work(*this));
 					}
+					__syncthreads();
 				}
 				break;
 			} else {
-
+				printf("B");
+				return;
 				util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
 				thread_work = group_work.leap(chunk_size);
 				PromiseUnionType promise;
@@ -5115,7 +5127,6 @@ class EventProgram
 					break;
 				}
 			}
-
 		}
 
 

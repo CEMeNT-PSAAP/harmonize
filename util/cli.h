@@ -1,10 +1,13 @@
+#pragma once
+
+#if defined(__NVCC__) || HIPIFY
+	#include "basic.h"
+#elif defined(__HIP__)
+	#include "basic.h.hip"
+#endif
 
 
-
-
-
-
-
+namespace cli {
 
 struct GraphStyle {
 
@@ -518,6 +521,6 @@ struct ArgSet
 
 
 
-
+}
 
 

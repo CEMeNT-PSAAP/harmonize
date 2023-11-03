@@ -137,12 +137,14 @@ struct MyProgramSpec {
 		
 		unsigned int index;
 		while(iter.step(index)){
+			printf("[%d]",index);
 			if( (index % 2) == 0 ){
 				prog.template async<Even>(0,index,index);
 			} else {
 				prog.template async< Odd>(0,index,index);
 			}
 		}
+
 
 		return ! prog.device.iterator->done();
 
@@ -153,8 +155,11 @@ struct MyProgramSpec {
 };
 
 
+#if defined(EVENT_MODE)
+typedef  EventProgram     < MyProgramSpec > ProgType;
+#else
 typedef  HarmonizeProgram < MyProgramSpec > ProgType;
-
+#endif
 
 
 
@@ -175,6 +180,7 @@ unsigned int checker(unsigned long long int val){
 
 
 
+
 int main(int argc, char* argv[]){
 
 	cli::ArgSet args(argc,argv);
@@ -182,7 +188,10 @@ int main(int argc, char* argv[]){
 
 	unsigned int wg_count    = args["wg_count"];
 	unsigned int cycle_count = args["cycle_count"] | 0x100000u;
+	unsigned int device_ord  = args["device_ord"]  | 0u;
 
+	cudaSetDevice(device_ord);
+	
 	Stopwatch watch;
 
 	watch.start();
@@ -211,7 +220,12 @@ int main(int argc, char* argv[]){
 	// program determines how much extra space it has to store work if it cannot store
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// main memory, you may get some performance benefits by seting the arena size to zero.
+	#if defined(EVENT_MODE)
 	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
+	#else
+	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
+	#endif
+
 	cudaDeviceSynchronize();
 	host::check_error();
 	
@@ -220,10 +234,15 @@ int main(int argc, char* argv[]){
 	cudaDeviceSynchronize();
 	host::check_error();
 
+
 	// Execute the instance using 240 work groups, with each work group performing up to
 	// 65536 promise executions per thread before halting. If all promises are exhausted
 	// before this, the program exits early.
+	#if defined(EVENT_MODE)
+	exec<ProgType>(instance,wg_count,4);
+	#else
 	exec<ProgType>(instance,wg_count,cycle_count);
+	#endif
 	cudaDeviceSynchronize();
 	host::check_error();	
 

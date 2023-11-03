@@ -1,7 +1,13 @@
+#pragma once
+
+#if defined(__NVCC__) || HIPIFY
+	#include "basic.h"
+#elif defined(__HIP__)
+	#include "basic.h.hip"
+#endif
 
 
-
-
+namespace host {
 
 
 bool check_error(){
@@ -266,7 +272,7 @@ class DevObj {
 
 
 
-
+}
 
 
 

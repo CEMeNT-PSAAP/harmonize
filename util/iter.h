@@ -1,8 +1,15 @@
+#pragma once
+
+#if defined(__NVCC__) || HIPIFY
+	#include "basic.h"
+	#include "host.h"
+#elif defined(__HIP__)
+	#include "basic.h.hip"
+	#include "host.h.hip"
+#endif
 
 
-
-
-
+namespace iter {
 
 
 template<typename ITER_TYPE>
@@ -396,7 +403,7 @@ struct IOBuffer
 	AtomicIter<IterType> output_iter;
 
 
-	__device__  IOBuffer<T,IterType>()
+	__host__ __device__  IOBuffer<T,IterType>()
 		: capacity(0)
 		, toggle(false)
 		, input_iter (0,0)
@@ -619,7 +626,7 @@ struct MCPCBuffer {
 #endif
 
 
-
+}
 
 
 

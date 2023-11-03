@@ -1,8 +1,16 @@
+#pragma once
+
+#if defined(__NVCC__) || HIPIFY
+	#include "basic.h"
+	#include "host.h"
+#elif defined(__HIP__)
+	#include "host.h.hip"
+	#include "basic.h.hip"
+#endif
 
 
 
-
-
+namespace mem {
 
 template<typename T>
 struct PairEquivalent;
@@ -1040,7 +1048,7 @@ struct MemPoolBank {
 
 
 
-
+}
 
 
 

@@ -7,3 +7,4 @@ test_problems/simple_neutron/neut_std
 test_problems/simple_neutron/neut_hrm
 test_problems/simple_neutron/neut_evt
 
+*.hip
