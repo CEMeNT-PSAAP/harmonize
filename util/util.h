@@ -1,5 +1,6 @@
 #pragma once
 
+#include "adapt.h"
 #include "math.h"
 #include <vector>
 #include <cstdint>
@@ -32,7 +33,7 @@ namespace util {
 // This function returns the number of currently active threads in a warp
 */
  __device__ unsigned int active_count(){
-	return __popc(__activemask()); 
+	return __popc(__activemask());
 }
 
 
@@ -62,11 +63,11 @@ __device__ unsigned long long int leading_zeros(unsigned long long int value) {
 
 
 /*
-// A simple pseudo-random number generator. This algorithm should never be used for cryptography, 
+// A simple pseudo-random number generator. This algorithm should never be used for cryptography,
 // it is simply used to generate numbers random enough to reduce collisions for atomic
 // instructions performed to manage the runtime state.
 */
-#if 1 
+#if 1
 __host__ __device__ unsigned int random_uint(unsigned int &state){
 
 	state = (0x10DCDu * state + 1u);
@@ -139,23 +140,23 @@ struct Stopwatch {
 
 
 namespace func {
-	#include "func.cpp"
+	#include "func.h"
 }
 
 namespace host {
-	#include "host.cpp"
+	#include "host.h"
 }
 
 namespace mem {
-	#include "mem.cpp"
+	#include "mem.h"
 }
 
 namespace iter {
-	#include "iter.cpp"
+	#include "iter.h"
 }
 
 namespace cli {
-	#include "cli.cpp"
+	#include "cli.h"
 }
 
 
