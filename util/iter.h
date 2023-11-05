@@ -27,7 +27,7 @@ struct Iter
 	: value(v), limit(l), tempo(w) {}
 
 
-	 __device__ bool step(IterType& iter_val){
+	__device__ bool step(IterType& iter_val){
 
 		if( value >= limit ){
 			return false;
@@ -182,7 +182,7 @@ struct AtomicIter
 	}
 
 
-	 __device__ bool step(IterType& iter_val) {
+	__device__ bool step(IterType& iter_val) {
 
 		if( value >= limit ){
 			return false;
@@ -200,7 +200,7 @@ struct AtomicIter
 		
 	}
 
-	 __device__ bool sync_done() const {
+	__device__ bool sync_done() const {
 		
 		__shared__ bool result;
 		if(current_leader()){
@@ -212,7 +212,7 @@ struct AtomicIter
 		
 	}
 
-	 __device__ bool done() const {
+	__device__ bool done() const {
 		
 		return ( value >= limit );
 		

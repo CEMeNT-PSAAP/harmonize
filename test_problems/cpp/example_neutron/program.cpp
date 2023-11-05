@@ -184,7 +184,10 @@ int main(int argc, char *argv[]){
 
 	// The device index to use (zero is default)
 	unsigned int dev_idx  = args["dev_idx"] | 0;
-	cudaSetDevice(dev_idx); 
+	throw_on_error(
+		"Failed to set device.",
+		cudaSetDevice(dev_idx)
+	); 
 
 	// Whether or not to show a graph on the command line
 	bool	    show = args["show"];
@@ -193,7 +196,7 @@ int main(int argc, char *argv[]){
 	bool	    csv  = args["csv"];
 	
 	// The size of the arena/io buffer used by the async/event-based program
-	unsigned int arena_size = args["pool"] | 0x8000000;
+	unsigned int arena_size = args["pool"] | 0x1000000;
 	
 	MyDeviceState  dev_state;
 
@@ -255,7 +258,10 @@ int main(int argc, char *argv[]){
 	int elem_count = dev_state.div_count*2;
 	halted.resize(elem_count);
 	dev_state.halted = halted;
-	cudaMemset( halted, 0, sizeof(float) * elem_count );
+	throw_on_error(
+		"Failed to memset.",
+		cudaMemset( halted, 0, sizeof(float) * elem_count )
+	);
 
 	// Set the ID iterator to the range from zero to the number of source neutrons
 	source_id_iter<< iter::AtomicIter<unsigned int>(0,args["num"]);
@@ -263,8 +269,7 @@ int main(int argc, char *argv[]){
 
 
 	// Synchronize for safety and report any errors
-	cudaDeviceSynchronize();
-	check_error();
+	checked_device_sync();
 
 
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -273,19 +278,17 @@ int main(int argc, char *argv[]){
 	
 	if( !dev_state.is_async ){
 
-		SyncProgram::Instance instance(arena_size,dev_state);
+		SyncProgram::Instance instance(arena_size,dev_state,1024);
 
 		// Sync for safety and report any errors
-		cudaDeviceSynchronize();
-		check_error();
+		checked_device_sync();
 		
 		// While the instance has not yet completed, execute, sync, and report any errors
 		do {
 			// Give the number of work groups and the size of the chunks pulled from
 			// the io buffer
 			exec<SyncProgram>(instance,wg_count,1);
-			cudaDeviceSynchronize();
-			check_error();
+			checked_device_sync();
 		} while ( ! instance.complete() );
 
 	} else {
@@ -293,12 +296,10 @@ int main(int argc, char *argv[]){
 		AsyncProgram::Instance instance(arena_size/32u,dev_state);
 
 		// Sync for safety and report any errors
-		cudaDeviceSynchronize();
-		check_error();
+		checked_device_sync();
 		
 		init<AsyncProgram>(instance,wg_count);
-		cudaDeviceSynchronize();
-		check_error();
+		checked_device_sync();
 		int num = 0;
 		
 		// While the instance has not yet completed, execute, sync, and report any errors
@@ -306,8 +307,7 @@ int main(int argc, char *argv[]){
 			// Give the number of work groups used and the number of iterations
 			// to perform before halting early, to prevent GPU timeouts
 			exec<AsyncProgram>(instance,wg_count,0x1000000);
-			cudaDeviceSynchronize();
-			check_error();
+			checked_device_sync();
 			num++;
 		} while(! instance.complete() );
 

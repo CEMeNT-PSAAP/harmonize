@@ -10,16 +10,11 @@
 namespace host {
 
 
-bool check_error(){
+void check_error(){
 
 	cudaError_t status = cudaGetLastError();
 
-	if(status != cudaSuccess){
-		const char* err_str = cudaGetErrorString(status);
-		printf("ERROR: \"%s\"\n",err_str);
-	}
-
-	return (status != cudaSuccess);
+	throw_on_error("",status);
 
 }
 
@@ -57,7 +52,11 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				cudaFree(adr);
+				cudaError_t free_err = cudaFree(adr);
+				if(free_err != cudaSuccess) {
+					std::cerr << "ERROR: Failed to free device buffer managed by a DevBuf!\n";
+					//throw std::runtime_error("Failed to free device buffer.");
+				}
 			}
 		}
 
@@ -229,7 +228,10 @@ class DevObj {
 				//printf("Doing a free\n");
 				pull_data();
 				host_copy.host_free();
-				cudaFree(adr);
+				cudaError_t free_err = cudaFree(adr);
+				if(free_err != cudaSuccess) {
+					std::cerr << "ERROR: Failed to free device buffer managed by a DevObj!\n";
+				}
 			}
 		}
 

@@ -10,5 +10,7 @@
 #include <type_traits>
 #include <limits>
 #include <memory>
+#include <stdexcept>
+#include <iostream>
 
 #define __noinline__ __attribute__((noinline))

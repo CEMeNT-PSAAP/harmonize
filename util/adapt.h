@@ -4,14 +4,16 @@
 
 #if   defined(__NVCC__)
 
-    // Nothing needed
+    size_t const WARP_SIZE = 32;
 
 
-#elif defined(__HIP__)
+#elif defined(__HIP__) || HIPIFY
 
-    #define __syncwarp(mask) printf("__syncwarp is not supported on AMD.\n")
+    #define __syncwarp(mask) ;
     #define __activemask()   0x3F
     #define __any_sync(x,y) 0x1
+    size_t const WARP_SIZE = 64;
+
 
 #elif defined(__HCC__)
 

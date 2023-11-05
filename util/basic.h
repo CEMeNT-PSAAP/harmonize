@@ -1,10 +1,40 @@
 #pragma once
 
-#include "includes.h"
 
 
-#include "adapt.h"
 
+#if defined(__NVCC__) || HIPIFY
+
+	#include "includes.h"
+	#include "adapt.h"
+
+#elif defined(__HIP__)
+
+	#include "includes.h.hip"
+	#include "adapt.h.hip"
+
+#endif
+
+
+void throw_err(const char *message, cudaError_t err) {
+	std::string text = message;
+	const char* err_str = cudaGetErrorString(err);
+	text += " - Error: '";
+	text += err_str;
+	text += "'\n";
+	throw std::runtime_error(text);
+}
+
+
+void throw_on_error(const char *message, cudaError_t err) {
+	if (err != cudaSuccess) {
+		throw_err(message,err);
+	}
+}
+
+void checked_device_sync(){
+	throw_on_error("Failed to sync with device.",cudaDeviceSynchronize());
+}
 
 /*
 // Gives a count of how many threads in the current warp with a lower warp-local id are currently
@@ -24,7 +54,7 @@
 /*
 // This function returns the number of currently active threads in a warp
 */
- __device__ unsigned int active_count(){
+__device__ unsigned int active_count(){
 	return __popc(__activemask());
 }
 
@@ -33,7 +63,7 @@
 // This returns true only if the current thread is the active thread with the lowest warp-local id.
 // This is valuable for electing a "leader" to perform single-threaded work for a warp.
 */
- __device__ bool current_leader(){
+__device__ bool current_leader(){
 	return ((__ffs(__activemask())-1) == threadIdx.x);
 }
 
@@ -81,37 +111,29 @@ struct Stopwatch {
 
 	Stopwatch() {
 
-		cudaError_t beg_stat = cudaEventCreate( &beg );
-		cudaError_t end_stat = cudaEventCreate( &end );
+		cudaError_t beg_err = cudaEventCreate( &beg );
+		cudaError_t end_err = cudaEventCreate( &end );
 
-		if(beg_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(beg_stat);
-			printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
-		}
+		throw_on_error("Failed to create Stopwatch start event.",beg_err);
+		throw_on_error("Failed to create Stopwatch end event.",end_err);
 
-		if(end_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(end_stat);
-			printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
-		}
-
-		if( (beg_stat != cudaSuccess) || (end_stat != cudaSuccess) ) {
-			printf("Failed to create one or more Stopwatch events\n");
-			std::exit(1);
-		}
 	}
 
 
-	bool start() {
-		return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+	void start() {
+		cudaError_t beg_err = cudaEventRecord( beg, NULL );
+		throw_on_error("Failed to submit Stopwatch start event.",beg_err);
 	}
 
-	bool stop() {
-		if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
-			return false;
-		}
-		cudaEventSynchronize( end );
-        	cudaEventElapsedTime( &duration, beg, end );
-		return true;
+	void stop() {
+		cudaError_t end_err = cudaEventRecord( end, NULL );
+		throw_on_error("Failed to submit Stopwatch end event.",end_err);
+
+		cudaError_t sync_err = cudaEventSynchronize( end );
+		throw_on_error("Failed to synchronize on StopWatch end event.",sync_err);
+		
+        cudaError_t time_err = cudaEventElapsedTime( &duration, beg, end );
+		throw_on_error("Failed to query StopWatch duration.",time_err);
 	}
 
 	float ms_duration(){

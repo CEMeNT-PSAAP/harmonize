@@ -38,6 +38,7 @@ struct Even {
 
 
 
+
 struct Odd{
 
 	using Type = void(*)(unsigned int step, unsigned int original, unsigned long long int val);
@@ -131,22 +132,24 @@ struct MyProgramSpec {
 	template<typename PROGRAM>
 	__device__ static bool make_work(PROGRAM prog){
 
+		
 		unsigned int iter_step_length = 1u;
 
 		iter::Iter<unsigned int> iter = prog.device.iterator->leap(iter_step_length);
-		
+
+
 		unsigned int index;
 		while(iter.step(index)){
-			printf("[%d]",index);
+			prog.device.output[index]++;
+
+			//printf("[%d]",index);
 			if( (index % 2) == 0 ){
 				prog.template async<Even>(0,index,index);
 			} else {
 				prog.template async< Odd>(0,index,index);
 			}
 		}
-
-
-		return ! prog.device.iterator->done();
+		return  ! prog.device.iterator->done();
 
 	}
 
@@ -190,7 +193,10 @@ int main(int argc, char* argv[]){
 	unsigned int cycle_count = args["cycle_count"] | 0x100000u;
 	unsigned int device_ord  = args["device_ord"]  | 0u;
 
-	cudaSetDevice(device_ord);
+	util::throw_on_error(
+		"Failed to set device.",
+		cudaSetDevice(device_ord)
+	);
 	
 	Stopwatch watch;
 
@@ -221,30 +227,33 @@ int main(int argc, char* argv[]){
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// main memory, you may get some performance benefits by seting the arena size to zero.
 	#if defined(EVENT_MODE)
-	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
+	ProgType::Instance instance = ProgType::Instance(0x100000,ds,1024);
 	#else
 	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
 	#endif
 
-	cudaDeviceSynchronize();
-	host::check_error();
+	util::checked_device_sync();
 	
 	// Initialize the instance using 32 work groups
 	init<ProgType>(instance,32);
-	cudaDeviceSynchronize();
-	host::check_error();
+	util::checked_device_sync();
 
 
 	// Execute the instance using 240 work groups, with each work group performing up to
 	// 65536 promise executions per thread before halting. If all promises are exhausted
 	// before this, the program exits early.
 	#if defined(EVENT_MODE)
-	exec<ProgType>(instance,wg_count,4);
+	size_t i = 0;
+	do {
+		exec<ProgType>(instance,wg_count,1);
+		util::checked_device_sync();
+		std::cout << "Completed event processing iteration #"<< i++ << '\n';
+	} while ( ! instance.complete() );
+	std::cout << "Done!\n";
 	#else
 	exec<ProgType>(instance,wg_count,cycle_count);
 	#endif
-	cudaDeviceSynchronize();
-	host::check_error();	
+	util::checked_device_sync();
 
 	watch.stop();
 

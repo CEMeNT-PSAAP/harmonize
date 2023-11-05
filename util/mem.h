@@ -1,11 +1,13 @@
 #pragma once
 
 #if defined(__NVCC__) || HIPIFY
+	#include "adapt.h"
 	#include "basic.h"
 	#include "host.h"
 #elif defined(__HIP__)
-	#include "host.h.hip"
+	#include "adapt.h.hip"
 	#include "basic.h.hip"
+	#include "host.h.hip"
 #endif
 
 
@@ -254,7 +256,9 @@ struct MemPool {
 		}
 		if( (arena_size.adr != 0) || (pool_size.adr != 0 ) ){
 			mempool_init<<<256,32>>>(*this);
-			cudaDeviceSynchronize();
+			if ( cudaDeviceSynchronize() ) {
+				printf("Failed to synchronize with host when initializing MemPool.\n");
+			}
 		}
 		//next_print();
 	}
@@ -272,7 +276,10 @@ struct MemPool {
 
 	__host__ void next_print(){
 		Link* host_copy = (Link*)malloc(sizeof(Link)*arena_size.adr);
-		cudaMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,cudaMemcpyDeviceToHost);
+		cudaError_t copy_err = cudaMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,cudaMemcpyDeviceToHost);
+		if ( copy_err != cudaSuccess ) {
+			printf("Failed to memcpy in MemPool::next_print.\n");
+		}
 		for(int i=0; i<arena_size.adr; i++){
 			printf("%d,",host_copy[i].next.adr);
 		}
@@ -650,7 +657,7 @@ __global__ void mempool_init(MemPool<T,INDEX> mempool){
 
 
 
-template<typename T, size_t SIZE, size_t WARP_SIZE=32>
+template<typename T, size_t SIZE>
 struct MemCache {
 
 	typedef typename T::DataType DataType;
@@ -798,7 +805,7 @@ struct MemCache {
 
 
 
-template<typename T, size_t SIZE, size_t WARP_SIZE=32>
+template<typename T, size_t SIZE>
 struct SimpleMemCache {
 
 	typedef typename T::DataType DataType;

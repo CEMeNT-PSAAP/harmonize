@@ -2117,8 +2117,8 @@ class HarmonizeProgram
 
 			unsigned int* base_cr_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  base_cr = 0;
-			hipMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),hipMemcpyDeviceToHost);
-			check_error();
+			hipError_t copy_err = hipMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),hipMemcpyDeviceToHost);
+			util::throw_on_error("Failed to read completion state of async runtime.",copy_err);
 			return (base_cr != 0);
 		}
 
@@ -4807,7 +4807,7 @@ class EventProgram
 	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 
-	CONST_SWITCH(size_t,GROUP_SIZE,32)
+	CONST_SWITCH(size_t,GROUP_SIZE,util::WARP_SIZE)
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -4870,13 +4870,14 @@ class EventProgram
 	*/
 	struct Instance {
 
-
+		unsigned int load_margin;
 		util::host::DevBuf<unsigned int> checkout;
 		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Info::COUNT];
 		DeviceState device_state;
 
-		__host__ Instance (size_t io_size, DeviceState gs)
+		__host__ Instance (size_t io_size, DeviceState gs, unsigned int margin)
 			: device_state(gs)
+			, load_margin(margin)
 		{
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
@@ -4888,6 +4889,7 @@ class EventProgram
 
 			DeviceContext result;
 
+			result.load_margin = load_margin;
 			result.checkout = checkout;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				result.event_io[i] = event_io[i];
@@ -4902,7 +4904,7 @@ class EventProgram
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i].pull_data();
 				check_error();
-				if( ! event_io[i].host_copy().input_iter.limit == 0 ){
+				if( ! (event_io[i].host_copy().input_iter.limit == 0) ){
 					return false;
 				}
 			}
@@ -5060,18 +5062,15 @@ class EventProgram
 		the_iter.reset(0,0);
 		__syncthreads();
 		if( util::current_leader() ){
-			done = false;
 			group_work = util::iter::GroupArrayIter<PromiseUnionType,unsigned int> (NULL,the_iter);
 		}
 		__syncthreads();
-
 
 
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
 		while(true){
-			/*
 			__syncthreads();
 			if( util::current_leader() ) {
 				done = true;
@@ -5083,12 +5082,9 @@ class EventProgram
 						break;
 					}
 				}
-			}*/
-
+			}
 			__syncthreads();
 			if( done ){
-				printf("A");
-				return;
 				__shared__ bool should_make_work;
 				if( util::current_leader() ) {
 					should_make_work = true;
@@ -5098,22 +5094,19 @@ class EventProgram
 					if( util::current_leader() ) {
 						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
 							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
-							if(load >= _dev_ctx.load_margin){
+							int capacity = _dev_ctx.event_io[i]->capacity;
+							if((capacity-load) < _dev_ctx.load_margin){
 								should_make_work = false;
 							}
 						}
 					}
-					__syncthreads();
 					if(should_make_work){
-						__syncthreads();
 						should_make_work = __any(PROGRAM_SPEC::make_work(*this));
 					}
-					__syncthreads();
 				}
 				break;
 			} else {
-				printf("B");
-				return;
+
 				util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
 				thread_work = group_work.leap(chunk_size);
 				PromiseUnionType promise;
@@ -5127,6 +5120,7 @@ class EventProgram
 					break;
 				}
 			}
+
 		}
 
 
