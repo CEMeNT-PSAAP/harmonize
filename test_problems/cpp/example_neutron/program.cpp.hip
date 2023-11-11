@@ -2,7 +2,9 @@
 #if defined(__HIP__)
 	#include "logic.cpp.hip"
 #else
-	#include "logic.cpp"
+	
+#include <hip/hip_runtime.h>
+#include "logic.cpp"
 #endif
 
 
@@ -187,7 +189,7 @@ int main(int argc, char *argv[]){
 	unsigned int dev_idx  = args["dev_idx"] | 0;
 	throw_on_error(
 		"Failed to set device.",
-		cudaSetDevice(dev_idx)
+		hipSetDevice(dev_idx)
 	); 
 
 	// Whether or not to show a graph on the command line
@@ -261,7 +263,7 @@ int main(int argc, char *argv[]){
 	dev_state.halted = halted;
 	throw_on_error(
 		"Failed to memset.",
-		cudaMemset( halted, 0, sizeof(float) * elem_count )
+		hipMemset( halted, 0, sizeof(float) * elem_count )
 	);
 
 	// Set the ID iterator to the range from zero to the number of source neutrons

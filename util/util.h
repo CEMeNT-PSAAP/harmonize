@@ -1,13 +1,11 @@
 #pragma once
-#include "includes.h"
+
+
+
+#include "adapt.h"
 
 
 namespace util {
-
-
-
-
-#if defined(__NVCC__) || HIPIFY
 
 	#include "basic.h"
 
@@ -18,21 +16,6 @@ namespace util {
 	#include "iter.h"
 
 	#include "cli.h"
-
-#elif defined(__HIP__)
-	
-	#include "basic.h.hip"
-
-	#include "host.h.hip"
-
-	#include "mem.h.hip"
-
-	#include "iter.h.hip"
-
-	#include "cli.h.hip"
-
-#endif
-
 
 }
 

@@ -1,4 +1,6 @@
 
+#include <hip/hip_runtime.h>
+
 
 using namespace hrm;
 using namespace hrm::util;
@@ -197,7 +199,7 @@ int main(int argc, char* argv[]){
 
 	util::throw_on_error(
 		"Failed to set device.",
-		cudaSetDevice(device_ord)
+		hipSetDevice(device_ord)
 	);
 	
 	Stopwatch watch;

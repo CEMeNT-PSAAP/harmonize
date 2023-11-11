@@ -1,10 +1,6 @@
 #pragma once
 
-#if defined(__NVCC__) || HIPIFY
-	#include "basic.h"
-#elif defined(__HIP__)
-	#include "basic.h.hip"
-#endif
+#include "basic.h"
 
 
 namespace host {
@@ -12,7 +8,7 @@ namespace host {
 
 void check_error(){
 
-	cudaError_t status = cudaGetLastError();
+	adapt::gpurtError_t status = adapt::gpurtGetLastError();
 
 	throw_on_error("",status);
 
@@ -21,15 +17,15 @@ void check_error(){
 
 
 
-void auto_throw(cudaError_t value){
-	if ( value != cudaSuccess ) { throw value; }
+void auto_throw(adapt::gpurtError_t value){
+	if ( value != adapt::gpurtSuccess ) { throw value; }
 }
 
 
 template<typename T>
 T* hardMalloc(size_t size){
 	T* result;
-	auto_throw( cudaMalloc(&result, sizeof(T)*size) );
+	auto_throw( adapt::gpurtMalloc(&result, sizeof(T)*size) );
 	return result;
 }
 
@@ -52,8 +48,8 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				cudaError_t free_err = cudaFree(adr);
-				if(free_err != cudaSuccess) {
+				adapt::gpurtError_t free_err = adapt::gpurtFree(adr);
+				if(free_err != adapt::gpurtSuccess) {
 					std::cerr << "ERROR: Failed to free device buffer managed by a DevBuf!\n";
 					//throw std::runtime_error("Failed to free device buffer.");
 				}
@@ -72,14 +68,14 @@ class DevBuf {
 	__host__ void resize(size_t s){
 		T* new_adr = hardMalloc<T>(s);
 		size_t copy_count = ( s < inner->size ) ? s : inner->size;
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			new_adr,
 			inner->adr,
 			sizeof(T)*copy_count,
-			cudaMemcpyDeviceToDevice
+			adapt::gpurtMemcpyDeviceToDevice
 		) );
 		if( inner->adr != NULL ) {
-			auto_throw( cudaFree(inner->adr) );
+			auto_throw( adapt::gpurtFree(inner->adr) );
 		}
 		inner->size = s;
 		inner->adr = new_adr;
@@ -89,11 +85,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			resize(other.size());
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			inner->adr,
 			other.data(),
 			sizeof(T)*inner->size,
-			cudaMemcpyHostToDevice
+			adapt::gpurtMemcpyHostToDevice
 		) );
 	}
 
@@ -101,11 +97,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			other.resize(inner->size);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			other.data(),
 			inner->adr,
 			sizeof(T)*inner->size,
-			cudaMemcpyDeviceToHost
+			adapt::gpurtMemcpyDeviceToHost
 		) );
 	}
 
@@ -114,11 +110,11 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			inner->adr,
 			&other,
 			sizeof(T),
-			cudaMemcpyHostToDevice
+			adapt::gpurtMemcpyHostToDevice
 		) );
 	}
 
@@ -127,21 +123,21 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			inner->adr,
 			&host_copy,
 			sizeof(T),
-			cudaMemcpyHostToDevice
+			adapt::gpurtMemcpyHostToDevice
 		) );
 	}
 
 	
 	__host__ void operator>>(T &other) {
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::gpurtMemcpy(
 			&other,
 			inner->adr,
 			sizeof(T),
-			cudaMemcpyDeviceToHost
+			adapt::gpurtMemcpyDeviceToHost
 		) );
 	}
 
@@ -196,21 +192,21 @@ class DevObj {
 
 		void push_data(){
 			//printf("Pushing data into %p\n",adr);
-			auto_throw( cudaMemcpy(
+			auto_throw( adapt::gpurtMemcpy(
 				adr,
 				&host_copy,
 				sizeof(T),
-				cudaMemcpyHostToDevice
+				adapt::gpurtMemcpyHostToDevice
 			) );
 		}
 
 		void pull_data(){
 			//printf("Pulling data from %p\n",adr);
-			auto_throw( cudaMemcpy(
+			auto_throw( adapt::gpurtMemcpy(
 				&host_copy,
 				adr,
 				sizeof(T),
-				cudaMemcpyDefault
+				adapt::gpurtMemcpyDefault
 			) );
 		}
 		
@@ -228,8 +224,8 @@ class DevObj {
 				//printf("Doing a free\n");
 				pull_data();
 				host_copy.host_free();
-				cudaError_t free_err = cudaFree(adr);
-				if(free_err != cudaSuccess) {
+				adapt::gpurtError_t free_err = adapt::gpurtFree(adr);
+				if(free_err != adapt::gpurtSuccess) {
 					std::cerr << "ERROR: Failed to free device buffer managed by a DevObj!\n";
 				}
 			}

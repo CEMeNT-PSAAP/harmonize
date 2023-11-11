@@ -1,14 +1,8 @@
 #pragma once
 
-#if defined(__NVCC__) || HIPIFY
-	#include "adapt.h"
-	#include "basic.h"
-	#include "host.h"
-#elif defined(__HIP__)
-	#include "adapt.h.hip"
-	#include "basic.h.hip"
-	#include "host.h.hip"
-#endif
+#include "adapt.h"
+#include "basic.h"
+#include "host.h"
 
 
 
@@ -256,7 +250,7 @@ struct MemPool {
 		}
 		if( (arena_size.adr != 0) || (pool_size.adr != 0 ) ){
 			mempool_init<<<256,32>>>(*this);
-			if ( cudaDeviceSynchronize() ) {
+			if ( adapt::gpurtDeviceSynchronize() ) {
 				printf("Failed to synchronize with host when initializing MemPool.\n");
 			}
 		}
@@ -266,18 +260,18 @@ struct MemPool {
 	__host__ void host_free()
 	{
 		if( arena_size.adr != 0 ){
-			host::auto_throw( cudaFree( arena ) );
+			host::auto_throw( adapt::gpurtFree( arena ) );
 		}
 		if( pool_size.adr  != 0 ){
-			host::auto_throw( cudaFree( pool  ) );
+			host::auto_throw( adapt::gpurtFree( pool  ) );
 		}
 	}
 
 
 	__host__ void next_print(){
 		Link* host_copy = (Link*)malloc(sizeof(Link)*arena_size.adr);
-		cudaError_t copy_err = cudaMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,cudaMemcpyDeviceToHost);
-		if ( copy_err != cudaSuccess ) {
+		adapt::gpurtError_t copy_err = adapt::gpurtMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,adapt::gpurtMemcpyDeviceToHost);
+		if ( copy_err != adapt::gpurtSuccess ) {
 			printf("Failed to memcpy in MemPool::next_print.\n");
 		}
 		for(int i=0; i<arena_size.adr; i++){
@@ -670,17 +664,13 @@ struct MemCache {
 	#endif
 
 	PoolType* parent;
-	Index indexes[SIZE*WARP_SIZE];
+	Index indexes[SIZE*adapt::WARP_SIZE];
 
 
-	#if    __CUDA_ARCH__ < 600
-		#define atomicExch_block atomicExch
-		#define atomicCAS_block  atomicCAS
-	#endif
 
 
 	__device__ Index& get_index( unsigned int offset ){
-		unsigned int real_offset = (WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*WARP_SIZE);
+		unsigned int real_offset = (adapt::WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*adapt::WARP_SIZE);
 		return indexes[real_offset];
 	}
 
@@ -736,7 +726,7 @@ struct MemCache {
 			}
 		}
 		#else
-		for ( unsigned int i=0; i<(SIZE*WARP_SIZE); i++ ) {
+		for ( unsigned int i=0; i<(SIZE*adapt::WARP_SIZE); i++ ) {
 			Index& slot = get_index(i);
 			Index swap = atomicExch_block(&slot,AdrType::null);
 			if( swap != AdrType::null ){
@@ -774,7 +764,7 @@ struct MemCache {
 			}
 		}
 		#else
-		for ( unsigned int i=0; i<(SIZE*WARP_SIZE); i++ ) {
+		for ( unsigned int i=0; i<(SIZE*adapt::WARP_SIZE); i++ ) {
 			Index& slot = get_index(i);
 			Index swap = atomicCAS_block(&slot,AdrType::null,index);
 			if( swap == AdrType::null ){
@@ -793,11 +783,6 @@ struct MemCache {
 		Index index = address - (parent->arena);
 		free(index,rand_state);
 	}
-
-	#if    __CUDA_ARCH__ < 600
-		#undef atomicExch_block
-		#undef atomicCAS_block
-	#endif
 
 
 };
@@ -818,18 +803,13 @@ struct SimpleMemCache {
 	#endif
 
 	PoolType* parent;
-	unsigned int counts[WARP_SIZE];
-	Index indexes[SIZE*WARP_SIZE];
+	unsigned int counts[adapt::WARP_SIZE];
+	Index indexes[SIZE*adapt::WARP_SIZE];
 
-
-	#if    __CUDA_ARCH__ < 600
-		#define atomicExch_block atomicExch
-		#define atomicCAS_block  atomicCAS
-	#endif
 
 
 	__device__ Index& get_index( unsigned int offset ){
-		unsigned int real_offset = (WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*WARP_SIZE);
+		unsigned int real_offset = (adapt::WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*adapt::WARP_SIZE);
 		return indexes[real_offset];
 	}
 
@@ -853,7 +833,7 @@ struct SimpleMemCache {
 	__device__ void fill_up(unsigned int& rand_state) {
 		unsigned int count = counts[threadIdx.x];
 		if( SIZE/2 > count ) {
-			parent->pull_span( &get_index(count), (SIZE/2)-count, WARP_SIZE, rand_state);
+			parent->pull_span( &get_index(count), (SIZE/2)-count, adapt::WARP_SIZE, rand_state);
 		}
 	}
 
@@ -900,11 +880,6 @@ struct SimpleMemCache {
 		Index index = address - (parent->arena);
 		free(index,rand_state);
 	}
-
-	#if    __CUDA_ARCH__ < 600
-		#undef atomicExch_block
-		#undef atomicCAS_block
-	#endif
 
 
 };

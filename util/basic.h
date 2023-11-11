@@ -1,24 +1,13 @@
 #pragma once
 
+#include "includes.h"
+#include "adapt.h"
 
 
 
-#if defined(__NVCC__) || HIPIFY
-
-	#include "includes.h"
-	#include "adapt.h"
-
-#elif defined(__HIP__)
-
-	#include "includes.h.hip"
-	#include "adapt.h.hip"
-
-#endif
-
-
-void throw_err(const char *message, cudaError_t err) {
+void throw_err(const char *message, adapt::gpurtError_t err) {
 	std::string text = message;
-	const char* err_str = cudaGetErrorString(err);
+	const char* err_str = adapt::gpurtGetErrorString(err);
 	text += " - Error: '";
 	text += err_str;
 	text += "'\n";
@@ -26,14 +15,14 @@ void throw_err(const char *message, cudaError_t err) {
 }
 
 
-void throw_on_error(const char *message, cudaError_t err) {
-	if (err != cudaSuccess) {
+void throw_on_error(const char *message, adapt::gpurtError_t err) {
+	if (err != adapt::gpurtSuccess) {
 		throw_err(message,err);
 	}
 }
 
 void checked_device_sync(){
-	throw_on_error("Failed to sync with device.",cudaDeviceSynchronize());
+	throw_on_error("Failed to sync with device.",adapt::gpurtDeviceSynchronize());
 }
 
 /*
@@ -105,14 +94,14 @@ __host__ __device__ unsigned long long int random_uint(unsigned long long int &s
 
 struct Stopwatch {
 
-	cudaEvent_t beg;
-	cudaEvent_t end;
+	adapt::gpurtEvent_t beg;
+	adapt::gpurtEvent_t end;
 	float duration;
 
 	Stopwatch() {
 
-		cudaError_t beg_err = cudaEventCreate( &beg );
-		cudaError_t end_err = cudaEventCreate( &end );
+		adapt::gpurtError_t beg_err = adapt::gpurtEventCreate( &beg );
+		adapt::gpurtError_t end_err = adapt::gpurtEventCreate( &end );
 
 		throw_on_error("Failed to create Stopwatch start event.",beg_err);
 		throw_on_error("Failed to create Stopwatch end event.",end_err);
@@ -121,18 +110,18 @@ struct Stopwatch {
 
 
 	void start() {
-		cudaError_t beg_err = cudaEventRecord( beg, NULL );
+		adapt::gpurtError_t beg_err = adapt::gpurtEventRecord( beg, (adapt::gpurtStream_t) NULL );
 		throw_on_error("Failed to submit Stopwatch start event.",beg_err);
 	}
 
 	void stop() {
-		cudaError_t end_err = cudaEventRecord( end, NULL );
+		adapt::gpurtError_t end_err = adapt::gpurtEventRecord( end, (adapt::gpurtStream_t) NULL );
 		throw_on_error("Failed to submit Stopwatch end event.",end_err);
 
-		cudaError_t sync_err = cudaEventSynchronize( end );
+		adapt::gpurtError_t sync_err = adapt::gpurtEventSynchronize( end );
 		throw_on_error("Failed to synchronize on StopWatch end event.",sync_err);
 		
-        cudaError_t time_err = cudaEventElapsedTime( &duration, beg, end );
+        adapt::gpurtError_t time_err = adapt::gpurtEventElapsedTime( &duration, beg, end );
 		throw_on_error("Failed to query StopWatch duration.",time_err);
 	}
 

@@ -1,4 +1,8 @@
+#include "util/includes.h"
 
+#if defined(__HIP__)
+    #include <hip/hip_runtime.h>
+#endif
 
 
 
@@ -44,11 +48,6 @@
 	#define end_time(idx) ;
 #endif
 
-#if   defined(__NVCC__) || HIPIFY
-	#include "util/util.h"
-#elif defined(__HIP__)
-	#include "util/util.h.hip"
-#endif
 
 //#define ASYNC_LOADS
 
@@ -57,11 +56,16 @@
 #define BARRIER_SPILL
 #endif
 
+
+
 #if __CUDA_ARCH__ < 700
 #define __nanosleep(...) ;
 #endif
 
 
+namespace hrm {
+
+#include "util/util.h"
 
 //!
 //! Forward declaring the more fundamental types of Harmonize
@@ -2115,7 +2119,7 @@ class HarmonizeProgram
 
 			unsigned int* base_cr_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  base_cr = 0;
-			cudaError_t copy_err = cudaMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			adapt::gpurtError_t copy_err = adapt::gpurtMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),adapt::gpurtMemcpyDeviceToHost);
 			util::throw_on_error("Failed to read completion state of async runtime.",copy_err);
 			return (base_cr != 0);
 		}
@@ -3741,10 +3745,11 @@ class HarmonizeProgram
 
 
 			#ifdef PARACON
-			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0) && (taken == 0) ){
+			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0) && (taken == 0) )
 			#else
-			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0)){
+			if(_grp_ctx.busy && (_grp_ctx.main_queue.count == 0))
 			#endif
+			{
 				unsigned int depth_live = atomicSub(&(_dev_ctx.stack->depth_live),1);
 				//printf("{unbusy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
 				rc_printf("SM %d: Decremented depth value\n",threadIdx.x);
@@ -3778,8 +3783,6 @@ class HarmonizeProgram
 		__syncwarp(active);
 		__threadfence();
 		#endif
-
-
 
 	}
 
@@ -4325,10 +4328,10 @@ class HarmonizeProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		adapt::gpurtError_t status = adapt::gpurtGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != adapt::gpurtSuccess){
+			const char* err_str = adapt::gpurtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -4569,9 +4572,9 @@ class HarmonizeProgram
 
 		LinkAdrType link_total = 0;
 
-		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,cudaMemcpyDeviceToHost);
+		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,adapt::gpurtMemcpyDeviceToHost);
+		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,adapt::gpurtMemcpyDeviceToHost);
+		cudaMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,adapt::gpurtMemcpyDeviceToHost);
 
 
 		for(AdrType i = 0; i < runtime.arena_size; i++){
@@ -4805,7 +4808,7 @@ class EventProgram
 	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 
-	CONST_SWITCH(size_t,GROUP_SIZE,util::WARP_SIZE)
+	CONST_SWITCH(size_t,GROUP_SIZE,adapt::WARP_SIZE)
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -4991,10 +4994,10 @@ class EventProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		adapt::gpurtError_t status = adapt::gpurtGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != adapt::gpurtSuccess){
+			const char* err_str = adapt::gpurtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -5192,10 +5195,9 @@ __host__ void exec(typename ProgType::Instance& instance,size_t group_count, siz
 }
 
 
-
-
-
 #undef MEMBER_SWITCH
 #undef CONST_SWITCH
+
+};
 
 

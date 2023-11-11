@@ -1,12 +1,7 @@
 #pragma once
 
-#if defined(__NVCC__) || HIPIFY
-	#include "basic.h"
-	#include "host.h"
-#elif defined(__HIP__)
-	#include "basic.h.hip"
-	#include "host.h.hip"
-#endif
+#include "basic.h"
+#include "host.h"
 
 
 namespace iter {
@@ -437,11 +432,11 @@ struct IOBuffer
 	__host__ void host_free()
 	{
 		if ( data_a != NULL ) {
-			host::auto_throw( cudaFree( data_a ) );
+			host::auto_throw( adapt::gpurtFree( data_a ) );
 		}
 
 		if ( data_b != NULL ) {
-			host::auto_throw( cudaFree( data_b ) );
+			host::auto_throw( adapt::gpurtFree( data_b ) );
 		}
 	}
 
