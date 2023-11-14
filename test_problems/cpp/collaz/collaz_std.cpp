@@ -50,17 +50,15 @@ int main(int argc, char* argv[]){
 	// Take command line arguments. Work group size defaults to 32.
 	unsigned int wg_size  = args["wg_size"]  | 32u;
 	unsigned int wg_count = args["wg_count"];
-	unsigned int limit    = args["limit"]; 
+	unsigned int limit    = args["limit"];
 
 
 	Stopwatch watch;
 
-	if( ! watch.start() ){
-		printf("A\n");
-	}
+	watch.start();
 
 	// Make device-side output buffer
-	host::DevBuf<unsigned int> dev_out((size_t)limit);	
+	host::DevBuf<unsigned int> dev_out((size_t)limit);
 	cudaDeviceSynchronize();
 	host::check_error();
 
@@ -68,12 +66,10 @@ int main(int argc, char* argv[]){
 	cudaDeviceSynchronize();
 	host::check_error();
 
-	if( ! watch.stop() ){
-		printf("B\n");
-	}
+	watch.stop();
 
 	float msec = watch.ms_duration();
-	
+
 	// Get output from device
 	std::vector<unsigned int> host_out;
 	dev_out >> host_out;

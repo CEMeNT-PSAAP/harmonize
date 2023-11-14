@@ -17,7 +17,7 @@ namespace adapt {
     #undef CUDA_TYPE_ALIAS
 
 
-    #define CUDA_CONST_ALIAS(thing) auto const gpurt ## thing = cuda ## thing; 
+    #define CUDA_CONST_ALIAS(thing) auto const gpurt ## thing = cuda ## thing;
         CUDA_CONST_ALIAS( Success );
         CUDA_CONST_ALIAS( MemcpyDeviceToDevice );
         CUDA_CONST_ALIAS( MemcpyDeviceToHost );
@@ -49,7 +49,13 @@ namespace adapt {
     #undef CUDA_FN_ALIAS
 
 
-    #define FN_ALIAS(alias,original) template<typename... ARGS> auto alias (ARGS... args) { return original (args...); }
+    #define FN_ALIAS(renamed,original)                    \
+    template<typename... ARGS>                            \
+    auto renamed (ARGS... args)                           \
+        -> decltype(original (std::declval<ARGS>()...))   \
+    {                                                     \
+        return original(args...);                         \
+    }
 
         #if    __CUDA_ARCH__ < 600
             FN_ALIAS(atomicExch_block,atomicExch)
@@ -60,8 +66,9 @@ namespace adapt {
 
 
 
+
 #elif defined(__HIP_PLATFORM_AMD__)
-    
+
     #include <hip/hip_runtime.h>
 
     #define __syncwarp(mask) ;
@@ -77,7 +84,7 @@ namespace adapt {
     #undef HIP_TYPE_ALIAS
 
 
-    #define HIP_CONST_ALIAS(thing) auto const gpurt ## thing = hip ## thing; 
+    #define HIP_CONST_ALIAS(thing) auto const gpurt ## thing = hip ## thing;
         HIP_CONST_ALIAS( Success );
         HIP_CONST_ALIAS( MemcpyDeviceToDevice );
         HIP_CONST_ALIAS( MemcpyDeviceToHost );
