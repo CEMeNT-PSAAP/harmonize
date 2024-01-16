@@ -58,11 +58,12 @@
 #endif
 
 
-#define MULTIWARP
 
 #ifdef MULTIWARP
 #define BARRIER_SPILL
 #endif
+
+#define MULTIWARP 0
 
 //!
 //! Forward declaring the more fundamental types of Harmonize
@@ -866,17 +867,22 @@ struct WorkLink
 
 
 
-/*
-template<typename OP_SET, typename ADR_TYPE>
-struct RemappingCheckpoint {
-
-};
 
 
-template<typename LINK_TYPE, typename OP_SET, typename ADR_TYPE>
-struct RemappingCheckpoint {
+template<typename PROGRAM>
+struct LocalRemappingCheckpoint {
 
-	using LinkType    = LINK_TYPE;
+	using ProgramType = PROGRAM;
+	using LinkType = typename ProgramType::LinkType;
+	using LinkAdrType = typename ProgramType::LinkAdrType;
+	static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
+
+	using OpSet       = typename ProgramType::OpSet;
+	using AdrType     = typename ProgramType::AdrType;
+	using UnionType   = typename ProgramType::UnionType;
+
+	using PairPack    = util::mem::PairPack<AdrType>;
+	using PairType    = typename PairPack::PairType;
 
 	//! The number of operations contained within the barrier's
 	//! operation set.
@@ -884,291 +890,156 @@ struct RemappingCheckpoint {
 
 	//! A table used to mediate the coalescing of links
 	PairPack partial_table[UnionType::Info::COUNT];
+	LinkType *arena;
 
-	LinkType* arena;
-
-
+	template<typename OP_TYPE>
+	struct TransactionState {
+		bool complete;
+		bool lazy;
+		bool optimistic;
+		Promise<OP_TYPE> promise;
+		LinkAdrType fullest;
+		LinkAdrType emptiest;
+	};
 	
-	RemappingBarrier<OP_SET,ADR_TYPE>() = default;
-
-	//! Awaits the barrier with a promise union, using the provided discriminant to determine
-	//! the type of the contained promise.
-	template<typename PROGRAM>
-	__device__ ADR_TYPE union_checkin(OpDisc disc, typename PROGRAM::PromiseUnionType promise_union, ADR_TYPE adr, ) {
-		using ProgramType = PROGRAM;
-		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
-		
-		//printf("Performing atomic append for type with discriminant %d.\n",disc);
-		
-		PairPack& part_slot = partial_table[disc];
-		PairType inc_val = PairPack::RIGHT_MASK + 1;
-		bool optimistic = true;
-
-		unsigned int opt_fail_count = 0;
-		bool had_custody = true;
-
-		//printf("Allocated spare link %d.\n",first_link_adr.adr);
+	LocalRemappingCheckpoint<ProgramType>() = default;
 
 
-
-		while(true) {
-			PairPack dst_pair;
-
-			LinkAdrType spare_link_adr = spare_pair.get_right();
-			LinkType& spare_link = arena[spare_link_adr];
-
-			//! Attempt to claim a slot in the link just by incrementing
-			//! the index of the index/address pair pack. This is quicker,
-			//! but only works if the incrementation reaches the field before
-			//! other threads claim the remaining promise slots.
-			if ( optimistic ) {
-				dst_pair.data = atomicAdd(&part_slot.data,inc_val*spare_pair.get_left());
-			}
-			//! Gain exclusive access to link via an atomic exchange. This is
-			//! slower, but has guaranteed progress. 
-			else {
-				PairPack null_pair(0,LinkAdrType::null);
-				dst_pair.data = atomicExch(&part_slot.data,spare_pair.data);
-				spare_pair = PairPack(0,LinkAdrType::null);
-			}
-
-			
-			AdrType dst_index   = dst_pair.get_left ();
-			AdrType dst_address = dst_pair.get_right();
-			//! Handle cases where represented link is null or already full
-			if ( (dst_address == LinkAdrType::null) || (dst_index >= GROUP_SIZE) ){
-				//! Optimistic queuing must retry, but pessimistic
-				//! queueing can get away with leaving its link behind
-				//! and doing nothing else.
-				if ( optimistic ) {
-					opt_fail_count += 1;
-					optimistic = (dst_index % GROUP_SIZE) > opt_fail_count;
-					continue;
-				} else {
-					break;
-				}
-			} else {
-				bool owns_dst = merge_links(program,dst_pair,spare_pair,!optimistic);
-				had_custody = owns_dst;
-				optimistic = (dst_index % GROUP_SIZE) != 0;
-				opt_fail_count = 0;
-				//printf("owns_dst=%d\n",owns_dst);
-				//! If the current thread has custody of the destination link,
-				//! it must handle appending it to the full list if it is full and
-				//! merging it into the partial slot if it is partial.
-				if ( owns_dst ){
-					//! Append full destination links to the full list.
-					//! DO NOT BREAK FROM THE LOOP. There may be a partial
-					//! source link that still needs to be merged in another
-					//! pass.
-					if ( dst_pair.get_left() == GROUP_SIZE ) {
-						append_full(program,dst_address);
-					}
-					//! Dump the current spare link and restart the merging
-					//! procedure with our new partial link
-					else if ( dst_pair.get_left() != 0 ) {
-						program.dump_spare_link(spare_pair.get_right());
-						spare_pair = dst_pair;
-						continue;
-					}
-					//! This case should not happen, but it does not hurt to 
-					//! include a branch to handle it, in case something
-					//! unexpected occurs.
-					else {
-						//printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
-						program.dump_spare_link(spare_pair.get_right());
-						program.dump_spare_link(  dst_pair.get_right());
-						break;
-					}
-				}
-				//! If the spare link is empty, dump it rather than try to merge
-				if (spare_pair.get_left() == 0) {
-					program.dump_spare_link(spare_pair.get_right());
-					break;
-				}
-			}
-
-		}
-
-	}
-	
-
-	//! Awaits the barrier with th supplied promise.
-	template<bool CAN_RELEASE=true, typename PROGRAM, typename OP_TYPE>
-	__device__ void await(PROGRAM program, Promise<OP_TYPE> promise) {
-		using ProgramType = PROGRAM;
-		using LinkType    = typename ProgramType::LinkType;
-		static const size_t GROUP_SIZE = ProgramType::GROUP_SIZE;
-		
-		//! Guards invocations of the function to make sure invalid promise types
-		//! are not passed in.
+	template<typename OP_TYPE>
+	__device__ static constexpr Promise<OP_TYPE> promise_guard(Promise<OP_TYPE> promise) {
 		static_assert(
-			UnionType::template Lookup<OP_TYPE>::type::CONTAINED,
-			"TYPE ERROR: Remapping work queue cannot queue promises of this type."
+			UnionType::template Lookup<OP_TYPE,OpSet>::type::CONTAINED,
+			"\n\nTYPE ERROR: Type of promise cannot be remapped at this checkpoint.\n\n"
+			"SUGGESTION: Double-check the signature of the checkpoint to make sure "
+			"its OpUnion template parameter contains the desired operation type.\n\n"
+			"SUGGESTION: Double-check the type signature of the promise and make sure "
+			"it is the correct operation type.\n\n"
 		);
+		return promise;
+	}
 
+	
+	template<typename OP_TYPE>
+	__device__ bool add_promise(ProgramType& program, PairPack& dst, Promise<OP_TYPE> promise) {
+		AdrType dst_index   = dst.get_left ();
+		AdrType dst_address = dst.get_right();
+		
+		unsigned int total = dst_index + 1;
+		unsigned int dst_total = ( total >= GROUP_SIZE ) ? GROUP_SIZE : total;
+		unsigned int dst_delta = dst_total - dst_index;
+		LinkType& dst_link  = program._grp_ctx.stash[dst_address];
+		unsigned int dst_offset = atomicAdd(&dst_link.count,dst_delta);
+		
+		dst_link.promises[dst_offset] = promise;
+
+		unsigned int checkout_delta = dst_delta;
+		AdrType checkout = atomicAdd(&dst_link.next.adr,-checkout_delta);
+		//printf("{[%d,%d]: %d checkout(%d->%d)}",blockIdx.x,threadIdx.x,dst_address,checkout,checkout-checkout_delta);
+
+		//! If checkout==0, this thread is the last thread to modify the link, and the
+		//! link has not been marked for dumping. This means we have custody of the link
+		//! and must manage getting it into the queue via a partial slot or the full list.
+		if( (checkout-checkout_delta) == 0 ){
+			//printf("[%d-%d]: Got custody of link @%d for re-insertion.\n",blockIdx.x,threadIdx.x,dst_address);
+			unsigned int final_count = atomicAdd(&dst_link.count,0);
+			dst.set_left(final_count);
+			unsigned int reset_delta = (GROUP_SIZE-final_count);
+			unsigned int old_next = atomicAdd(&dst_link.next.adr,reset_delta);
+			//printf("[%d-%d]: Reset the next field (%d->%d) of link @%d.\n",blockIdx.x,threadIdx.x,old_next,old_next+reset_delta,dst_address);
+			__threadfence();
+			return true;
+		}
+		//! If checkout==(GROUP_SIZE+1), this thread is the last thread to modify the
+		//! link, and the link has been marked for dumping. This means we have custody
+		//! of the link and must release it.
+		else if ( (checkout-checkout_delta) == (GROUP_SIZE+1) ) {
+			//printf("[%d-%d]: Got custody of link @%d for immediate dumping.\n",blockIdx.x,threadIdx.x,dst_address);
+			atomicExch(&dst_link.next.adr,LinkAdrType::null);
+
+
+
+			//!! TODO: Implement release
+
+			return false;
+		}
+		//! In all other cases, we have no custody of the link.
+		else {
+			//printf("(checkout-checkout_delta) = %d\n",checkout-checkout_delta);
+			__threadfence();
+			return false;
+		}
+
+	}
+
+
+	// Attempt to add lazily
+	template<typename OP_TYPE>
+	__device__ void lazy_remap(ProgramType program, TransactionState<OP_TYPE>& state) {
+		charge = LinkAdrType::null;
 		OpDisc disc = UnionType::template Lookup<OP_TYPE>::type::DISC;
-		
-		//printf("Performing atomic append for type with discriminant %d.\n",disc);
-		
+		promise = promise_guard(promise);
 		PairPack& part_slot = partial_table[disc];
 		PairType inc_val = PairPack::RIGHT_MASK + 1;
-		bool optimistic = true;
+		PairPack dst_pair;
+		dst_pair.data = atomicAdd(&part_slot.data,inc_val);
+		AdrType dst_index   = dst_pair.get_left ();
+		AdrType dst_address = dst_pair.get_right();
+		if ( (dst_address == LinkAdrType::null) || (dst_index >= GROUP_SIZE) ){
+			// No luck, there is no link to claim a slot in
+			return false;
+		}
 		
-		//! We check the semaphore. If the semaphore is non-zero, the queue has been
-		//! released, and so the promise can be queued normally. This check does not
-		//! force a load with atomics (as is done later) because the benefits of
-		//! a forced load don't seem to make up for the overhead.
-		if( (semaphore.sem == 0) && CAN_RELEASE ){
-			//printf("early exit\n");
-	 		program.async_call_cast(0, promise);
-			return;
+
+		if(add_promise(promise, ))
+		
+		if (dst_index == GROUP_SIZE) {
+			charge = 
+			return true;
+		} else {
+			return 
 		}
 
-		//! We start off with a link containing just our input promise. Depending
-		//! upon how merges transpire, this link will either fill up and be
-		//! successfully deposited into the queue, or will have its contents
-		//! drained into a different link and will be stored away for future use.
-		LinkAdrType first_link_adr = program.alloc_spare_link();
-		PairPack spare_pair(1u,first_link_adr.adr);
-		LinkType&   start_link     = program._dev_ctx.arena[first_link_adr];
-		start_link.id    = disc;
-		start_link.count = 1;
-		start_link.next  = GROUP_SIZE - 1;
-		start_link.promises[0] = promise;
-		__threadfence();
+	}
 
-		unsigned int opt_fail_count = 0;
-		bool had_custody = true;
 
-		//printf("Allocated spare link %d.\n",first_link_adr.adr);
+	template<typename OP_TYPE>
+	__device__ void optimistic_remap(ProgramType& program, TransactionState<OP_TYPE>& state) {
+		promise = promise_guard(promise);
+		// Attempt to add lazily
+	}
 
-		while(true) {
-			PairPack dst_pair;
+	template<typename OP_TYPE>
+	__device__ void pessimistic_remap(ProgramType& program, TransactionState<OP_TYPE>& state) {
+		promise = promise_guard(promise);
+		// Attempt to add lazily
+	}
 
-			LinkAdrType spare_link_adr = spare_pair.get_right();
-			LinkType& spare_link = program._dev_ctx.arena[spare_link_adr];
-
-			//! Attempt to claim a slot in the link just by incrementing
-			//! the index of the index/address pair pack. This is quicker,
-			//! but only works if the incrementation reaches the field before
-			//! other threads claim the remaining promise slots.
-			if ( optimistic ) {
-				//printf("Today, we choose optimisim.\n");
-				dst_pair.data = atomicAdd(&part_slot.data,inc_val*spare_pair.get_left());
-				//printf("{[%d,%d] Optimistic (%d->%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_left()+spare_pair.get_left(),dst_pair.get_right());
-			}
-			//! Gain exclusive access to link via an atomic exchange. This is
-			//! slower, but has guaranteed progress. 
-			else {
-				//printf("Today, we resort to pessimism.\n");
-				PairPack null_pair(0,LinkAdrType::null);
-				dst_pair.data = atomicExch(&part_slot.data,spare_pair.data);
-				spare_pair = PairPack(0,LinkAdrType::null);
-				//printf("{[%d,%d] Pessimistic (%d,@%d)}",blockIdx.x,threadIdx.x,dst_pair.get_left(),dst_pair.get_right());
-			}
-
-			
-			AdrType dst_index   = dst_pair.get_left ();
-			AdrType dst_address = dst_pair.get_right();
-			//! Handle cases where represented link is null or already full
-			if ( (dst_address == LinkAdrType::null) || (dst_index >= GROUP_SIZE) ){
-				//! Optimistic queuing must retry, but pessimistic
-				//! queueing can get away with leaving its link behind
-				//! and doing nothing else.
-				if ( optimistic ) {
-					opt_fail_count += 1;
-					optimistic = (dst_index % GROUP_SIZE) > opt_fail_count;
-					continue;
-				} else {
-					break;
-				}
+	template<typename OP_TYPE>
+	__device__ void remap(ProgramType& program, Promise<OP_TYPE> promise) {
+		promise = promise_guard(promise);
+		TransactionState state = {
+			true,false,promise,
+			{0,LinkAdrType::null},
+			{0,LinkAdrType::null}
+		};
+		while( (!state.complete) && state.lazy) {
+			lazy_remap(program,state);
+		}
+		if(state.fullest.get_right() == LinkAdrType::null) {
+			// Allocate link
+		}
+		while(!state.complete){
+			if (program.optimistic) {
+				optimistic_remap(program,state);
 			} else {
-				bool owns_dst = merge_links(program,dst_pair,spare_pair,!optimistic);
-				had_custody = owns_dst;
-				optimistic = (dst_index % GROUP_SIZE) != 0;
-				opt_fail_count = 0;
-				//printf("owns_dst=%d\n",owns_dst);
-				//! If the current thread has custody of the destination link,
-				//! it must handle appending it to the full list if it is full and
-				//! merging it into the partial slot if it is partial.
-				if ( owns_dst ){
-					//! Append full destination links to the full list.
-					//! DO NOT BREAK FROM THE LOOP. There may be a partial
-					//! source link that still needs to be merged in another
-					//! pass.
-					if ( dst_pair.get_left() == GROUP_SIZE ) {
-						append_full(program,dst_address);
-					}
-					//! Dump the current spare link and restart the merging
-					//! procedure with our new partial link
-					else if ( dst_pair.get_left() != 0 ) {
-						program.dump_spare_link(spare_pair.get_right());
-						spare_pair = dst_pair;
-						continue;
-					}
-					//! This case should not happen, but it does not hurt to 
-					//! include a branch to handle it, in case something
-					//! unexpected occurs.
-					else {
-						//printf("\n\nTHIS PRINT SHOULD BE UNREACHABLE\n\n");
-						program.dump_spare_link(spare_pair.get_right());
-						program.dump_spare_link(  dst_pair.get_right());
-						break;
-					}
-				}
-				//! If the spare link is empty, dump it rather than try to merge
-				if (spare_pair.get_left() == 0) {
-					program.dump_spare_link(spare_pair.get_right());
-					break;
-				}
+				pessimistic_remap(program,state);
 			}
-
-		}
-
-
-
-
-		//! Double-check the sememaphore at the end. It is very important we do this double
-		//! check and that we do it at the very end of every append operation. Because
-		//! custody of partial links can be given to any append operation of the
-		//! corresponding operation type, and we don't know which append operation
-		//! comes last, we need to assume that, if the append has gotten this far, it
-		//! may be the last append and hence should make sure that no work is left
-		//! behind.
-		__threadfence();
-		unsigned int now_semaphore = atomicAdd(&semaphore.sem,0);
-		if( (now_semaphore == 0) && had_custody && CAN_RELEASE ){
-			//printf("[%d,%d]: Last-minute release required!\n",blockIdx.x,threadIdx.x);
-			release_sweep(program);
-		}
-
-
-	}
-
-
-	//! Adds the supplied delta value to the semaphore and performs a release sweep if the
-	//! result value is zero.
-	template<typename PROGRAM>
-	__device__ void add_semaphore(PROGRAM program,unsigned int delta) {
-		unsigned int now_semaphore = atomicAdd(&semaphore.sem,delta);
-		if( (now_semaphore+delta) == 0 ) {
-			release_sweep(program);
 		}
 	}
 
-	//! Subtracts the supplied delta value from  the semaphore and performs a release sweep
-	//! if the result value is zero.
-	template<typename PROGRAM>
-	__device__ void sub_semaphore(PROGRAM program,unsigned int delta) {
-		unsigned int now_semaphore = atomicAdd(&semaphore.sem,(unsigned int) -delta);
-		if( (now_semaphore-delta) == 0 ) {
-			release_sweep(program);
-		}
-	}
 
 };
-*/
+
 
 
 
