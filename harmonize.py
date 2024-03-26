@@ -1323,6 +1323,10 @@ class RuntimeSpec():
         # String template to alias the appropriate specialization to a convenient name
         spec_decl_template = "typedef {kind}Program<{name}> {short_name};\n"
 
+
+        state_struct = map_type_name(self.type_map,self.dev_state,rec_mode="")
+
+
         # String template for the program initialization wrapper
         init_template = ""                                              \
         "extern \"C\"\n"                                                \
@@ -1354,18 +1358,12 @@ class RuntimeSpec():
         #"\tprintf(\"<ctx%p>\",_dev_ctx);\n"\
         #"\tprintf(\"<sta%p>\",device);\n"\
 
-        alloc_state_template = ""                                       \
-        "extern \"C\"\n"                                                \
-        "void alloc_program(\n"                                         \
-        "\tvoid   *_dev_ctx_arg,\n"                                     \
-        "\tvoid   *device_arg,\n"                                       \
-        "\tsize_t  cycle_count,\n"                                      \
-        "\tint     grid_size,\n"                                        \
-        "\tint     block_size\n"                                        \
-        ") {{\n"                                                        \
-        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n"            \
-        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"                 \
-        "\t_dev_exec<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device,cycle_count);\n" \
+        alloc_state_template = ""                         \
+        "extern \"C\"\n"                                  \
+        "void *alloc_state() {{\n"                        \
+        "\tvoid *result = nullptr;"                       \
+        "\tcudaMalloc(&result,sizeof({state_name});\n"    \
+        "\treturn result;\n"                              \
         "}}\n"
 
 
