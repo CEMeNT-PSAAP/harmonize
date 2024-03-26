@@ -5,8 +5,9 @@ from numba import njit, cuda
 import numba
 import re
 import subprocess
+from llvmlite import binding
 
-import inspect 
+import inspect
 import sys
 
 
@@ -28,7 +29,7 @@ DEBUG = False
 
 # Injects `value` as the value of the global variable named `name` in the module
 # that defined the function `index` calls down the stack, from the perspective
-# of the function that calls `inject_global`. 
+# of the function that calls `inject_global`.
 def inject_global(name,value,index):
     frm = inspect.stack()[index+1]
     mod = inspect.getmodule(frm[0])
@@ -60,7 +61,7 @@ def fn_sig( func ):
 # as a tuple
 def fn_arg_ano( func ):
     return tuple( x for x in fn_arg_ano_list(func) )
-            
+
 
 # Raises an error if the annotated return type for the input function
 # does not patch the input result type
@@ -77,7 +78,7 @@ def assert_fn_res_ano( func, res_type ):
             + func.__name__ + "' results in a return type  matching its "  \
             + "annotation when supplied arguments matching its annotation."
             raise(TypeError(err_str))
-            
+
 
 # Returns the ptx of the input function, as a global CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
@@ -89,6 +90,7 @@ def global_ptx( func ):
 # Returns the ptx of the input function, as a device CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
 def device_ptx( func ):
+    print(func.__name__)
     ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
     return ptx, res_type
@@ -105,7 +107,7 @@ def func_defn_time(func):
 def remove_ptx_comments(ptx_text):
     space = ' \t\r\n'
     ptx_text = "\n".join([ line.lstrip(space) for line in ptx_text.splitlines() if len(line.lstrip(space)) != 0 ])
-    
+
     filtered = []
     start_split = ptx_text.split("/*")
     for index, entry in enumerate(start_split) :
@@ -124,7 +126,7 @@ def remove_ptx_comments(ptx_text):
     ptx_text = "\n".join([ line.lstrip(space) for line in ptx_text.splitlines() if not line.lstrip(space).startswith("//") ])
 
     ptx_text = "\n".join([ line.split("//")[0] for line in ptx_text.splitlines() ])
-    
+
     return ptx_text
 
 # Parses the input text based upon bracket delimiters (such as (), {}, [], <> ), returning
@@ -150,8 +152,8 @@ def parse_braks(ptx_text,paren_pairs,closer=None):
         index += 1
     seq.append(ptx_text[start:index])
     return ( closer, seq ), index
-    
-                
+
+
 
 # Recursively iterates through a bracket-delimiter parse tree, breaking/grouping nodes by
 # the delimiters contained within the leaf nodes
@@ -190,7 +192,7 @@ def parse_sep(ptx_brak_tree, sep):
             if incomplete and not_last and capped:
                 sep_seq.append(sub_seq)
                 new_seq.append((sep,sep_seq))
-                sep_seq = []      
+                sep_seq = []
             else:
                 new_seq += sep_seq
                 sep_seq = []
@@ -305,7 +307,7 @@ def replace(parse_tree,rep_list,whole=False):
         for chunk in content:
             new_content.append(replace(chunk,rep_list,whole))
         return (sep,new_content)
-        
+
 
 # Returns true if and only if the input parse tree has a curly-brace block
 def has_curly_block(parse_tree):
@@ -331,14 +333,14 @@ def has_colon(parse_tree):
             return True
     return False
 
-# Collapses the portions of a parse tree that correspond to the same line in 
+# Collapses the portions of a parse tree that correspond to the same line in
 # ptx syntax. This is useful for performing whole-line regex matches.
 def linify_tree(parse_tree):
     if isinstance(parse_tree,str):
         return parse_tree
     sep, content = parse_tree
     if sep ==';': # and not has_curly_block(parse_tree):
-        return  ("ptx",stringify_tree(parse_tree).replace("\n","")+"\n") 
+        return  ("ptx",stringify_tree(parse_tree).replace("\n","")+"\n")
 
     hit_curly   = False
     hit_line    = False
@@ -389,7 +391,7 @@ def stringify_tree(parse_tree,inlined=False,last=False,depth=0):
 
         if sep == "cuda":
             return tabs + content
-        
+
         if sep == "ptx":
             if content.strip() == ";":
                 return tabs + '\n' #tabs + ';' + '\n'
@@ -397,12 +399,12 @@ def stringify_tree(parse_tree,inlined=False,last=False,depth=0):
                 return tabs + "asm volatile (\"" + content.rstrip() + "\" ::: \"memory\");\n"
             else:
                 return tabs + content
- 
+
         if sep == ' ':
             return "\t".join(content)
 
         sub_depth = depth
- 
+
         result = ""
 
         if sep in brak_list:
@@ -569,7 +571,7 @@ def replace_fn_params( parse_tree, params, has_return ):
         line = 'asm volatile (\"cvt.{kind}.{kind} {dst}, %0;\" : : \"{kid}\"({name}) : "memory" );\n'
         line = line.format(kind=kind,dst=dst,name=name,kid=kind_map[kind])
         context[index] = ('cuda',line)
-    
+
     return_regex = r"st\.param\.(?P<kind>\w+)\s*\[func_retval0\+0\]\s*,\s*(?P<src>\w+)\s*;"
     for match, index, context in extract_regex(parse_tree,return_regex):
         #if has_return:
@@ -610,8 +612,8 @@ def extern_device_ptx( func, type_map ):
     ptx_text = stringify_tree(line_tree,False)
     ptx_text = ptx_text.replace("call.uni","call")
     return ptx_text
-    
-    
+
+
 
 
 def inlined_device_ptx( func, function_map, type_map ):
@@ -649,9 +651,9 @@ def inlined_device_ptx( func, function_map, type_map ):
     body = replace(body,inner_tf_list,whole=False)
 
     replace_externs(body,function_map,type_map)
- 
+
     has_return = 'return' in func.__annotations__
- 
+
     replace_fn_params(body,["fn_param_"+str(index) for index in range(len(params))], has_return)
     fix_returns(body,func.__name__)
     fix_temp_param(body)
@@ -667,16 +669,16 @@ def map_type_to_np(kind):
     primitives = {
         numba.none    : np.void,
         bool          : np.bool8,
-        numba.boolean : np.bool8, 
-        numba.uint8   : np.uint8, 
-        numba.uint16  : np.uint16, 
-        numba.uint32  : np.uint32, 
-        numba.uint64  : np.uint64, 
-        numba.int8    : np.int8, 
-        numba.int16   : np.int16, 
-        numba.int32   : np.int32, 
-        numba.int64   : np.int64, 
-        numba.float32 : np.float32, 
+        numba.boolean : np.bool8,
+        numba.uint8   : np.uint8,
+        numba.uint16  : np.uint16,
+        numba.uint32  : np.uint32,
+        numba.uint64  : np.uint64,
+        numba.int8    : np.int8,
+        numba.int16   : np.int16,
+        numba.int32   : np.int32,
+        numba.int64   : np.int64,
+        numba.float32 : np.float32,
         numba.float64 : np.float64
     }
     if kind in primitives:
@@ -700,17 +702,17 @@ def map_type_name(type_map,kind,rec_mode=""):
     primitives = {
         numba.none : "void",
         bool       : "bool",
-        np.bool8   : "bool", 
-        np.uint8   : "uint8_t", 
-        np.uint16  : "uint16_t", 
-        np.uint32  : "uint32_t", 
-        np.uint64  : "uint64_t", 
-        np.int8    : "int8_t", 
-        np.int16   : "int16_t", 
-        np.int32   : "int32_t", 
-        np.int64   : "int64_t", 
-        np.float32 : "float", 
-        np.float64 : "double" 
+        np.bool8   : "bool",
+        np.uint8   : "uint8_t",
+        np.uint16  : "uint16_t",
+        np.uint32  : "uint32_t",
+        np.uint64  : "uint64_t",
+        np.int8    : "int8_t",
+        np.int16   : "int16_t",
+        np.int32   : "int32_t",
+        np.int64   : "int64_t",
+        np.float32 : "float",
+        np.float64 : "double"
     }
 
 
@@ -760,7 +762,7 @@ def func_param_text(func,type_map,rec_mode="",prior=False,clip=0,first_void=Fals
     param_list  = fn_arg_ano_list(func)
 
     param_list = param_list[clip:]
-    
+
     if first_void:
         param_list = param_list[1:]
         param_list  = ["void*"] + [ map_type_name(type_map,kind,rec_mode=rec_mode) for kind in param_list ]
@@ -905,23 +907,22 @@ class Runtime():
 # asynchronously schedules calls on-GPU and within a single kernel
 class HarmonizeRuntime(Runtime):
 
-    def __init__(self,spec,context,state,init_fn,exec_fn,gpu_objects):
+    def __init__(self,spec,context,state,fn,gpu_objects):
         self.spec          = spec
         self.context       = context
         self.context_ptr   = cuda_adr_of(context)
         self.state         = state
         self.state_ptr     = cuda_adr_of(state)
-        self.init_fn       = init_fn
-        self.exec_fn       = exec_fn
+        self.fn            = fn
         self.gpu_objects   = gpu_objects
 
     # Initializes the runtime using `wg_count` work groups
     def init(self,wg_count=1):
-        self.init_fn[wg_count,32](self.context_ptr,self.state_ptr)
+        self.fn["init_program"](self.context_ptr,self.state_ptr,wg_count,32)
 
     # Executes the runtime through `cycle_count` iterations using `wg_count` work_groups
     def exec(self,cycle_count,wg_count=1):
-        self.exec_fn[wg_count,32](self.context_ptr,self.state_ptr,cycle_count)
+        self.fn["exec_program"](self.context_ptr,self.state_ptr,cycle_count,wg_count,32)
 
     # Loads the device state of the runtime, returning value normally and also through the
     # supplied argument, if it is not None
@@ -941,14 +942,13 @@ class HarmonizeRuntime(Runtime):
 class EventRuntime(Runtime):
 
 
-    def __init__(self,spec,context,state,init_fn,exec_fn,checkout,io_buffers):
+    def __init__(self,spec,context,state,fn,checkout,io_buffers):
         self.spec          = spec
         self.context       = context
         self.context_ptr   = cuda_adr_of(context)
         self.state         = state
         self.state_ptr     = cuda_adr_of(state)
-        self.init_fn       = init_fn
-        self.exec_fn       = exec_fn
+        self.fn            = fn
         self.checkout      = checkout
         self.io_buffers    = io_buffers
 
@@ -960,7 +960,7 @@ class EventRuntime(Runtime):
             for buf in bufs:
                 print(buf)
         return True
-    
+
     # Returns true if and only if the instance has halted, indicating that no
     # work is left to be performed
     def halted(self):
@@ -984,13 +984,13 @@ class EventRuntime(Runtime):
             self.exec_fn[wg_count,32](self.context_ptr,self.state_ptr,chunk_size)
             has_halted = self.halted()
             count += 1
-        
+
     # Loads the device state of the runtime, returning value normally and also through the
     # supplied argument, if it is not None
     def load_state(self,result = None):
         res = self.state.copy_to_host(result)
         return res
-    
+
     # Stores the input value into the device state
     def store_state(self,state):
         cpu_state = np.zeros((1,),self.spec.dev_state)
@@ -1016,7 +1016,7 @@ class RuntimeSpec():
             # A list of python functions that are to be
             # included as async functions in the program
             async_fns,
-            **kwargs 
+            **kwargs
         ):
 
         self.spec_name = spec_name
@@ -1029,7 +1029,7 @@ class RuntimeSpec():
         self.init_fn, self.final_fn, self.source_fn = base_fns
 
         self.async_fns = async_fns
-        
+
         self.meta = kwargs
 
         if 'function_map' in kwargs:
@@ -1107,13 +1107,13 @@ class RuntimeSpec():
         # The integer type used to iterate across IO buffers
         self.meta['IO_ITER_TYPE'] = self.meta['ADR_TYPE']
 
-        # The atomic iterator type used to iterate across IO buffers 
+        # The atomic iterator type used to iterate across IO buffers
         self.meta['IO_ATOMIC_ITER_TYPE'] = np.dtype([
             ('value',self.meta['IO_ITER_TYPE']),
             ('limit',self.meta['IO_ITER_TYPE']),
         ])
 
-        # The atomic iterator type used to iterate across IO buffers 
+        # The atomic iterator type used to iterate across IO buffers
         self.meta['IO_BUFFER_TYPE'] = np.dtype([
             ('toggle',     np.bool_),
             ('padding1',   np.uint8),
@@ -1125,7 +1125,7 @@ class RuntimeSpec():
             ('input_iter', self.meta['IO_ATOMIC_ITER_TYPE']),
             ('output_iter',self.meta['IO_ATOMIC_ITER_TYPE']),
         ])
-        
+
         # The array of IO buffers used by the event-based method
         self.meta['IO_BUFFER_ARRAY_TYPE'] = np.dtype(
             (np.uintp,(len(self.async_fns),))
@@ -1150,12 +1150,12 @@ class RuntimeSpec():
             self.meta['QUEUE_TYPE'],
             (self.meta['QUEUE_COUNT'],)
         ))
-        
+
         # The struct type that wraps a series of work queues
         self.meta['WORK_POOL_TYPE']      = np.dtype([
             ('queues',self.meta['WORK_POOL_ARR_TYPE'])
         ])
-        # The type used to represent 
+        # The type used to represent
         self.meta['WORK_FRAME_TYPE']     = np.dtype([
             ('children_residents',np.uint32),
             ('padding',np.uintp),
@@ -1182,14 +1182,14 @@ class RuntimeSpec():
         # in the arena, and the stack for tracking work links that contain outstanding
         # promises waiting for processing
         self.meta['DEV_CTX_TYPE'] = {}
-        
+
         self.meta['DEV_CTX_TYPE']["Harmonize"] = np.dtype([
             ('claim_count',np.intp),
             ('arena',      self.meta['WORK_ARENA_TYPE']),
             ('pool' ,      np.intp),
             ('stack',      np.intp)
         ])
-        
+
         self.meta['DEV_CTX_TYPE']["Event"] = np.dtype([
             ('checkout',   np.uintp),
             ('load_margin',np.uint32),
@@ -1224,7 +1224,7 @@ class RuntimeSpec():
                     size      = kind.size
                     align     = alignment(kind)
                     param_specs[(size,align)] = ()
-        
+
         # Add in parameter specs from the required async functions
         state_kinds = [self.dev_state, self.grp_state, self.thd_state]
         for kind in state_kinds:
@@ -1232,10 +1232,10 @@ class RuntimeSpec():
                     size      = kind.size
                     align     = alignment(kind)
                     param_specs[(size,align)] = ()
-            
+
 
         # An accumulator for parameter type declarations
-        param_decls = "" 
+        param_decls = ""
 
         # A map from alignment sizes to their corresponding element type
         element_map = {
@@ -1252,7 +1252,7 @@ class RuntimeSpec():
             count =  (size + (align-1)) // align
             size  = ((size + (align-1)) // align) * align
             param_decls += "struct _"+str(size)+"b"+str(align) \
-                        +" { "+element_map[align]+" data["+str(count)+"]; };\n"   
+                        +" { "+element_map[align]+" data["+str(count)+"]; };\n"
 
 
 
@@ -1262,7 +1262,7 @@ class RuntimeSpec():
             + "extern \"C\" __device__ int _initialize(void*, void* prog);\n"        \
             + "extern \"C\" __device__ int _finalize  (void*, void* prog);\n"        \
             + "extern \"C\" __device__ int _make_work (bool* result, void* prog);\n"
-        
+
         # Generate and accumulate prototypes for other async function definitons
         for func in self.async_fns:
             param_text = func_param_text(func,self.type_map,rec_mode="void_ptr",prior=True,clip=0,first_void=True)
@@ -1325,33 +1325,48 @@ class RuntimeSpec():
 
         # String template for the program initialization wrapper
         init_template = ""                                              \
-        "extern \"C\" __device__ int init_program(\n"                    \
-        "\tvoid*,\n"                                                    \
+        "extern \"C\"\n"                                                \
+        "void init_program(\n"                                          \
         "\tvoid *_dev_ctx_arg,\n"                                       \
-        "\tvoid *device_arg\n"                                          \
+        "\tvoid *device_arg,\n"                                         \
+        "\tint   grid_size,\n"                                          \
+        "\tint   block_size\n"                                          \
         ") {{\n"                                                        \
         "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n" \
-        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"     \
-        "\t_inner_dev_init<{short_name}>(*_dev_ctx,device);\n"         \
-        "\treturn 0;\n"                                                 \
+        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"      \
+        "\t_dev_init<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device);\n"  \
         "}}\n"
 
         # String template for the program execution wrapper
         exec_template = ""                                              \
-        "extern \"C\" __device__ "                                      \
-        "int exec_program(\n"                                           \
-        "\tvoid*,\n"                                                    \
+        "extern \"C\"\n"                                                \
+        "void exec_program(\n"                                          \
         "\tvoid   *_dev_ctx_arg,\n"                                     \
         "\tvoid   *device_arg,\n"                                       \
-        "\tsize_t  cycle_count\n"                                       \
+        "\tsize_t  cycle_count,\n"                                      \
+        "\tint     grid_size,\n"                                        \
+        "\tint     block_size\n"                                        \
         ") {{\n"                                                        \
-        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n" \
-        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"     \
-        "\t_inner_dev_exec<{short_name}>(*_dev_ctx,device,cycle_count);\n"         \
-        "\treturn 0;\n"                                                 \
+        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n"            \
+        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"                 \
+        "\t_dev_exec<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device,cycle_count);\n" \
         "}}\n"
         #"\tprintf(\"<ctx%p>\",_dev_ctx);\n"\
         #"\tprintf(\"<sta%p>\",device);\n"\
+
+        alloc_state_template = ""                                       \
+        "extern \"C\"\n"                                                \
+        "void alloc_program(\n"                                         \
+        "\tvoid   *_dev_ctx_arg,\n"                                     \
+        "\tvoid   *device_arg,\n"                                       \
+        "\tsize_t  cycle_count,\n"                                      \
+        "\tint     grid_size,\n"                                        \
+        "\tint     block_size\n"                                        \
+        ") {{\n"                                                        \
+        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n"            \
+        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"                 \
+        "\t_dev_exec<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device,cycle_count);\n" \
+        "}}\n"
 
 
         # String template for async function dispatches
@@ -1387,9 +1402,9 @@ class RuntimeSpec():
         "\t(*(void**)result) = {prefix}(({short_name}*)prog)->{field};\n"   \
         "\treturn 0;\n"                                                     \
         "}}\n"
-        #"\tprintf(\"{{ {field} accessor }}\");\n"                              \
-        #"\tprintf(\"{{prog %p}}\",prog);\n"                              \
-        #"\tprintf(\"{{field%p}}\",*(void**)result);\n"                              \
+        #"\tprintf(\"{{ {field} accessor }}\");\n"                          \
+        #"\tprintf(\"{{prog %p}}\",prog);\n"                                \
+        #"\tprintf(\"{{field%p}}\",*(void**)result);\n"                     \
 
         # The set of fields that should have accessors, each annotated with
         # the code (if any) that should prefix references to those fields.
@@ -1467,7 +1482,7 @@ class RuntimeSpec():
 
     # Generates the CUDA/C++ code specifying the structure of the program, for later
     # specialization to a specific program type, and compiles the ptx for each async
-    # function supplied to the specfication. Both this cuda code and the ptx are 
+    # function supplied to the specfication. Both this cuda code and the ptx are
     # saved to the `__ptxcache__` directory for future re-use.
     def generate_code(self):
 
@@ -1481,7 +1496,7 @@ class RuntimeSpec():
         base_file = open(base_filename+".cu",mode='w')
         base_file.write(base_code)
         base_file.close()
-        
+
         # Compile the async function definitions to ptx
 
         # The list of required async functions
@@ -1506,13 +1521,15 @@ class RuntimeSpec():
             # Record the path of the generated ptx
             self.fn_def_link_list.append(file_name)
             ptx_file.close()
-        
-        self.init_dispatcher = {}
-        self.exec_dispatcher = {}
+
+        self.fn = {}
 
         # Generate and compile specializations of the specification for
         # each kind of runtime
         for kind, shortname in [("Harmonize","hrm"), ("Event","evt")]:
+
+            self.fn[kind] = {}
+
             # Generate the cuda code implementing the specialization
             spec_code = self.generate_specialization_code(kind,shortname)
             # Save the code to an appropriately named file
@@ -1523,182 +1540,74 @@ class RuntimeSpec():
 
             # Compile the specialization to ptx
             compute_level = native_cuda_compute_level()
+            # nvcc dep.cu --shared -o libdep.so --compiler-options -fPIC -g
             comp_cmd = "nvcc "+spec_filename+".cu -arch=compute_"+compute_level+  \
-                    " -rdc true -c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
-                    "-o "+spec_filename+".ptx"
+                    " -include "+HARMONIZE_ROOT_CPP+" --shared -o "+spec_filename+".so"+ \
+                    " --compiler-options -fPIC"
+
             if DEBUG:
                 comp_cmd += " -g"
             subprocess.run(comp_cmd.split(),shell=False,check=True)
+            path = abspath("/home/brax/cuda_lab/libdep.so")
+            binding.load_library_permanently(path)
 
             # Create handles to reference the cuda entry wrapper functions
-            init_dev_fn  = cuda.declare_device("init_program",'void(voidptr,voidptr)')
-            exec_dev_fn  = cuda.declare_device("exec_program",'void(voidptr,voidptr,uintp)')
+            void    = numba.types.void
+            vp      = numba.types.voidptr
+            i32     = numba.types.int32
+            usize   = numba.types.uintp
+            sig     = numba.core.typing.signature
+            ext_fn  = numba.types.ExternalFunction
+            context = numba.from_dtype(self.meta['DEV_CTX_TYPE'][kind])
+            #print("\n\n\n\n",self.dev_state,"\n\n\n")
+            state   = self.dev_state #numba.from_dtype(self.dev_state)
 
+            init_program  = ext_fn("init_program",  sig(void, vp, vp, i32, i32))
+            exec_program  = ext_fn("exec_program",  sig(void, vp, vp, usize, i32, i32))
+            store_state   = ext_fn("store_state",   sig(void, vp, state))
+            load_state    = ext_fn("load_state",    sig(void, state, vp))
+            if kind == "Event":
+                # IO_SIZE, LOAD_MARGIN
+                alloc_context = ext_fn("alloc_context", sig(vp,usize,usize))
+            else:
+                # ARENA SIZE, POOL SIZE, STACK SIZE
+                alloc_context = ext_fn("alloc_context", sig(vp,usize,usize,usize))
+            alloc_state   = ext_fn("alloc_state",   sig(vp))
+            free_context  = ext_fn("free_context",  sig(void,vp))
+            free_state    = ext_fn("free_state",    sig(void,vp))
+            rt_alloc      = ext_fn("rt_alloc",      sig(vp, usize))
+            rt_free       = ext_fn("rt_free",       sig(void, vp))
 
-            vp = numba.types.voidptr
-            
-            # Wrapper functions to call entry wrapper functions
-            def init_kernel(context : vp, state : vp):
-                init_dev_fn(context,state)
- 
-            def exec_kernel(context : vp, state : vp, cycle_count : numba.uintp):
-                exec_dev_fn(context,state,cycle_count)
-
-
-            link_list = [spec_filename+".ptx"] + self.fn_def_link_list
-
-
-            #async_even = cuda.declare_device('dispatch_even_async', sig)
-            #async_odd  = cuda.declare_device('dispatch_odd_async' , sig)
-            #device     = cuda.declare_device('access_device',   dev_sig)
 
             # Finally, compile the entry functions, saving it for later use
-            self.init_dispatcher[kind] = cuda.jit(
-                init_kernel,
-                device=False,
-                link=link_list,
-                debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
-            )
-            self.exec_dispatcher[kind] = cuda.jit(
-                exec_kernel,
-                device=False,
-                link=link_list,
-                debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
-            )
+            self.fn[kind]['init_program']  = init_program
+            self.fn[kind]['exec_program']  = exec_program
+            self.fn[kind]['store_state']   = store_state
+            self.fn[kind]['load_state']    = load_state
+            self.fn[kind]['rt_alloc']      = rt_alloc
+            self.fn[kind]['alloc_state']   = alloc_state
+            self.fn[kind]['alloc_context'] = alloc_context
+            self.fn[kind]['free_state']    = free_state
+            self.fn[kind]['free_context']  = free_context
+            self.fn[kind]['rt_free']       = rt_free
 
 
     # Returns a HarmonizeRuntime instance based off of the program specification
-    def harmonize_instance(self):
-        # The integer in global memory used to track how many 'easy' work link
-        # allocations have been made thusfar
-        claim_count        = numba.cuda.device_array((1,),dtype=np.uint32)
-        # The pool used to hold unused work links
-        spare_pool         = numba.cuda.device_array((1,),dtype=self.meta['WORK_POOL_TYPE'])
-        # The frames used to hold occupied work links
-        work_stack         = numba.cuda.device_array((1,),dtype=self.meta['WORK_STACK_TYPE'])
-
-        # The pool of memory (arena) used to store intermediate data (promises) in global
-        # memory. Internally, the arena is managed by the built-in link allocator.
-        work_arena_array   = numba.cuda.device_array(
-            (self.meta['WORK_ARENA_SIZE'],),
-            dtype=self.meta['WORK_LINK_TYPE'],
-            strides=None,
-            order='C',
-            stream=0
-        )
-
-        # The handle for the arena
-        work_arena_cpu          = np.zeros((1,),dtype=self.meta['WORK_ARENA_TYPE'])
-        work_arena_cpu['size']  = self.meta['WORK_ARENA_SIZE']
-        work_arena_cpu['links'] = cuda_adr_of(work_arena_array)
-
-        # The context bundling the claim count, arena handle, pool, and stack together
-        dev_ctx_cpu = np.zeros((1,),self.meta['DEV_CTX_TYPE']["Harmonize"])
-
-        # Linking the context to its members
-        dev_ctx_cpu[0]['claim_count'] = cuda_adr_of(   claim_count)
-        dev_ctx_cpu[0]['arena']       = work_arena_cpu
-        dev_ctx_cpu[0]['pool']        = cuda_adr_of(    spare_pool)
-        dev_ctx_cpu[0]['stack']       = cuda_adr_of(    work_stack)
-
-        # Pushing the context to the GPU and getting the address of the on-GPU copy
-        dev_ctx_gpu = numba.cuda.to_device(dev_ctx_cpu)
-        #dev_ctx_ptr = cuda_adr_of(dev_ctx_gpu)
-
-        #print(hex(dev_ctx_cpu[0]['claim_count']))
-        #print(hex(dev_ctx_cpu[0]['arena']['size']))
-        #print(hex(dev_ctx_cpu[0]['arena']['links']))
-        #print(hex(dev_ctx_cpu[0]['pool']))
-        #print(hex(dev_ctx_cpu[0]['stack']))
-        
-        # The device state, used by the program
-        dev_sta_cpu = np.zeros((1,),self.dev_state)
-        dev_sta_gpu = numba.cuda.to_device(dev_sta_cpu)
-
-        # Pointers to the device contexts and states
-        #print('context {0:x}'.format(cuda_adr_of(dev_ctx_gpu)))
-        #print('state   {0:x}'.format(cuda_adr_of(dev_sta_gpu)))
-
-        return HarmonizeRuntime(
-            self,
-            dev_ctx_gpu, dev_sta_gpu,
-            self.init_dispatcher["Harmonize"],
-            self.exec_dispatcher["Harmonize"],
-            [claim_count,spare_pool,work_stack,work_arena_array]
-        )
+    def harmonize_fns(self):
+        return self.fn["Harmonize"]
 
 
     # Returns an EventRuntime instance based off of the program specification, using
     # buffers of size `io_capacity` to store intermediate data for each event type and
     # halting work generation when the space left in any buffer is less than or equal to
     # `load_margin`.
-    def event_instance(self, io_capacity=65536, load_margin=0):
-
-        # The integer used to track how many work groups have terminated 
-        # during a given pass
-        checkout_cpu  = np.zeros((1,),dtype=np.uint32)
-        checkout_gpu = numba.cuda.to_device(checkout_cpu)
-
-        io_buffers = []
-
-        # The buffers used to store intermediate data between passes
-        io_count = len(self.async_fns)
-        io_buf_array_cpu = np.zeros((1,),self.meta['IO_BUFFER_ARRAY_TYPE'])
-        for desc in range(io_count):
-            data_a_gpu = numba.cuda.device_array(
-                (io_capacity,),dtype=self.meta['UNION_TYPE']
-            )
-            data_b_gpu = numba.cuda.device_array(
-                (io_capacity,),dtype=self.meta['UNION_TYPE']
-            )
-            io_buf_cpu = np.zeros((1,),self.meta['IO_BUFFER_TYPE'])
-            io_buf_cpu[0]['toggle']      = False
-            io_buf_cpu[0]['data_a']      = cuda_adr_of(data_a_gpu)
-            io_buf_cpu[0]['data_b']      = cuda_adr_of(data_b_gpu)
-            io_buf_cpu[0]['capacity']    = io_capacity
-            io_buf_cpu[0]['input_iter'] ['value']  = 0
-            io_buf_cpu[0]['input_iter'] ['limit']  = 0
-            io_buf_cpu[0]['output_iter']['value']  = 0
-            io_buf_cpu[0]['output_iter']['limit']  = io_capacity
-            io_buf_gpu = numba.cuda.to_device(io_buf_cpu)
-            io_buffers.append({
-                "handle" : io_buf_gpu,
-                "data_a" : data_a_gpu,
-                "data_b" : data_b_gpu,
-            })
-            io_buf_array_cpu[0][desc] = cuda_adr_of(io_buf_gpu)
-            #print('io buf {0:x}'.format(cuda_adr_of(io_buf_gpu)))
-            #print('data a {0:x}'.format(cuda_adr_of(data_a_gpu)))
-            #print('data b {0:x}'.format(cuda_adr_of(data_b_gpu)))
-
-        # The device context used to manage the runtime
-        dev_ctx_cpu = np.zeros((1,),self.meta['DEV_CTX_TYPE']["Event"])
-        dev_ctx_cpu[0]['checkout']    = cuda_adr_of(checkout_gpu)
-        dev_ctx_cpu[0]['load_margin'] = load_margin
-        dev_ctx_cpu[0]['event_io']    = io_buf_array_cpu[0]
-        dev_ctx_gpu = numba.cuda.to_device(dev_ctx_cpu)
-        
-        # The device state, used by the program
-        dev_sta_cpu = np.zeros((1,),self.dev_state)
-        dev_sta_gpu = numba.cuda.to_device(dev_sta_cpu)
-
-        return EventRuntime(
-            self,
-            dev_ctx_gpu, dev_sta_gpu,
-            self.init_dispatcher["Event"],
-            self.exec_dispatcher["Event"],
-            checkout_gpu,
-            io_buffers
-        )
+    def event_instance(self):
+        return self.fn["Event"]
 
 
 
 
-    # Injects the async/sync dispatch functions and state accessors into the 
+    # Injects the async/sync dispatch functions and state accessors into the
     # global scope of the caller. This should only be done if you are sure that
     # the injection of these fields into the global namespace of the calling
     # module won't overwrite anything. While convenient in some respects, this
@@ -1706,7 +1615,7 @@ class RuntimeSpec():
     # will be injected, leading to linters incorrectly (though understandably)
     # marking the fields as undefined
     def inject_fns(state_spec,async_fns):
-    
+
         dev_state, grp_state, thd_state = state_spec
 
         for func in async_fns:
@@ -1729,7 +1638,7 @@ class RuntimeSpec():
     # Returns the `device`, `group`, and `thread` accessor function
     # handles of the specification as a triplet
     def access_fns(state_spec):
-    
+
         dev_state, grp_state, thd_state = state_spec
 
         field_list = [
@@ -1745,7 +1654,7 @@ class RuntimeSpec():
         return tuple(result)
 
     # Returns the async/sync function handles for the supplied functions, using
-    # `kind` to switch between async and sync 
+    # `kind` to switch between async and sync
     def dispatch_fns(kind,*async_fns):
         async_fns, = async_fns
         result = []
@@ -1761,16 +1670,16 @@ class RuntimeSpec():
     #    for field in fields:
     #        result.append(cuda.declare_device("dispatch_"+name+"_"+kind, sig))
     #    return tuple(result)
-    
+
 
     # Returns the handles for the on-gpu functions used to asynchronously schedule
     # the supplied function
     def async_dispatch(*async_fns):
-        return RuntimeSpec.dispatch_fns("async",async_fns) 
+        return RuntimeSpec.dispatch_fns("async",async_fns)
 
     # Returns the handles for the on-gpu functions used to immediately call
     # the supplied function
     def sync_dispatch(*async_fns):
-        return RuntimeSpec.dispatch_fns("sync",async_fns) 
+        return RuntimeSpec.dispatch_fns("sync",async_fns)
 
 

@@ -1,8 +1,8 @@
-.version	7.5	.target	sm_75	.address_size	64	.extern	.func(.param	.b32	func_retval0)access_device(.param	.b64	access_device_param_0,	.param	.b64	access_device_param_1);
+.version	8.4	.target	sm_86	.address_size	64	.extern	.func(.param	.b32	func_retval0)access_device(.param	.b64	access_device_param_0,	.param	.b64	access_device_param_1);
 .extern	.func(.param	.b32	func_retval0)dispatch_even_async(.param	.b64	dispatch_even_async_param_0,	.param	.b64	dispatch_even_async_param_1,	.param	.b64	dispatch_even_async_param_2);
 .extern	.func(.param	.b32	func_retval0)dispatch_odd_async(.param	.b64	dispatch_odd_async_param_0,	.param	.b64	dispatch_odd_async_param_1,	.param	.b64	dispatch_odd_async_param_2);
-.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy;
- .visible	.func(.param	.b32	func_retval0)_make_work(.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0,	.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1){
+.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy;
+ .visible	.func(.param	.b32	func_retval0)_make_work(.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0,	.param	.b64	_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1){
 	.local	.align	8	.b8	__local_depot0[48];
 	.reg	.b64	%SP;
 	.reg	.b64	%SPL;
@@ -12,8 +12,8 @@
 	.reg	.b64	%rd<33>;
 	mov.u64	%SPL,	__local_depot0;
 	cvta.local.u64	%SP,	%SPL;
-	ld.param.u64	%rd8,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0];
-	ld.param.u64	%rd9,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1];
+	ld.param.u64	%rd8,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0];
+	ld.param.u64	%rd9,	[_ZN8__main__9make_workB2v3B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1];
 	add.u64	%rd10,	%SP,	0;
 	add.u64	%rd1,	%SPL,	0;
 	add.u64	%rd11,	%SP,	8;
@@ -52,21 +52,22 @@
 	$L__BB0_2:
 	ld.local.u64	%rd15,	[%rd1];
 	atom.add.u64	%rd5,	[%rd15],	4;
-	setp.gt.u64	%p3,	%rd5,	655359;
+	setp.gt.u64	%p3,	%rd5,	65535;
 	@%p3	bra	$L__BB0_11;
 	bra.uni	$L__BB0_3;
 	$L__BB0_11:
-	st.u8[%rd8],	%rs1;
-	mov.u32	%r6,	0;
-	st.param.b32[func_retval0+0],	%r6;
-	ret;
+	mov.u16	%rs3,	0;
+	st.u8[%rd8],	%rs3;
+	mov.u32	%r7,	0;
+	bra.uni	$L__BB0_12;
 	$L__BB0_3:
-	mov.u64	%rd32,	%rd12;
+	mov.u64	%rd16,	0;
+	mov.u64	%rd32,	%rd16;
 	$L__BB0_4:
 	add.s64	%rd18,	%rd32,	%rd5;
 	st.local.u64[%rd2],	%rd18;
 	st.local.u64[%rd2+8],	%rd18;
-	st.local.u64[%rd2+16],	%rd12;
+	st.local.u64[%rd2+16],	%rd16;
 	shr.u64	%rd19,	%rd18,	63;
 	add.s64	%rd20,	%rd18,	%rd19;
 	and.b64	%rd21,	%rd20,	-2;
@@ -121,15 +122,13 @@
 	$L__BB0_9:
 	add.s64	%rd32,	%rd32,	1;
 	add.s64	%rd31,	%rd32,	%rd5;
-	setp.lt.s64	%p10,	%rd31,	655360;
+	setp.lt.s64	%p10,	%rd31,	65536;
 	setp.lt.u64	%p11,	%rd32,	4;
 	and.pred	%p12,	%p11,	%p10;
 	@%p12	bra	$L__BB0_4;
 	mov.u16	%rs2,	1;
 	st.u8[%rd8],	%rs2;
-	mov.u32	%r5,	0;
-	st.param.b32[func_retval0+0],	%r5;
-	ret;
+	mov.u32	%r7,	0;
 	$L__BB0_12:
 	st.param.b32[func_retval0+0],	%r7;
 	ret;

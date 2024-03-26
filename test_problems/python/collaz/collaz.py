@@ -81,7 +81,7 @@ def make_work(prog: numba.uintp) -> numba.boolean:
 
 
 base_fns   = (initialize,finalize,make_work)
-state_spec = (dev_state_type,grp_state_type,thd_state_type) 
+state_spec = (dev_state_type,grp_state_type,thd_state_type)
 async_fns  = [odd,even]
 
 device, group, thread = harm.RuntimeSpec.access_fns(state_spec)
@@ -90,13 +90,28 @@ odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
 collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 
 
-
+state = np.zeros((0,),dev_state_type)
 
 
 if mode == "async":
-    runtime = collaz_spec.harmonize_instance()
-    runtime.init(4096)
-    runtime.exec(65536,4096)
+    fns = collaz_spec.harmonize_fns()
+    arena_size = 0x1000000
+    pool_size  = 8191
+    stack_size = 8191
+
+    context    = fns["alloc_context"](arena_size,pool_size,stack_size)
+    gpu_state  = fns["alloc_state"]()
+
+    grid_size  = 4095
+    block_size = 32
+    fns["load_state"](gpu_state,state)
+    fns["init_program"](context,state,grid_size,block_size)
+
+    iter_count = 65536
+    fns["exec_program"](context,state,iter_count,grid_size,block_size)
+    fns["load_state"](state,gpu_state)
+    fns["rt_free"](context)
+    fns["rt_free"](state)
 else:
     runtime = collaz_spec.event_instance(io_capacity=65536*4,load_margin=1024)
     runtime.init(4096)
@@ -127,3 +142,4 @@ for val in range(val_count):
     total += steps
 
 print(f"Number of inconsistent results : {diff}")
+

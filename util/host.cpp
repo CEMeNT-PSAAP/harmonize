@@ -43,9 +43,9 @@ class DevBuf {
 
 		size_t  size;
 		T       *adr;
-		
+
 		Inner(T *adr_val, size_t size_val)
-		: adr (adr_val ) 
+		: adr (adr_val )
 		, size(size_val)
 		{}
 
@@ -130,7 +130,7 @@ class DevBuf {
 		) );
 	}
 
-	
+
 	__host__ void operator>>(T &other) {
 		auto_throw( cudaMemcpy(
 			&other,
@@ -152,7 +152,7 @@ class DevBuf {
 	DevBuf<T> (size_t size)
 		: DevBuf<T> (hardMalloc<T>(size),size)
 	{}
-	
+
 	DevBuf<T> (T& value)
 		: DevBuf<T>()
 	{
@@ -165,13 +165,13 @@ class DevBuf {
 		(*this) << value;
 	}
 
-	
+
 	template<typename... ARGS>
 	static DevBuf<T> make(ARGS... args)
 	{
 		return DevBuf<T>( T(args...) );
 	}
-	
+
 
 };
 
@@ -208,7 +208,7 @@ class DevObj {
 				cudaMemcpyDefault
 			) );
 		}
-		
+
 		template<typename... ARGS>
 		Inner(T *adr_val, ARGS... args)
 			: adr (adr_val)
@@ -245,20 +245,22 @@ class DevObj {
 	operator T*()    { return inner->adr; }
 
 	operator T()     { return inner->host_copy; }
-	
+
 	T& host_copy()   { return inner->host_copy; }
 
 	template<typename... ARGS>
 	DevObj<T>(ARGS... args)
 		: inner(new Inner(hardMalloc<T>(1),args...))
 	{}
-	
+
 };
 
 
 
 
 
+template<typename T>
+void *alloc_context()
 
 
 

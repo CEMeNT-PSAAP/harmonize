@@ -1,8 +1,8 @@
-.version	7.5	.target	sm_75	.address_size	64	.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy;
- .visible	.func(.param	.b32	func_retval0)_finalize(.param	.b64	_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0,	.param	.b64	_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1){
+.version	8.4	.target	sm_86	.address_size	64	.common	.global	.align	8	.u64	_ZN08NumbaEnv8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy;
+ .visible	.func(.param	.b32	func_retval0)_finalize(.param	.b64	_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0,	.param	.b64	_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_1){
 	.reg	.b32	%r<2>;
 	.reg	.b64	%rd<3>;
-	ld.param.u64	%rd1,	[_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Uw11Ew1dRRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0];
+	ld.param.u64	%rd1,	[_ZN8__main__8finalizeB2v2B94cw51cXTLSUwv1sCUt9Ww0FEw09RRQPKzLTg4gaGKFsG2oMQGEYakJSQB1PQBk0Bynm21OiwU1a0UoLGhDpQE8oxrNQE_3dEy_param_0];
 	mov.u64	%rd2,	0;
 	st.u64[%rd1],	%rd2;
 	mov.u32	%r1,	0;

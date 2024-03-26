@@ -1,5 +1,5 @@
 struct _24b8 { unsigned long long int data[3]; };
-struct _5242888b8 { unsigned long long int data[655361]; };
+struct _524296b8 { unsigned long long int data[65537]; };
 struct _0b8 { unsigned long long int data[0]; };
 extern "C" __device__ int _initialize(void*, void* prog);
 extern "C" __device__ int _finalize  (void*, void* prog);
@@ -31,7 +31,7 @@ struct collaz{
 	static const size_t FRAME_SIZE = 8192;
 	static const size_t POOL_SIZE = 8192;
 	typedef OpUnion<Odd,Even> OpSet;
-	typedef _5242888b8* DeviceState;
+	typedef _524296b8* DeviceState;
 	typedef _0b8* GroupState;
 	typedef _0b8* ThreadState;
 	template<typename PROGRAM>
