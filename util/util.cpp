@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 
 
 
@@ -18,7 +19,7 @@ namespace util {
 // active. This is useful for finding an index for a set of operations performed once by an
 // unpredictable number of threads within a warp.
 */
- __device__ unsigned int warp_inc_scan(){
+__device__ unsigned int warp_inc_scan(){
 
 	unsigned int active = __activemask();
 	unsigned int keep = (1 << threadIdx.x) - 1;
@@ -31,8 +32,8 @@ namespace util {
 /*
 // This function returns the number of currently active threads in a warp
 */
- __device__ unsigned int active_count(){
-	return __popc(__activemask()); 
+__device__ unsigned int active_count(){
+	return __popc(__activemask());
 }
 
 
@@ -40,7 +41,7 @@ namespace util {
 // This returns true only if the current thread is the active thread with the lowest warp-local id.
 // This is valuable for electing a "leader" to perform single-threaded work for a warp.
 */
- __device__ bool current_leader(){
+__device__ bool current_leader(){
 	return ((__ffs(__activemask())-1) == threadIdx.x);
 }
 
@@ -62,11 +63,11 @@ __device__ unsigned long long int leading_zeros(unsigned long long int value) {
 
 
 /*
-// A simple pseudo-random number generator. This algorithm should never be used for cryptography, 
+// A simple pseudo-random number generator. This algorithm should never be used for cryptography,
 // it is simply used to generate numbers random enough to reduce collisions for atomic
 // instructions performed to manage the runtime state.
 */
-#if 1 
+#if 1
 __host__ __device__ unsigned int random_uint(unsigned int &state){
 
 	state = (0x10DCDu * state + 1u);

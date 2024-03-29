@@ -2426,7 +2426,7 @@ class HarmonizeProgram
 	 __device__  QueueType push_queue(QueueType& dest, QueueType& queue){
 
 		if( queue.is_null() ){
-			return;
+			return queue;
 		}
 		#ifdef INF_LOOP_SAFE
 		while(true)
@@ -2462,7 +2462,7 @@ class HarmonizeProgram
 				break;
 			}
 		}
-
+		return queue;
 
 	}
 

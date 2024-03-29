@@ -6,6 +6,9 @@ import numba
 import re
 import subprocess
 from llvmlite import binding
+from time import sleep
+
+from templates import *
 
 import inspect
 import sys
@@ -25,7 +28,7 @@ def native_cuda_compute_level():
 
 
 
-DEBUG = False
+DEBUG = True
 
 # Injects `value` as the value of the global variable named `name` in the module
 # that defined the function `index` calls down the stack, from the perspective
@@ -90,7 +93,7 @@ def global_ptx( func ):
 # Returns the ptx of the input function, as a device CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
 def device_ptx( func ):
-    print(func.__name__)
+    #print(func.__name__)
     ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
     return ptx, res_type
@@ -601,16 +604,21 @@ def fix_temp_param(parse_tree):
 def extern_device_ptx( func, type_map ):
     arg_types   = fn_arg_ano_list(func)
     ptx_text, res_type = device_ptx(func)
-    ptx_text = strip_ptx(ptx_text,False)
-    parse_tree = parse_ptx(ptx_text)
-    line_tree  = linify_tree(parse_tree)
-    extern_regex = r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))'
-    for match, index, context in extract_regex(line_tree,extern_regex):
-        before = match['before']
-        after  = match['after']
-        context[index] = before + "_" + func.__name__ + after
-    ptx_text = stringify_tree(line_tree,False)
-    ptx_text = ptx_text.replace("call.uni","call")
+    #ptx_text = strip_ptx(ptx_text,False)
+    #parse_tree = parse_ptx(ptx_text)
+    #line_tree  = linify_tree(parse_tree)
+    #for match, index, context in extract_regex(line_tree,extern_regex):
+    #    before = match['before']
+    #    after  = match['after']
+    #    context[index] = before + "_" + func.__name__ + after
+    #ptx_text = stringify_tree(line_tree,False)
+    #ptx_text = ptx_text.replace("call.uni","call")
+    ptx_text = re.sub( \
+        r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
+        r'\g<before>'+"_"+func.__name__+r'\g<after>', \
+        ptx_text \
+    )
+    #print(ptx_text)
     return ptx_text
 
 
@@ -840,6 +848,7 @@ def harm_template_func(func,template_name,function_map,type_map,inline,base=Fals
         code += inlined_device_ptx(func,function_map,type_map)
     else:
         code += "\t\t_"+func.__name__+"(fn_param_0, &prog"+arg_text+");\n"
+        pass
 
     if return_type != "void":
         code += "\t\treturn result;\n"
@@ -1326,84 +1335,6 @@ class RuntimeSpec():
 
         state_struct = map_type_name(self.type_map,self.dev_state,rec_mode="")
 
-
-        # String template for the program initialization wrapper
-        init_template = ""                                              \
-        "extern \"C\"\n"                                                \
-        "void init_program(\n"                                          \
-        "\tvoid *_dev_ctx_arg,\n"                                       \
-        "\tvoid *device_arg,\n"                                         \
-        "\tint   grid_size,\n"                                          \
-        "\tint   block_size\n"                                          \
-        ") {{\n"                                                        \
-        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n" \
-        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"      \
-        "\t_dev_init<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device);\n"  \
-        "}}\n"
-
-        # String template for the program execution wrapper
-        exec_template = ""                                              \
-        "extern \"C\"\n"                                                \
-        "void exec_program(\n"                                          \
-        "\tvoid   *_dev_ctx_arg,\n"                                     \
-        "\tvoid   *device_arg,\n"                                       \
-        "\tsize_t  cycle_count,\n"                                      \
-        "\tint     grid_size,\n"                                        \
-        "\tint     block_size\n"                                        \
-        ") {{\n"                                                        \
-        "\tauto _dev_ctx = (typename {short_name}::DeviceContext*) _dev_ctx_arg;\n"            \
-        "\tauto device   = (typename {short_name}::DeviceState) device_arg;\n"                 \
-        "\t_dev_exec<{short_name}><<<grid_size,block_size>>>(*_dev_ctx,device,cycle_count);\n" \
-        "}}\n"
-        #"\tprintf(\"<ctx%p>\",_dev_ctx);\n"\
-        #"\tprintf(\"<sta%p>\",device);\n"\
-
-        alloc_state_template = ""                         \
-        "extern \"C\"\n"                                  \
-        "void *alloc_state() {{\n"                        \
-        "\tvoid *result = nullptr;"                       \
-        "\tcudaMalloc(&result,sizeof({state_name});\n"    \
-        "\treturn result;\n"                              \
-        "}}\n"
-
-
-        # String template for async function dispatches
-        dispatch_template = ""                                              \
-        "extern \"C\" __device__ \n"                                        \
-        "int dispatch_{fn}_{kind}(void*{params}){{\n"                       \
-        "\t(({short_name}*)fn_param_1)->template {kind}<{fn_type}>({args});\n"  \
-        "\treturn 0;\n"                                                     \
-        "}}\n"
-        #"\tprintf(\"{{ {fn} wrapper }}\");\n"                            \
-
-        # String template for the program execution wrapper
-        fn_query_template = ""                                                 \
-        "extern \"C\" __device__ "                                          \
-        "int query_{field}(void *result, void *prog){{\n"                   \
-        "\t(*({kind}*)result) = {prefix}(({short_name}*)prog)->template {field}<{fn_type}>();\n"\
-        "\treturn 0;\n"                                                     \
-        "}}\n"
-
-        # String template for the program execution wrapper
-        query_template = ""                                                 \
-        "extern \"C\" __device__ "                                          \
-        "int query_{field}(void *result, void *prog){{\n"                   \
-        "\t(*({kind}*)result) = {prefix}(({short_name}*)prog)->{field}();\n"\
-        "\treturn 0;\n"                                                     \
-        "}}\n"
-
-
-        # String template for field accessors
-        accessor_template = ""                                              \
-        "extern \"C\" __device__ \n"                                        \
-        "int access_{field}(void* result, void* prog){{\n"                  \
-        "\t(*(void**)result) = {prefix}(({short_name}*)prog)->{field};\n"   \
-        "\treturn 0;\n"                                                     \
-        "}}\n"
-        #"\tprintf(\"{{ {field} accessor }}\");\n"                          \
-        #"\tprintf(\"{{prog %p}}\",prog);\n"                                \
-        #"\tprintf(\"{{field%p}}\",*(void**)result);\n"                     \
-
         # The set of fields that should have accessors, each annotated with
         # the code (if any) that should prefix references to those fields.
         # This is mainly useful for working with references.
@@ -1431,6 +1362,18 @@ class RuntimeSpec():
         dispatch_defs += init_template.format(short_name=short_name,name=self.spec_name,kind=kind)
         dispatch_defs += exec_template.format(short_name=short_name,name=self.spec_name,kind=kind)
 
+        if kind == "Event":
+            dispatch_defs += alloc_event_prog_template.format(short_name=short_name)
+        else :
+            dispatch_defs += alloc_harm_prog_template.format(short_name=short_name)
+
+        dispatch_defs += free_prog_template  .format(short_name=short_name)
+        dispatch_defs += alloc_state_template.format(state_struct=state_struct)
+        dispatch_defs += free_state_template .format()
+        dispatch_defs += load_state_template .format(state_struct=state_struct)
+        dispatch_defs += store_state_template.format(state_struct=state_struct)
+
+
         # Generate the dispatch functions for each async function
         for fn in self.async_fns:
             # Accepts record parameters as void pointers
@@ -1452,29 +1395,31 @@ class RuntimeSpec():
         for (field,prefix) in program_fields:
             accessor_defs += accessor_template.format(short_name=short_name,field=field,prefix=prefix)
 
-        #fn_query_defs = ""
-        #fn_query_list = [ ("load_fraction","float", "") ]
-        #for (field,kind,prefix) in fn_query_list:
-        #    for fn in self.async_fns:
-        #        fn_query_defs += fn_query_template.format(
-        #                short_name=short_name,
-        #                fn_type=pascal_case(fn.__name__)
-        #                field=field,
-        #                kind=kind,
-        #                prefix=prefix,
-        #            )
+        # Query definitions currently disabled
+        fn_query_defs = ""
+        query_defs = ""
+        if False:
+            fn_query_list = [ ("load_fraction","float", "") ]
+            for (field,kind,prefix) in fn_query_list:
+                for fn in self.async_fns:
+                    fn_query_defs += fn_query_template.format(
+                            short_name=short_name,
+                            fn_type=pascal_case(fn.__name__),
+                            field=field,
+                            kind=kind,
+                            prefix=prefix,
+                        )
 
-        #query_defs = ""
-        #query_list = [ ]
-        #for (field,kind,prefix) in query_list:
-        #    query_defs += query_template.format(
-        #        short_name=short_name,
-        #        field=field,
-        #        kind=kind,
-        #        prefix=prefix
-        #    )
+            query_list = [ ]
+            for (field,kind,prefix) in query_list:
+                query_defs += query_template.format(
+                    short_name=short_name,
+                    field=field,
+                    kind=kind,
+                    prefix=prefix
+                )
 
-        return preamble + dispatch_defs + accessor_defs #+ fn_query_defs + query_defs
+        return preamble + dispatch_defs + accessor_defs + fn_query_defs + query_defs
 
 
 
@@ -1505,26 +1450,26 @@ class RuntimeSpec():
 
         # A list to record the files containing the definitions
         # of each async function definition
-        self.fn_def_link_list = []
+        self.fn_def_list = []
 
         # Compile each user-provided function defintion to ptx
         # and save it to an appropriately named file
         for fn in comp_list:
-            file_name = fn.__name__+".ptx"
+            base_name = fn.__name__
             if fn in base_fns:
-                file_name = self.spec_name + "_" + file_name
-            file_name = cache_path + file_name
-            ptx_file  = open(file_name,mode='w')
+                base_name = self.spec_name + "_" + base_name
+            base_name = cache_path + base_name
+            ptx_file  = open(base_name+".ptx",mode='w')
             ptx_file.write(extern_device_ptx(fn,self.type_map))
             # Record the path of the generated ptx
-            self.fn_def_link_list.append(file_name)
+            self.fn_def_list.append(base_name)
             ptx_file.close()
 
         self.fn = {}
 
         # Generate and compile specializations of the specification for
         # each kind of runtime
-        for kind, shortname in [("Harmonize","hrm"), ("Event","evt")]:
+        for kind, shortname in [("Harmonize","hrm")]: #, ("Event","evt")]:
 
             self.fn[kind] = {}
 
@@ -1536,17 +1481,40 @@ class RuntimeSpec():
             spec_file.write(spec_code)
             spec_file.close()
 
+
             # Compile the specialization to ptx
             compute_level = native_cuda_compute_level()
-            # nvcc dep.cu --shared -o libdep.so --compiler-options -fPIC -g
-            comp_cmd = "nvcc "+spec_filename+".cu -arch=compute_"+compute_level+  \
-                    " -include "+HARMONIZE_ROOT_CPP+" --shared -o "+spec_filename+".so"+ \
-                    " --compiler-options -fPIC"
+            #print(self.fn_def_list)
 
+            debug_flag = ""
             if DEBUG:
-                comp_cmd += " -g"
+                debug_flag = "-g"
+
+
+            for path in self.fn_def_list:
+                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --compiler-options '-fPIC' {path}.ptx -o {path}.o {debug_flag}"
+                #print(dev_comp_cmd)
+                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --compiler-options '-fPIC' {spec_filename}.cu -include {HARMONIZE_ROOT_CPP} -o {spec_filename}.o {debug_flag}"
+            #print(dev_comp_cmd)
+            subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+
+            link_list = [ f"{spec_filename}.o" ] + [ path+".o" for path in self.fn_def_list ]
+
+            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{compute_level} -o {spec_filename}_device.o --compiler-options '-fPIC' {debug_flag}"
+
+            comp_cmd = f"nvcc -shared {' '.join(link_list)} {spec_filename}_device.o -arch=compute_{compute_level} -o {spec_filename}.so {debug_flag}"
+
+
+
+            #print(dev_link_cmd)
+            subprocess.run(dev_link_cmd.split(),shell=False,check=True)
+            #print(comp_cmd)
             subprocess.run(comp_cmd.split(),shell=False,check=True)
-            path = abspath("/home/brax/cuda_lab/libdep.so")
+            path = abspath(spec_filename+".so")
+            #print(path)
             binding.load_library_permanently(path)
 
             # Create handles to reference the cuda entry wrapper functions
@@ -1560,34 +1528,35 @@ class RuntimeSpec():
             #print("\n\n\n\n",self.dev_state,"\n\n\n")
             state   = self.dev_state #numba.from_dtype(self.dev_state)
 
-            init_program  = ext_fn("init_program",  sig(void, vp, vp, i32, i32))
-            exec_program  = ext_fn("exec_program",  sig(void, vp, vp, usize, i32, i32))
+            init_program  = ext_fn("init_program",  sig(void, vp, usize))
+            exec_program  = ext_fn("exec_program",  sig(void, vp, usize, usize))
             store_state   = ext_fn("store_state",   sig(void, vp, state))
             load_state    = ext_fn("load_state",    sig(void, state, vp))
+
             if kind == "Event":
                 # IO_SIZE, LOAD_MARGIN
-                alloc_context = ext_fn("alloc_context", sig(vp,usize,usize))
+                alloc_program = ext_fn("alloc_program", sig(vp,vp,usize))
+                free_program  = ext_fn("free_program",  sig(void,vp))
             else:
                 # ARENA SIZE, POOL SIZE, STACK SIZE
-                alloc_context = ext_fn("alloc_context", sig(vp,usize,usize,usize))
-            alloc_state   = ext_fn("alloc_state",   sig(vp))
-            free_context  = ext_fn("free_context",  sig(void,vp))
-            free_state    = ext_fn("free_state",    sig(void,vp))
-            rt_alloc      = ext_fn("rt_alloc",      sig(vp, usize))
-            rt_free       = ext_fn("rt_free",       sig(void, vp))
+                alloc_program = ext_fn("alloc_program", sig(vp,vp,usize))
+                free_program  = ext_fn("free_program",  sig(void,vp))
 
+            alloc_state   = ext_fn("alloc_state",   sig(vp))
+            free_state    = ext_fn("free_state",    sig(void,vp))
 
             # Finally, compile the entry functions, saving it for later use
             self.fn[kind]['init_program']  = init_program
             self.fn[kind]['exec_program']  = exec_program
+
             self.fn[kind]['store_state']   = store_state
             self.fn[kind]['load_state']    = load_state
-            self.fn[kind]['rt_alloc']      = rt_alloc
+
+            self.fn[kind]['alloc_program'] = alloc_program
+            self.fn[kind]['free_program']  = free_program
+
             self.fn[kind]['alloc_state']   = alloc_state
-            self.fn[kind]['alloc_context'] = alloc_context
             self.fn[kind]['free_state']    = free_state
-            self.fn[kind]['free_context']  = free_context
-            self.fn[kind]['rt_free']       = rt_free
 
 
     # Returns a HarmonizeRuntime instance based off of the program specification

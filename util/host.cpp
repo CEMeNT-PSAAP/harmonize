@@ -20,8 +20,12 @@ bool check_error(){
 
 
 
-void auto_throw(cudaError_t value){
-	if ( value != cudaSuccess ) { throw value; }
+void auto_throw(cudaError_t status){
+	if ( status != cudaSuccess ) {
+		std::string message = "GPU Runtime Error: ";
+		message += cudaGetErrorString(status);
+		throw std::runtime_error(message);
+	}
 }
 
 
@@ -254,21 +258,6 @@ class DevObj {
 	{}
 
 };
-
-
-
-
-
-template<typename T>
-void *alloc_context()
-
-
-
-
-
-
-
-
 
 
 
