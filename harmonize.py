@@ -1011,6 +1011,9 @@ class EventRuntime(Runtime):
 # runtime meta-parameters
 class RuntimeSpec():
 
+    dev_ir_registry = {}
+    code_registry   = {}
+
     def __init__(
             self,
             # The name of the program specification
@@ -1328,7 +1331,7 @@ class RuntimeSpec():
 
 
     # Returns the CUDA/C++ code specializing the specification for a program type
-    def generate_specialization_code(self,kind,shorthand):
+    def generate_specialization_code(self,kind,shorthand,suffix):
         # String template to alias the appropriate specialization to a convenient name
         spec_decl_template = "typedef {kind}Program<{name}> {short_name};\n"
 
@@ -1356,22 +1359,23 @@ class RuntimeSpec():
         # The name used to refer to the program template specialization
         short_name = self.spec_name.lower() +"_"+shorthand
         # Typedef the specialization to a more convenient shothand
-        preamble += spec_decl_template.format(kind=kind,name=self.spec_name,short_name=short_name)
+        preamble += spec_decl_template.format(kind=kind,name=self.spec_name,short_name=short_name,suffix=suffix)
 
         # Generate the wrappers for kernel entry points
-        dispatch_defs += init_template.format(short_name=short_name,name=self.spec_name,kind=kind)
-        dispatch_defs += exec_template.format(short_name=short_name,name=self.spec_name,kind=kind)
+        dispatch_defs += init_template.format(short_name=short_name,name=self.spec_name,kind=kind,suffix=suffix)
+        dispatch_defs += exec_template.format(short_name=short_name,name=self.spec_name,kind=kind,suffix=suffix)
 
         if kind == "Event":
-            dispatch_defs += alloc_event_prog_template.format(short_name=short_name)
+            dispatch_defs += alloc_event_prog_template.format(short_name=short_name,suffix=suffix)
         else :
-            dispatch_defs += alloc_harm_prog_template.format(short_name=short_name)
+            dispatch_defs += alloc_harm_prog_template.format(short_name=short_name,suffix=suffix)
 
-        dispatch_defs += free_prog_template  .format(short_name=short_name)
-        dispatch_defs += alloc_state_template.format(state_struct=state_struct)
-        dispatch_defs += free_state_template .format()
-        dispatch_defs += load_state_template .format(state_struct=state_struct)
-        dispatch_defs += store_state_template.format(state_struct=state_struct)
+        dispatch_defs += free_prog_template  .format(short_name=short_name,suffix=suffix)
+        dispatch_defs += alloc_state_template.format(state_struct=state_struct,suffix=suffix)
+        dispatch_defs += free_state_template .format(suffix=suffix)
+        dispatch_defs += load_state_template .format(state_struct=state_struct,suffix=suffix)
+        dispatch_defs += store_state_template.format(state_struct=state_struct,suffix=suffix)
+        dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
 
 
         # Generate the dispatch functions for each async function
@@ -1469,14 +1473,15 @@ class RuntimeSpec():
 
         # Generate and compile specializations of the specification for
         # each kind of runtime
-        for kind, shortname in [("Harmonize","hrm")]: #, ("Event","evt")]:
+        for kind, shortname in [("Event","evt")]: #,("Harmonize","hrm")]:
 
             self.fn[kind] = {}
 
             # Generate the cuda code implementing the specialization
-            spec_code = self.generate_specialization_code(kind,shortname)
+            suffix = self.spec_name+"_"+shortname
+            spec_code = self.generate_specialization_code(kind,shortname,suffix)
             # Save the code to an appropriately named file
-            spec_filename = cache_path+self.spec_name+"_"+shortname
+            spec_filename = cache_path+suffix
             spec_file = open(spec_filename+".cu",mode='w')
             spec_file.write(spec_code)
             spec_file.close()
@@ -1492,20 +1497,20 @@ class RuntimeSpec():
 
 
             for path in self.fn_def_list:
-                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --compiler-options '-fPIC' {path}.ptx -o {path}.o {debug_flag}"
+                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {path}.ptx -o {path}.o {debug_flag}"
                 #print(dev_comp_cmd)
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
-            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --compiler-options '-fPIC' {spec_filename}.cu -include {HARMONIZE_ROOT_CPP} -o {spec_filename}.o {debug_flag}"
+            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {spec_filename}.cu -include {HARMONIZE_ROOT_CPP} -o {spec_filename}.o {debug_flag}"
             #print(dev_comp_cmd)
             subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
 
             link_list = [ f"{spec_filename}.o" ] + [ path+".o" for path in self.fn_def_list ]
 
-            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{compute_level} -o {spec_filename}_device.o --compiler-options '-fPIC' {debug_flag}"
+            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{compute_level} --cudart shared -o {spec_filename}_device.o --compiler-options -fPIC {debug_flag}"
 
-            comp_cmd = f"nvcc -shared {' '.join(link_list)} {spec_filename}_device.o -arch=compute_{compute_level} -o {spec_filename}.so {debug_flag}"
+            comp_cmd = f"nvcc -shared {' '.join(link_list)} {spec_filename}_device.o -arch=compute_{compute_level} --cudart shared -o {spec_filename}.so {debug_flag}"
 
 
 
@@ -1525,25 +1530,28 @@ class RuntimeSpec():
             sig     = numba.core.typing.signature
             ext_fn  = numba.types.ExternalFunction
             context = numba.from_dtype(self.meta['DEV_CTX_TYPE'][kind])
+            boolean = numba.types.boolean
             #print("\n\n\n\n",self.dev_state,"\n\n\n")
             state   = self.dev_state #numba.from_dtype(self.dev_state)
 
-            init_program  = ext_fn("init_program",  sig(void, vp, usize))
-            exec_program  = ext_fn("exec_program",  sig(void, vp, usize, usize))
-            store_state   = ext_fn("store_state",   sig(void, vp, state))
-            load_state    = ext_fn("load_state",    sig(void, state, vp))
+            init_program  = ext_fn(f"init_program_{suffix}",  sig(void, vp, usize))
+            exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
+            store_state   = ext_fn(f"store_state_{suffix}",   sig(void, vp, state))
+            load_state    = ext_fn(f"load_state_{suffix}",    sig(void, state, vp))
 
             if kind == "Event":
                 # IO_SIZE, LOAD_MARGIN
-                alloc_program = ext_fn("alloc_program", sig(vp,vp,usize))
-                free_program  = ext_fn("free_program",  sig(void,vp))
+                alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
+                free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
             else:
                 # ARENA SIZE, POOL SIZE, STACK SIZE
-                alloc_program = ext_fn("alloc_program", sig(vp,vp,usize))
-                free_program  = ext_fn("free_program",  sig(void,vp))
+                alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
+                free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
 
-            alloc_state   = ext_fn("alloc_state",   sig(vp))
-            free_state    = ext_fn("free_state",    sig(void,vp))
+            alloc_state   = ext_fn(f"alloc_state_{suffix}",   sig(vp))
+            free_state    = ext_fn(f"free_state_{suffix}",    sig(void,vp))
+
+            complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
 
             # Finally, compile the entry functions, saving it for later use
             self.fn[kind]['init_program']  = init_program
@@ -1558,6 +1566,14 @@ class RuntimeSpec():
             self.fn[kind]['alloc_state']   = alloc_state
             self.fn[kind]['free_state']    = free_state
 
+            @njit(sig(boolean,vp))
+            def complete_wrapper(instance):
+                result = complete(instance)
+                return (result != 0)
+
+            self.fn[kind]['complete']      = complete_wrapper
+
+
 
     # Returns a HarmonizeRuntime instance based off of the program specification
     def harmonize_fns(self):
@@ -1568,7 +1584,7 @@ class RuntimeSpec():
     # buffers of size `io_capacity` to store intermediate data for each event type and
     # halting work generation when the space left in any buffer is less than or equal to
     # `load_margin`.
-    def event_instance(self):
+    def event_fns(self):
         return self.fn["Event"]
 
 
@@ -1648,5 +1664,7 @@ class RuntimeSpec():
     # the supplied function
     def sync_dispatch(*async_fns):
         return RuntimeSpec.dispatch_fns("sync",async_fns)
+
+
 
 

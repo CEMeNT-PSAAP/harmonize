@@ -2108,7 +2108,7 @@ class HarmonizeProgram
 			unsigned int  base_cr = 0;
 			cudaMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
 			check_error();
-			return (base_cr != 0);
+			return (base_cr == 0);
 		}
 
 	};
@@ -5127,7 +5127,6 @@ template<typename ProgType>
 __host__ void exec(typename ProgType::Instance& instance,size_t group_count, size_t cycle_count) {
 	_dev_exec<ProgType><<<group_count,ProgType::WORK_GROUP_SIZE>>>(instance.to_context(),instance.device_state,cycle_count);
 }
-
 
 
 

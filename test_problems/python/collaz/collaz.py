@@ -11,7 +11,7 @@ import harmonize as harm
 
 
 
-mode = "async"
+mode = "event"
 
 config.DISABLE_JIT = False
 
@@ -101,7 +101,7 @@ if mode == "async":
     store_state   = fns["store_state"]
     init_program  = fns["init_program"]
     exec_program  = fns["exec_program"]
-
+    complete      = fns["complete"]
 
     @njit
     def exec_fn(state):
@@ -114,16 +114,48 @@ if mode == "async":
         store_state(gpu_state,state)
         init_program(program,grid_size)
 
-        iter_count = 655360
+        iter_count = 65536
         exec_program(program,grid_size,iter_count)
+        while (not complete(program)):
+            exec_program(program,grid_size,iter_count)
         load_state(state,gpu_state)
 
         free_program(program)
         free_state(gpu_state)
 else:
-    runtime = collaz_spec.event_instance(io_capacity=65536*4,load_margin=1024)
-    runtime.init(4096)
-    runtime.exec(4,4096)
+
+    fns = collaz_spec.event_fns()
+
+    alloc_state   = fns["alloc_state"]
+    free_state    = fns["free_state"]
+    alloc_program = fns["alloc_program"]
+    free_program  = fns["free_program"]
+    load_state    = fns["load_state"]
+    store_state   = fns["store_state"]
+    init_program  = fns["init_program"]
+    exec_program  = fns["exec_program"]
+    complete      = fns["complete"]
+
+    @njit
+    def exec_fn(state):
+        io_size = 0x10000
+
+        gpu_state  = alloc_state()
+        program    = alloc_program(gpu_state,io_size)
+
+        grid_size  = 4096
+        store_state(gpu_state,state)
+        init_program(program,grid_size)
+
+        chunk_size = 1
+        exec_program(program,grid_size,chunk_size)
+        while (not complete(program)) :
+            exec_program(program,grid_size,chunk_size)
+
+        load_state(state,gpu_state)
+
+        free_program(program)
+        free_state(gpu_state)
 
 
 @njit
@@ -142,8 +174,9 @@ def collaz_check(value):
 @njit
 def run():
 
-    state = np.zeros((1,),dev_state_type)[0]
-    exec_fn(state)
+    state = np.zeros((1,),dev_state_type)
+
+    exec_fn(state[0])
 
     print("Finished GPU Pass")
 
@@ -151,15 +184,14 @@ def run():
     diff  = 0
     for val in range(val_count):
         steps = collaz_check(val)
-        gpu_steps = state['val'][1+val]
+        gpu_steps = state[0]['val'][1+val]
         if steps != gpu_steps:
             diff += 1
-            print(f"@{val} CPU {steps} different from {gpu_steps}")
-        if diff > 10:
-            break
+            #print(f"@{val} CPU {steps} different from {gpu_steps}")
         total += steps
 
-    print(f"Number of inconsistent results : at least {diff}")
+    print(f"Number of inconsistent results : {diff}")
 
 
 run()
+

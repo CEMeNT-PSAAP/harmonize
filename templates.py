@@ -2,12 +2,12 @@
 # String template for the program initialization wrapper
 init_template = """
 extern "C"
-void init_program(
+void init_program_{suffix}(
     void   *instance_ptr,
     size_t  grid_size
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    //printf("\\n\\nINIT\\n\\n");
+    printf("\\n\\nINIT\\n\\n");
     init<{short_name}>(*instance,grid_size);
     util::host::auto_throw(cudaDeviceSynchronize());
 }}
@@ -16,14 +16,12 @@ void init_program(
 # String template for the program execution wrapper
 exec_template = """
 extern "C"
-void exec_program(
+void exec_program_{suffix}(
     void   *instance_ptr,
     size_t  grid_size,
 	size_t  cycle_count
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    // printf("<ctx%p>",_dev_ctx);
-    // printf("<sta%p>",device);
     //printf("\\n\\nEXEC\\n\\n");
     exec<{short_name}>(*instance,grid_size,cycle_count);
     util::host::auto_throw(cudaDeviceSynchronize());
@@ -33,25 +31,27 @@ void exec_program(
 
 alloc_event_prog_template = """
 extern "C"
-void *alloc_program(void* device_arg, size_t io_size) {{
+void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
     auto  state  = (typename {short_name}::DeviceState) device_arg;
     void *result = new {short_name}::Instance(io_size,state);
+    printf("prog:%p\\n",result);
     return result;
 }}
 """
 
 alloc_harm_prog_template = """
 extern "C"
-void *alloc_program(void* device_arg, size_t arena_size) {{
+void *alloc_program_{suffix}(void* device_arg, size_t arena_size) {{
 	auto  state  = (typename {short_name}::DeviceState) device_arg;
 	void *result = new {short_name}::Instance(arena_size,state);
+    printf("prog:%p\\n",result);
 	return result;
 }}
 """
 
 free_prog_template = """
 extern "C"
-void free_program(void* instance_ptr) {{
+void free_program_{suffix}(void* instance_ptr) {{
 	auto instance  = (typename {short_name}::Instance*) instance_ptr;
 	delete instance;
 }}
@@ -59,17 +59,20 @@ void free_program(void* instance_ptr) {{
 
 alloc_state_template = """
 extern "C"
-void *alloc_state() {{
+void *alloc_state_{suffix}() {{
 	void *result = nullptr;
 	util::host::auto_throw(cudaMalloc(&result,sizeof({state_struct})));
+    printf("gpu_state:%p\\n",result);
 	return result;
 }}
 """
 
 load_state_template = """
 extern "C"
-void load_state(void *host_ptr, void *dev_ptr) {{
+void load_state_{suffix}(void *host_ptr, void *dev_ptr) {{
     util::host::auto_throw(cudaMemcpy (host_ptr,dev_ptr,sizeof({state_struct}),cudaMemcpyDeviceToHost));
+    printf("cpu_state:%p\\n",host_ptr);
+    printf("gpu_state:%p\\n", dev_ptr);
     //size_t *data = (size_t*) host_ptr;
     //for(int i=0; i<10; i++) {{
     //    printf("%d,",data[i]);
@@ -80,7 +83,7 @@ void load_state(void *host_ptr, void *dev_ptr) {{
 
 store_state_template = """
 extern "C"
-void store_state(void *dev_ptr, void *host_ptr) {{
+void store_state_{suffix}(void *dev_ptr, void *host_ptr) {{
     //size_t *data = (size_t*) host_ptr;
     //for(int i=0; i<10; i++) {{
     //    printf("%d,",data[i]);
@@ -92,8 +95,17 @@ void store_state(void *dev_ptr, void *host_ptr) {{
 
 free_state_template = """
 extern "C"
-void free_state(void *state_ptr) {{
+void free_state_{suffix}(void *state_ptr) {{
 	util::host::auto_throw(cudaFree(state_ptr));
+}}
+"""
+
+complete_template = """
+extern "C"
+int complete_{suffix}(void *instance_ptr) {{
+	auto instance  = (typename {short_name}::Instance*) instance_ptr;
+	bool result = instance->complete();
+    return result;
 }}
 """
 
