@@ -66,16 +66,16 @@ struct MyDeviceState {
 
 	iter::IOBuffer<unsigned int> *neutron_io;
 
-	float*  halted;
+	float  *halted;
 
-	float	div_width;
-	float	pos_limit;
-	int	    div_count;
+	float   div_width;
+	float   pos_limit;
+	int     div_count;
 
-	float	fission_x;
-	float	capture_x;
-	float	scatter_x;
-	float	combine_x;
+	int     cross_section_count;
+	float  *fission_x;
+	float  *capture_x;
+	float  *scatter_x;
 
 	float   time_limit;
 
@@ -182,7 +182,18 @@ __device__ int step_neutron(MyDeviceState params, Neutron& n){
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Advance particle position
 	///////////////////////////////////////////////////////////////////////////////////////////
-	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;
+
+	float fission_x = 0;
+	float scatter_x = 0;
+	float capture_x = 0;
+	for(int i=0; i<10; i++){
+		fission_x = params.fission_x[random_uint(n.seed) % params.cross_section_count];
+		scatter_x = params.scatter_x[random_uint(n.seed) % params.cross_section_count];
+		capture_x = params.capture_x[random_uint(n.seed) % params.cross_section_count];
+	}
+	float combine_x = fission_x + scatter_x + capture_x;
+
+	float step = - logf( 1 - random_unorm(n.seed) ) / combine_x;
 
 	bool halt = false;
 	if( n.time + step > params.time_limit){
@@ -197,7 +208,7 @@ __device__ int step_neutron(MyDeviceState params, Neutron& n){
 
 	float original_weight = n.weight;
 	if ( params.implicit_capture && (n.weight >= params.weight_limit) ) {
-		n.weight *= expf(-step*params.capture_x);
+		n.weight *= expf(-step*capture_x);
 	}
 
 	float dist = n.p_x;
@@ -222,15 +233,15 @@ __device__ int step_neutron(MyDeviceState params, Neutron& n){
 		atomicAdd(&params.halted[index],n.weight);
 		return -1;
 	// On scatter, update the momentum
-	} else if( samp < (params.scatter_x/params.combine_x) ){
+	} else if( samp < (scatter_x/combine_x) ){
 		random_3D_iso_mom(n);
 		return 0;
 	// On fission, return the number of neutrons generated
-	} else if ( samp < ((params.scatter_x + params.fission_x) / params.combine_x) ) {
+	} else if ( samp < ((scatter_x + fission_x) / combine_x) ) {
 		return params.fiss_mult;
 	// On capture, check if implicit capture is active and weight is above weight limit.
 	// If not, report capture, otherwise, update weight and report no change.
-	} else if ( samp < ((params.scatter_x + params.fission_x + params.capture_x) / params.combine_x) ) {
+	} else if ( samp < ((scatter_x + fission_x + capture_x) / combine_x) ) {
 		if ( params.implicit_capture ) {
 			if( original_weight < params.weight_limit ){
 				return -1;

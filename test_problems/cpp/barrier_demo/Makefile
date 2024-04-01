@@ -7,8 +7,8 @@ CUDA_NVCC	=	nvcc
 
 FLAGS		=	-std=c++11 --compiler-options -fdiagnostics-color=always -g
 
-HARMONIZE_PATH  =       ../../harmonize.cpp
-UTIL_PATH       =       ../../util/util.cpp
+HARMONIZE_PATH  =       ../../../harmonize.cpp
+UTIL_PATH       =       ../../../util/util.cpp
 UTIL_SOURCE     =       $(shell find ../../util -type f -name '*.cpp' )
 
 
