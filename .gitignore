@@ -1,9 +1,16 @@
+.vscode/
 
 test_problems/collaz/clz_hrm
 test_problems/collaz/clz_std
 
-
 test_problems/simple_neutron/neut_std
 test_problems/simple_neutron/neut_hrm
 test_problems/simple_neutron/neut_evt
+
+*.exe
+*.so
+*.ptx
+
+__pycache__/
+__ptxcache__/
 
