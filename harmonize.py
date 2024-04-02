@@ -1,5 +1,5 @@
 import numpy as np
-from os.path import getmtime, exists, dirname, abspath
+from os.path import getmtime, exists, dirname, abspath, isfile
 from os      import makedirs, getcwd
 from numba import njit, cuda
 import numba
@@ -12,16 +12,42 @@ import sys
 
 HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))
 HARMONIZE_ROOT_CPP = HARMONIZE_ROOT_DIR+"/harmonize.cpp"
-
+CACHING = False
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
 def native_cuda_compute_level():
-    query_cmd = "nvidia-smi --query-gpu compute_cap --format=csv,noheader"
-    completed = subprocess.run(query_cmd.split(),shell=False,check=True, capture_output=True)
-    output = completed.stdout.decode("utf-8").strip().replace(".","")
+    query_cmd = "nvidia-smi --query-gpu=compute_cap --format=csv,noheader"
+    completed = subprocess.run(
+        query_cmd.split(),
+        shell=False,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    output = completed.stdout.decode("utf-8").splitlines()[0].strip().replace(".","")
     return output
 
+
+# Writes content to filepath and returns True if the written content differs from
+# the original content
+def cached_write(filepath, content):
+    outfile = None
+    if isfile(filepath):
+        outfile = open(filepath,'r+')
+        original = outfile.read()
+        if original == content:
+            print(f"{filepath} has not changed!")
+            return False
+    else:
+        outfile = open(filepath,'w')
+
+    print(f"{filepath} has changed!")
+    outfile.seek(0)
+    outfile.write(content)
+    outfile.truncate()
+    outfile.close()
+    return True
 
 
 DEBUG = False
@@ -89,6 +115,7 @@ def global_ptx( func ):
 # Returns the ptx of the input function, as a device CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
 def device_ptx( func ):
+    #print(func.__name__)
     ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
     return ptx, res_type
@@ -362,7 +389,7 @@ def linify_tree(parse_tree):
                     new_content.append(("ptx",sub_chunk))
         elif sub_sep == '}':
             hit_curly = True
-            new_content.append(("ptx",stringify_tree((None,line))+"\n"))
+            new_content.append(("ptx",stringify_tree((None,line)).replace("\n","")+"\n"))
             line = []
             new_content.append((sub_sep,sub_con))
         else:
@@ -597,17 +624,21 @@ def fix_temp_param(parse_tree):
 
 
 def extern_device_ptx( func, type_map ):
-    arg_types   = fn_arg_ano_list(func)
+    #extern_regex = r'(?P<before>^\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))'
+    extern_regex = r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\()'
     ptx_text, res_type = device_ptx(func)
     ptx_text = strip_ptx(ptx_text,False)
-    parse_tree = parse_ptx(ptx_text)
-    line_tree  = linify_tree(parse_tree)
-    extern_regex = r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))'
-    for match, index, context in extract_regex(line_tree,extern_regex):
-        before = match['before']
-        after  = match['after']
-        context[index] = before + "_" + func.__name__ + after
-    ptx_text = stringify_tree(line_tree,False)
+    #parse_tree = parse_ptx(ptx_text)
+    #line_tree  = linify_tree(parse_tree)
+    #for match, index, context in extract_regex(line_tree,extern_regex):
+    #    before = match['before']
+    #    after  = match['after']
+    #    context[index] = before + "_" + func.__name__ + after
+    #ptx_text = stringify_tree(line_tree,False)
+    slice_list = [ (match.start('name'), match.end('name')) for match in re.finditer(extern_regex,ptx_text) ]
+    for pair in reversed(slice_list):
+        start, end = pair
+        ptx_text = ptx_text[:start] + "_" + func.__name__ + ptx_text[end:]
     ptx_text = ptx_text.replace("call.uni","call")
     return ptx_text
     
@@ -700,7 +731,7 @@ def map_type_name(type_map,kind,rec_mode=""):
     primitives = {
         numba.none : "void",
         bool       : "bool",
-        np.bool8   : "bool", 
+        np.bool_   : "bool", 
         np.uint8   : "uint8_t", 
         np.uint16  : "uint16_t", 
         np.uint32  : "uint32_t", 
@@ -751,7 +782,6 @@ def map_type_name(type_map,kind,rec_mode=""):
 # Returns the number of arguments used by the input function
 def arg_count(func):
     return len(fn_arg_ano_list(func))
-
 
 # Returns the CUDA/C++ text used as the parameter list for the input function, with various
 # options to map record type names, account for preceding parameters, remove initial
@@ -875,7 +905,10 @@ def harm_async_func(func, function_map, type_map,inline):
 
 # Returns the address of the input device array
 def cuda_adr_of(array):
-    return array.__cuda_array_interface__['data'][0]
+    result = numba.uintp(-1)
+    with numba.objmode(result=numba.uintp):
+        result = numba.uintp(array.__cuda_array_interface__['data'][0])
+    return result
 
 
 
@@ -901,19 +934,33 @@ class Runtime():
 
 
 
+
+
+
 # The class representing the default Harmonize runtime type, which
 # asynchronously schedules calls on-GPU and within a single kernel
 class HarmonizeRuntime(Runtime):
 
-    def __init__(self,spec,context,state,init_fn,exec_fn,gpu_objects):
-        self.spec          = spec
+    def __init__(self,state_type,context,state,init_fn,exec_fn,claim_count,spare_pool,work_stack,work_arena_array):
+        self.state_type    = state_type
         self.context       = context
-        self.context_ptr   = cuda_adr_of(context)
         self.state         = state
+        self.context_ptr   = cuda_adr_of(context)
         self.state_ptr     = cuda_adr_of(state)
         self.init_fn       = init_fn
         self.exec_fn       = exec_fn
-        self.gpu_objects   = gpu_objects
+        self.claim_count   = claim_count 
+        self.spare_pool    = spare_pool
+        self.work_stack    = work_stack
+        self.work_arena_array = work_arena_array
+
+    # Returns true if and only if the instance has halted, indicating that no
+    # work is left to be performed
+    def halted(self):
+        stack_cpu = self.work_stack.copy_to_host()
+        if stack_cpu[0]['status_flags'] == 0:
+            return False
+        return True
 
     # Initializes the runtime using `wg_count` work groups
     def init(self,wg_count=1):
@@ -932,7 +979,7 @@ class HarmonizeRuntime(Runtime):
 
     # Stores the input value into the device state
     def store_state(self,state):
-        cpu_state = np.zeros((1,),self.spec.dev_state)
+        cpu_state = np.zeros((1,),self.state_type)
         cpu_state[0] = state
         return self.state.copy_to_device(cpu_state)
 
@@ -941,8 +988,8 @@ class HarmonizeRuntime(Runtime):
 class EventRuntime(Runtime):
 
 
-    def __init__(self,spec,context,state,init_fn,exec_fn,checkout,io_buffers):
-        self.spec          = spec
+    def __init__(self,state_type,context,state,init_fn,exec_fn,checkout,io_buffers):
+        self.state_type    = state_type
         self.context       = context
         self.context_ptr   = cuda_adr_of(context)
         self.state         = state
@@ -993,7 +1040,7 @@ class EventRuntime(Runtime):
     
     # Stores the input value into the device state
     def store_state(self,state):
-        cpu_state = np.zeros((1,),self.spec.dev_state)
+        cpu_state = np.zeros((1,),self.state_type)
         cpu_state[0] = state
         return self.state.copy_to_device(cpu_state)
 
@@ -1090,7 +1137,7 @@ class RuntimeSpec():
             self.meta['OP_DISC_TYPE'] = np.uint32
 
         # The type used to represent the union of all potential inputs
-        self.meta['UNION_TYPE']       = np.dtype((np.void,self.meta['MAX_INP_SIZE']))
+        self.meta['UNION_TYPE']       = np.dtype((np.uint8,self.meta['MAX_INP_SIZE']))
 
         # The type used to represent the array of promises held by a link
         self.meta['PROMISE_ARR_TYPE'] = np.dtype((self.meta['UNION_TYPE'],self.meta['GROUP_SIZE']))
@@ -1142,7 +1189,7 @@ class RuntimeSpec():
         # The number of independent queues maintained per stack frame and per
         # link pool
         if 'QUEUE_COUNT' not in self.meta:
-            self.meta['QUEUE_COUNT']     = 8192 #1024
+            self.meta['QUEUE_COUNT']     = 8191 #1024
         # The type of value used to represent links
         self.meta['QUEUE_TYPE']          = np.intp
         # The type used to hold a series of work queues
@@ -1350,8 +1397,8 @@ class RuntimeSpec():
         "\t_inner_dev_exec<{short_name}>(*_dev_ctx,device,cycle_count);\n"         \
         "\treturn 0;\n"                                                 \
         "}}\n"
-        #"\tprintf(\"<ctx%p>\",_dev_ctx);\n"\
-        #"\tprintf(\"<sta%p>\",device);\n"\
+        "\tprintf(\"<ctx%p>\",_dev_ctx);\n"\
+        "\tprintf(\"<sta%p>\",device);\n"\
 
 
         # String template for async function dispatches
@@ -1464,7 +1511,6 @@ class RuntimeSpec():
         return preamble + dispatch_defs + accessor_defs #+ fn_query_defs + query_defs
 
 
-
     # Generates the CUDA/C++ code specifying the structure of the program, for later
     # specialization to a specific program type, and compiles the ptx for each async
     # function supplied to the specfication. Both this cuda code and the ptx are 
@@ -1478,9 +1524,13 @@ class RuntimeSpec():
         # Generate and save generic program specification
         base_code = self.generate_specification_code()
         base_filename = cache_path+self.spec_name
-        base_file = open(base_filename+".cu",mode='w')
-        base_file.write(base_code)
-        base_file.close()
+        changed  = True
+        if CACHING:
+            changed  = cached_write(base_filename+".cu",base_code)
+        else:
+            base_file = open(base_filename+".cu",mode='w')
+            base_file.write(base_code)
+            base_file.close()
         
         # Compile the async function definitions to ptx
 
@@ -1501,11 +1551,18 @@ class RuntimeSpec():
             if fn in base_fns:
                 file_name = self.spec_name + "_" + file_name
             file_name = cache_path + file_name
-            ptx_file  = open(file_name,mode='w')
-            ptx_file.write(extern_device_ptx(fn,self.type_map))
             # Record the path of the generated ptx
             self.fn_def_link_list.append(file_name)
-            ptx_file.close()
+
+            ptx_text  = extern_device_ptx(fn,self.type_map)
+
+            if CACHING:
+                ptx_new = cached_write(file_name,ptx_text)
+                changed = changed or ptx_new
+            else:
+                ptx_file  = open(file_name,mode='w')
+                ptx_file.write(extern_device_ptx(fn,self.type_map))
+                ptx_file.close()
         
         self.init_dispatcher = {}
         self.exec_dispatcher = {}
@@ -1516,16 +1573,21 @@ class RuntimeSpec():
             # Generate the cuda code implementing the specialization
             spec_code = self.generate_specialization_code(kind,shortname)
             # Save the code to an appropriately named file
+
+            spec_new = True
             spec_filename = cache_path+self.spec_name+"_"+shortname
-            spec_file = open(spec_filename+".cu",mode='w')
-            spec_file.write(spec_code)
-            spec_file.close()
+            if CACHING:
+                spec_new  = cached_write(spec_filename+".cu",spec_code)
+            else:
+                spec_file = open(spec_filename+".cu",mode='w')
+                spec_file.write(spec_code)
+                spec_file.close()
 
             # Compile the specialization to ptx
             compute_level = native_cuda_compute_level()
-            comp_cmd = "nvcc "+spec_filename+".cu -arch=compute_"+compute_level+  \
+            comp_cmd = "nvcc "+spec_filename+".cu --std=c++11 -arch=compute_"+compute_level+  \
                     " -rdc true -c -include "+HARMONIZE_ROOT_CPP+" -ptx " \
-                    "-o "+spec_filename+".ptx"
+                    "-o "+spec_filename+".ptx --restrict --extra-device-vectorization"
             if DEBUG:
                 comp_cmd += " -g"
             subprocess.run(comp_cmd.split(),shell=False,check=True)
@@ -1558,16 +1620,16 @@ class RuntimeSpec():
                 device=False,
                 link=link_list,
                 debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
+                opt=(not DEBUG)
+                #,cache=True
             )
             self.exec_dispatcher[kind] = cuda.jit(
                 exec_kernel,
                 device=False,
                 link=link_list,
                 debug=DEBUG,
-                opt=(not DEBUG),
-                cache=False
+                opt=(not DEBUG)
+                #,cache=True
             )
 
 
@@ -1624,11 +1686,14 @@ class RuntimeSpec():
         #print('state   {0:x}'.format(cuda_adr_of(dev_sta_gpu)))
 
         return HarmonizeRuntime(
-            self,
+            self.dev_state,
             dev_ctx_gpu, dev_sta_gpu,
             self.init_dispatcher["Harmonize"],
             self.exec_dispatcher["Harmonize"],
-            [claim_count,spare_pool,work_stack,work_arena_array]
+            claim_count,
+            spare_pool,
+            work_stack,
+            work_arena_array
         )
 
 
@@ -1687,7 +1752,7 @@ class RuntimeSpec():
         dev_sta_gpu = numba.cuda.to_device(dev_sta_cpu)
 
         return EventRuntime(
-            self,
+            self.dev_state,
             dev_ctx_gpu, dev_sta_gpu,
             self.init_dispatcher["Event"],
             self.exec_dispatcher["Event"],
