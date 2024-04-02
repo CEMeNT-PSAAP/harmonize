@@ -21,13 +21,13 @@ sum_like () {
 
 echo "Async Stall Metrics"
 # 240 WG is typically optimal for async, based on testing
-ncu  --metrics 'regex:stalled' ./neut.exe -wg_count 240 -num 10000000 -pool 10000000 -cross_count 100000000 -time 20 -size 20 -res 0.01 -show -fx_max 0.4 -sx_max 0.2 -cx_max 0.4 -async |
+ncu  --metrics 'regex:stalled' ./neut.exe -wg_count 240 -num 10000000 -pool 10000000 -cross_count 100000000 -time 10 -size 10 -res 0.01 -show -fx_max 0.4 -sx_max 0.2 -cx_max 0.4 -async -lookups_per_step 10 |
     grep '\.sum ' | sort | sum_like
 
 
 echo "Event Stall Metrics"
 # >1024 WG is typically optimal for sync, based on testing
-ncu  --metrics 'regex:stalled' ./neut.exe -wg_count 1024 -num 10000000 -pool 10000000 -cross_count 100000000 -time 20 -size 20 -res 0.01 -show -fx_max 0.4 -sx_max 0.2 -cx_max 0.4 |
+ncu  --metrics 'regex:stalled' ./neut.exe -wg_count 1024 -num 10000000 -pool 10000000 -cross_count 100000000 -time 10 -size 10 -res 0.01 -show -fx_max 0.4 -sx_max 0.2 -cx_max 0.4 -lookups_per_step 10 |
     grep '\.sum ' | sort | sum_like
 
 
