@@ -190,11 +190,15 @@ __device__ int step_neutron(MyDeviceState params, Neutron& n){
 	float scatter_x = 0;
 	float capture_x = 0;
 	for(int i=0; i<params.lookups_per_step; i++){
-		fission_x = params.fission_x[random_uint(n.seed) % params.cross_section_count];
-		scatter_x = params.scatter_x[random_uint(n.seed) % params.cross_section_count];
-		capture_x = params.capture_x[random_uint(n.seed) % params.cross_section_count];
+		fission_x += params.fission_x[random_uint(n.seed) % params.cross_section_count];
+		scatter_x += params.scatter_x[random_uint(n.seed) % params.cross_section_count];
+		capture_x += params.capture_x[random_uint(n.seed) % params.cross_section_count];
 	}
 	float combine_x = fission_x + scatter_x + capture_x;
+	fission_x /= combine_x;
+	scatter_x /= combine_x;
+	capture_x /= combine_x;
+	combine_x = 1;
 
 	float step = - logf( 1 - random_unorm(n.seed) ) / combine_x;
 

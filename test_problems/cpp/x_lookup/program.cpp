@@ -261,9 +261,15 @@ int main(int argc, char *argv[]){
 		cpu_scatter[i] = scatter_max * (rand() % 1000000) / 1000000.0;
 		cpu_capture[i] = capture_max * (rand() % 1000000) / 1000000.0;
 		float sum = cpu_fission[i] + cpu_scatter[i] + cpu_capture[i];
-		cpu_fission[i] /= sum;
-		cpu_scatter[i] /= sum;
-		cpu_capture[i] /= sum;
+		if (sum > 0.01){
+			cpu_fission[i] /= sum;
+			cpu_scatter[i] /= sum;
+			cpu_capture[i] /= sum;
+		} else {
+			cpu_fission[i] = 0;
+			cpu_scatter[i] = 0;
+			cpu_capture[i] = 1;
+		}
 	}
 
 	fission << cpu_fission;
