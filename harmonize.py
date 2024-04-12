@@ -105,570 +105,16 @@ def func_defn_time(func):
 
 
 
-# Removes all comments from the input ptx, to aid its subsequent parsing, returning the
-# sanitized result string
-def remove_ptx_comments(ptx_text):
-    space = ' \t\r\n'
-    ptx_text = "\n".join([ line.lstrip(space) for line in ptx_text.splitlines() if len(line.lstrip(space)) != 0 ])
-
-    filtered = []
-    start_split = ptx_text.split("/*")
-    for index, entry in enumerate(start_split) :
-        end_split = entry.split("*/")
-        if index == 0 :
-            if len(end_split) != 1 :
-                raise AssertionError("PTX has an unmatched comment block end")
-            filtered.append(end_split[0])
-        elif len(end_split) !=2 :
-            raise AssertionError("PTX has an unmatched comment block end")
-        else :
-            filtered.append(end_split[1])
-
-    ptx_text = "".join(filtered)
-
-    ptx_text = "\n".join([ line.lstrip(space) for line in ptx_text.splitlines() if not line.lstrip(space).startswith("//") ])
-
-    ptx_text = "\n".join([ line.split("//")[0] for line in ptx_text.splitlines() ])
-
-    return ptx_text
-
-# Parses the input text based upon bracket delimiters (such as (), {}, [], <> ), returning
-# the resulting parse tree. Leaf nodes are strings.
-def parse_braks(ptx_text,paren_pairs,closer=None):
-    seq = []
-    limit = len(ptx_text)
-    start = 0
-    index = 0
-    while index < limit :
-        character = ptx_text[index]
-        if character == closer :
-            seq.append(ptx_text[start:index])
-            return ( closer, seq ), index + 1
-        for open,close in paren_pairs :
-            if character == open :
-                seq.append(ptx_text[start:index])
-                index += 1
-                sub_seq, delta = parse_braks(ptx_text[index:limit],paren_pairs,close)
-                seq.append(sub_seq)
-                index += delta
-                start = index
-        index += 1
-    seq.append(ptx_text[start:index])
-    return ( closer, seq ), index
-
-
-
-# Recursively iterates through a bracket-delimiter parse tree, breaking/grouping nodes by
-# the delimiters contained within the leaf nodes
-def parse_sep(ptx_brak_tree, sep):
-    closer, seq = ptx_brak_tree
-    new_seq = []
-    sep_found = False
-    sep_seq = []
-    seq_len = len(seq)
-    for idx, sub_seq in enumerate(seq) :
-        if isinstance(sub_seq,str) :
-            split_seq = sub_seq.split(sep)
-            length = len(split_seq)
-            if length == 1 :
-                sep_seq.append(split_seq[0])
-            elif length > 1 :
-                sep_found = True
-                sep_seq.append(split_seq[0])
-                new_seq.append((sep,sep_seq))
-                sep_seq = [split_seq[-1]]
-                for split in split_seq[1:-1]:
-                    new_seq.append((sep,[split]))
-        elif sub_seq[0] == '}':
-            capped = False
-            not_last = (idx < seq_len -1)
-            incomplete = False
-            if len(sep_seq) > 0 and isinstance(sep_seq[0],str):
-                incomplete = not sep_seq[0].isspace()
-            if incomplete and not_last:
-                next = seq[idx+1]
-                if isinstance(next,str):
-                    split = next.split(sep)
-                    empty = len(split[0]) == 0 or split[0].isspace()
-                    if len(split) > 1 and empty:
-                        capped = True
-            if incomplete and not_last and capped:
-                sep_seq.append(sub_seq)
-                new_seq.append((sep,sep_seq))
-                sep_seq = []
-            else:
-                new_seq += sep_seq
-                sep_seq = []
-                new_seq.append(parse_sep(sub_seq,sep))
-        else :
-            sep_seq.append(parse_sep(sub_seq,sep))
-    if sep_found :
-        new_seq.append((sep,sep_seq))
-        return (closer,new_seq)
-    else :
-        new_seq += sep_seq
-        return (closer,new_seq)
-
-
-# Breaks up the leaf nodes of a parse tree by whitespace
-def parse_tok(parse_tree):
-    closer, seq = parse_tree
-    new_seq = []
-    for chunk in seq:
-        if isinstance(chunk,str):
-            sub_seq = chunk.split()
-            if len(sub_seq) > 0:
-                new_seq.append((' ',sub_seq))
-        else:
-            sub_tree = parse_tok(chunk)
-            if sub_tree[0] != ' ' or len(sub_tree[1]) != 0:
-                new_seq.append(parse_tok(chunk))
-    return (closer,new_seq)
-
-
-# Parses ptx into an AST based upon bracket delimiters and seperators
-def parse_ptx(ptx_text):
-    ptx_text = remove_ptx_comments(ptx_text)
-    braks = [ ('(',')'), ('[',']'), ('{','}'), ('<','>') ]
-    parse_tree, _ = parse_braks(ptx_text,braks)
-    seperators  = [ ';' , ',', ':' ]
-    for sep in seperators:
-        parse_tree = parse_sep(parse_tree,sep)
-    parse_tree = parse_tok(parse_tree)
-    return parse_tree
-
-# Checks that a sequence of nodes matches the supplied pattern of delimiters
-def delim_match(chunk_list,delim_list):
-    if len(delim_list) > len(chunk_list):
-        return False
-    for index, delim in enumerate(delim_list):
-        if chunk_list[index][0] != delim:
-            return False
-    return True
-
-
-
-# Searches a parse tree for leaves matching the input regex
-def extract_regex(parse_tree,regex):
-    result = []
-    if isinstance(parse_tree,str):
-        #for match in re.finditer(regex,parse_tree):
-        #    result.append((match, None, None))
-        return result
-
-    _, chunks = parse_tree
-    for index, chunk in enumerate(chunks):
-        if isinstance(chunk,str):
-            continue
-        sep, content = chunk
-        if sep != "ptx":
-            result += extract_regex((sep,content),regex)
-            continue
-        for match in re.finditer(regex,content):
-            result.append((match, index, chunks))
-    return result
-
-
-# Searches the input parse tree for extern functions, returning any matches
-def find_extern_funcs(parse_tree):
-    result = []
-    extern_regex = r'.extern\s+.func\s*\(\s*.param\s\.+\w+\s+\w+\s*\)\s*(?P<name>\w+)\((?P<params>(\s*.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\)'
-    param_regex = r'\s*.param\s+(?P<type>\.\w+)\s+(?P<name>\w+)\s*'
-    for match, _, _ in extract_regex(parse_tree,extern_regex):
-        params = [(p['type'],p['name']) for p in re.finditer(param_regex,match['params'])]
-        result.append((match['name'],params))
-    return result
-
-
-# Searches the input parse tree for visible (non-extern) functions, returning any matches
-def find_visible_funcs(parse_tree):
-    result = []
-    extern_regex = r'\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*(?P<name>\w+)\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\)'
-    param_regex = r'\s*\.param\s+(?P<type>\.\w+)\s+(?P<name>\w+)\s*'
-    for match, index, context in extract_regex(parse_tree,extern_regex):
-        params = [(p['type'],p['name']) for p in re.finditer(param_regex,match['params'])]
-        result.append((match['name'],params,context[index+1]))
-    return result
-
-
-# Replaces leaf nodes (or portions of leaf nodes) based off of a list
-# of 'target' and 'destination' patterns. If a target pattern is found, it
-# is replaced with its corresponding destination.
-def replace(parse_tree,rep_list,whole=False):
-    if isinstance(parse_tree,str):
-        for targ, dest in rep_list:
-            pattern = targ
-            if whole:
-                pattern = "\\b" + pattern + "\\b"
-            parse_tree = re.sub(pattern,dest,parse_tree)
-        return parse_tree
-    else:
-        sep, content = parse_tree
-        if sep == "ptx":
-            return (sep, replace(content,rep_list,whole))
-        new_content = []
-        for chunk in content:
-            new_content.append(replace(chunk,rep_list,whole))
-        return (sep,new_content)
-
-
-# Returns true if and only if the input parse tree has a curly-brace block
-def has_curly_block(parse_tree):
-    if isinstance(parse_tree,str):
-        return False
-    sep, content = parse_tree
-    if sep == '}':
-        return True
-    for chunk in content:
-        if has_curly_block(chunk):
-            return True
-    return False
-
-# Returns true if and only if the input parse tree has a colon
-def has_colon(parse_tree):
-    if isinstance(parse_tree,str):
-        return False
-    sep, content = parse_tree
-    if sep == ':':
-        return True
-    for chunk in content:
-        if has_colon(chunk):
-            return True
-    return False
-
-# Collapses the portions of a parse tree that correspond to the same line in
-# ptx syntax. This is useful for performing whole-line regex matches.
-def linify_tree(parse_tree):
-    if isinstance(parse_tree,str):
-        return parse_tree
-    sep, content = parse_tree
-    if sep ==';': # and not has_curly_block(parse_tree):
-        return  ("ptx",stringify_tree(parse_tree).replace("\n","")+"\n")
-
-    hit_curly   = False
-    hit_line    = False
-    line        = []
-    new_content = []
-    for chunk in content:
-        if isinstance(chunk,str):
-            new_content.append(chunk)
-            continue
-        chunk = linify_tree(chunk)
-        sub_sep, sub_con = chunk
-        if sub_sep == "ptx":
-            hit_line = True
-            split = sub_con.split(':')
-            for index, sub_chunk in enumerate(split):
-                #if index != 0:
-                #    sub_chunk = sub_chunk[1:]
-                if index != len(split)-1 :
-                    new_content.append(("ptx",sub_chunk+":\n"))
-                else:
-                    new_content.append(("ptx",sub_chunk))
-        elif sub_sep == '}':
-            hit_curly = True
-            new_content.append(("ptx",stringify_tree((None,line))+"\n"))
-            line = []
-            new_content.append((sub_sep,sub_con))
-        else:
-            line.append((sub_sep,sub_con))
-    if len(line) != 0:
-        if (hit_curly or hit_line):
-            new_content.append(("ptx",stringify_tree((None,line))+"\n"))
-        else:
-            new_content += line
-    return (sep,new_content)
-
-# Converts a parse tree into its equivalent text, returned as a string
-def stringify_tree(parse_tree,inlined=False,last=False,depth=0):
-    brak_list = [')',']','}','>']
-    brak_map  = {')':'(',']':'[','}':'{','>':'<'}
-    sep_list  = [',',';',':']
-
-    tabs = '\t'*depth
-
-    if isinstance(parse_tree,str):
-        return " " + parse_tree
-    else:
-        sep, content = parse_tree
-
-        if sep == "cuda":
-            return tabs + content
-
-        if sep == "ptx":
-            if content.strip() == ";":
-                return tabs + '\n' #tabs + ';' + '\n'
-            elif inlined:
-                return tabs + "asm volatile (\"" + content.rstrip() + "\" ::: \"memory\");\n"
-            else:
-                return tabs + content
-
-        if sep == ' ':
-            return "\t".join(content)
-
-        sub_depth = depth
-
-        result = ""
-
-        if sep in brak_list:
-            if sep == '}':
-                sub_depth += 1
-                if inlined:
-                    result += tabs + "//asm volatile (\"" + str(brak_map[sep]) + "\");\n"
-                else:
-                    result += tabs + str(brak_map[sep]) + '\n'
-            else:
-                result += str(brak_map[sep])
-
-        for index, chunk in enumerate(content):
-            sub_last = (index == (len(content)-1))
-            result += stringify_tree(chunk,inlined,sub_last,sub_depth)
-
-        if sep in brak_list:
-            if sep == '}':
-                if inlined:
-                    result += tabs + "//asm volatile (\"" + str(sep) + "\");\n"
-                else:
-                    result += tabs + str(sep) + '\n'
-            else:
-                result += str(sep)
-
-        elif (sep in sep_list) and not last:
-            result += str(sep)
-            if sep == ';' or sep == ':':
-                result += '\n' + tabs
-            else:
-                result += '\t'
-        return result
-
-
-
-
-# Removes versioning/config information and comments that are not needed in the final ptx
-def strip_ptx(ptx_text,inline):
-    ignore_list = [ "//" ]
-    if inline:
-        ignore_list.extend([".version", ".target" , ".address_size", ".common" ])
-    # get rid of empty lines and leading whitespace
-    space = ' \t\r\n'
-    ptx_text = "\n".join([ line.lstrip(space) for line in ptx_text.splitlines() if len(line.lstrip(space)) != 0 ])
-    # get rid of comments and other ptx lines we don't care about
-    for entry in ignore_list:
-        ptx_text = "\n".join([ line for line in ptx_text.splitlines() if not line.lstrip(space).startswith(entry) ])
-    return ptx_text
-
-
-
-# (Currently unused) Replaces the call parameters of a function body with appropriate move
-# instructions. This function has potential use for inlining ptx.
-def replace_call_params(context,call_idx,ret,signature,params,temp_count):
-    kind_map = {
-        "u8":"h", "u16":"h", "u32":"r", "u64":"l",
-        "s8":"h", "s16":"h", "s32":"r", "s64":"l",
-        "b8":"h", "b16":"h", "b32":"r", "b64":"l",
-        "f32":"f", "f64":"d",
-    }
-
-    params.append(ret)
-
-    for id, param in enumerate(params):
-        decl_regex = r"\.param\s+\.\w+\s+"+param+r"\s*;"
-        move_regex = r"st\.param\.(?P<kind>\w+)\s*\[\s*"+param+r"\s*(\+\s*[0-9]+\s*)?\]\s*,\s*(?P<src>\w+)\s*;"
-        if param == ret:
-            move_regex = r"ld\.param\.(?P<kind>\w+)\s*(?P<dst>\w+)\s*,\s*\[\s*"+param+r"\+0\]\s*;"
-
-        start = min(call_idx+2,len(context))
-        found_decl = False
-        found_move = False
-        for line_idx in range(start,-1,-1):
-            if found_decl and found_move:
-                break
-            if isinstance(context[line_idx],str):
-                continue
-            if context[line_idx][0] != 'ptx':
-                continue
-            if re.match(decl_regex,context[line_idx][1]) != None:
-                found_decl = True
-                if param == ret:
-                    context[line_idx] = ('cuda', "//"+context[line_idx][1])
-                else:
-                    if id == 0:
-                        line = '{kind} *_param_{id};\n'
-                    else:
-                        line = '{kind} _param_{id};\n'
-                    line = line.format(kind=str(signature[id]),id=temp_count+id)
-                    context[line_idx] = ('cuda',line)
-                continue
-            move_match = re.match(move_regex,context[line_idx][1])
-            if move_match != None:
-                found_move = True
-                kind = move_match['kind']
-                if param == ret:
-                    dst = move_match['dst']
-                    #line = 'asm volatile(\"cvt.{kind}.{kind} {dst}, 0;\");\n'
-                    line = 'asm volatile(\"mov.{kind} {dst}, 0;\" ::: "memory" );\n'
-                    line = line.format(kind=kind,dst=dst)
-                    context[line_idx] = ('cuda',line)
-                else:
-                    src  = move_match['src']
-                    #line = 'asm volatile(\"cvt.{kind}.{kind} %0, {src};\" : \"={kid}\"(_param_{id}) : );\n'
-                    line = 'asm volatile(\"mov.{kind} %0, {src};\" : \"={kid}\"(_param_{id}) :: "memory" );\n'
-                    line = line.format(kind=kind,src=src,id=temp_count+id,kid=kind_map[kind])
-                    context[line_idx] = ('cuda',line)
-    return temp_count + len(params)-1
-
-
-
-
-def replace_call( parse_tree, mapping, temp_count, type_map, context=[] ):
-    repl_fn, repl_name = mapping
-    src_list = []
-    ret  = None
-    call_regex = r"call\.uni\s*\(\s*(?P<ret>\w+)\s*\)\s*,\s*"+repl_fn.name+r"\s*,\s*\((?P<params>\s*\w+\s*(,\s*\w+\s*)*)\)\s*;\s*"
-    param_regex = r'\b(?P<name>\w+)\b'
-    for match, index, context in extract_regex(parse_tree,call_regex):
-
-        ret         = match['ret']
-        params      = [p['name'] for p in re.finditer(param_regex,match['params'])]
-        signature   = [ repl_fn.sig.return_type ] + [ arg for arg in repl_fn.sig.args ]
-        signature   = [ map_type_name(type_map,kind) for kind in signature ]
-
-        old_tc = temp_count
-        temp_count = replace_call_params(context,index,ret,signature,params,temp_count)
-        arg_str = ",".join([ "_param_"+str(x) for x in range(old_tc+1,temp_count)])
-
-        if signature[0] == "void":
-            context[index] = ('cuda', repl_name + "(" + arg_str + ");\n" )
-        else:
-            context[index] = ('cuda', "*_param_0 = " + repl_name + "(" + arg_str + ");\n" )
-
-    return temp_count
-
-
-
-
-def replace_externs( parse_tree, function_map, type_map ):
-    temp_count = 0
-    for mapping in function_map.items():
-        temp_count = replace_call(parse_tree,mapping,temp_count,type_map)
-
-
-
-def replace_fn_params( parse_tree, params, has_return ):
-    kind_map = {
-        "u8":"h", "u16":"h", "u32":"r", "u64":"l",
-        "s8":"h", "s16":"h", "s32":"r", "s64":"l",
-        "b8":"h", "b16":"h", "b32":"r", "b64":"l",
-                             "f32":"f", "f64":"d",
-    }
-    param_regex = r"ld\.param\.(?P<kind>\w+)\s+(?P<dst>\w+)\s*,\s*\[(?P<name>\w+)\]\s*;"
-
-    for match, index, context in extract_regex(parse_tree,param_regex):
-        kind = match['kind']
-        dst  = match['dst']
-        name = match['name']
-
-        if name not in params:
-            continue
-
-        line = 'asm volatile (\"cvt.{kind}.{kind} {dst}, %0;\" : : \"{kid}\"({name}) : "memory" );\n'
-        line = line.format(kind=kind,dst=dst,name=name,kid=kind_map[kind])
-        context[index] = ('cuda',line)
-
-    return_regex = r"st\.param\.(?P<kind>\w+)\s*\[func_retval0\+0\]\s*,\s*(?P<src>\w+)\s*;"
-    for match, index, context in extract_regex(parse_tree,return_regex):
-        #if has_return:
-        #    kind = match['kind']
-        #    src  = match['src']
-        #    line = 'asm volatile (\"cvt.{kind}.{kind} %0, {src}\" : \"={kid}\"(result) : );\n'
-        #    line = line.format(kind=kind,src=src,kid=kind_map[kind])
-        #    context[index] = ('cuda',line )
-        #else:
-        context[index] = ('cuda',"//"+context[index][1])
-
-
-
-def fix_returns(parse_tree,fn_name):
-    return_regex = r"ret\s*;"
-    for _, index, context in extract_regex(parse_tree,return_regex):
-        context[index] = ('ptx',"bra $RETURN_"+fn_name+";")
-
-
-def fix_temp_param(parse_tree):
-    return_regex = r"temp_param_reg;"
-    for _, index, context in extract_regex(parse_tree,return_regex):
-        context[index] = ('cuda',"//"+context[index][1])
-
-
-
-def extern_device_ptx( func, type_map ):
+def extern_device_ptx( func, type_map, suffix ):
     arg_types   = fn_arg_ano_list(func)
     ptx_text, res_type = device_ptx(func)
-    #ptx_text = strip_ptx(ptx_text,False)
-    #parse_tree = parse_ptx(ptx_text)
-    #line_tree  = linify_tree(parse_tree)
-    #for match, index, context in extract_regex(line_tree,extern_regex):
-    #    before = match['before']
-    #    after  = match['after']
-    #    context[index] = before + "_" + func.__name__ + after
-    #ptx_text = stringify_tree(line_tree,False)
-    #ptx_text = ptx_text.replace("call.uni","call")
     ptx_text = re.sub( \
         r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
-        r'\g<before>'+"_"+func.__name__+r'\g<after>', \
+        r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
         ptx_text \
     )
     #print(ptx_text)
     return ptx_text
-
-
-
-
-def inlined_device_ptx( func, function_map, type_map ):
-    arg_types   = fn_arg_ano_list(func)
-    ptx_text, res_type = device_ptx(func)
-    parse_tree  = parse_ptx(ptx_text)
-    line_tree   = linify_tree(parse_tree)
-    visible_fns = find_visible_funcs(line_tree)
-
-    if len(visible_fns) == 0:
-        raise AssertionError("PTX for user-defined function contains no '.visible .func'")
-    elif len(visible_fns) > 1:
-        raise AssertionError("PTX for user-defined function contains multiple '.visible .func'")
-
-
-    name, params, body = visible_fns[0]
-
-    whole_tf_list = []
-    inner_tf_list = [
-        ("%","_"+func.__name__+"_"),
-        ("\$L__","$L_"+func.__name__+"_"),
-        ("__local_depot0","_"+func.__name__+"_local_depot0")
-    ]
-    par_types     = []
-
-    whole_tf_list.append((name,func.__name__))
-
-    targ_par_names  = fn_arg_ano_list(func)
-
-    for index, param in enumerate(params):
-        par_name = param[1]
-        whole_tf_list.append((par_name,"fn_param_"+str(index)))
-
-    body = replace(body,whole_tf_list,whole=True)
-    body = replace(body,inner_tf_list,whole=False)
-
-    replace_externs(body,function_map,type_map)
-
-    has_return = 'return' in func.__annotations__
-
-    replace_fn_params(body,["fn_param_"+str(index) for index in range(len(params))], has_return)
-    fix_returns(body,func.__name__)
-    fix_temp_param(body)
-    body[1].append(('ptx',"$RETURN_"+func.__name__+":"))
-    cuda_body = stringify_tree(body,False,False,2)
-
-    return cuda_body
 
 
 # Used to map numba types to numpy d_types
@@ -810,7 +256,7 @@ def func_arg_text(func,type_map,rec_mode="",prior=False,clip=0):
 
 # Returns the CUDA/C++ text representing the input function as a Harmonize async template
 # function. The wrapper type that surrounds such templates is handled in other functions.
-def harm_template_func(func,template_name,function_map,type_map,inline,base=False):
+def harm_template_func(func,template_name,function_map,type_map,inline,suffix,base=False):
 
 
     return_type = "void"
@@ -847,7 +293,7 @@ def harm_template_func(func,template_name,function_map,type_map,inline,base=Fals
     if inline:
         code += inlined_device_ptx(func,function_map,type_map)
     else:
-        code += "\t\t_"+func.__name__+"(fn_param_0, &prog"+arg_text+");\n"
+        code += f"\t\t_{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
         pass
 
     if return_type != "void":
@@ -864,7 +310,7 @@ def pascal_case(name):
 
 # Returns the CUDA/C++ text for a Harmonize async function that would map onto the
 # input function.
-def harm_async_func(func, function_map, type_map,inline):
+def harm_async_func(func, function_map, type_map,inline,suffix):
     return_type = "void"
     if 'return' in func.__annotations__:
         return_type = map_type_name(type_map, func.__annotations__['return'])
@@ -877,7 +323,7 @@ def harm_async_func(func, function_map, type_map,inline):
 
     code = "struct " + struct_name + " {\n"                                              \
 	     + "\tusing Type = " + return_type + "(*)(" + param_text + ");\n"                \
-         + harm_template_func(func,"eval",function_map,type_map,inline)                  \
+         + harm_template_func(func,"eval",function_map,type_map,inline,suffix)                  \
          + "};\n"
 
     return code
@@ -1217,6 +663,7 @@ class RuntimeSpec():
     # meta-parameters
     def generate_specification_code(
             self,
+            suffix,
             # Whether or not the async functions should be inlined through ptx
             # (currently, this feature is NOT supported)
             inline=False
@@ -1271,9 +718,9 @@ class RuntimeSpec():
         # Accumulator for prototypes of extern definitions of async functions, initialized
         # with prototypes corresponding to the required async functions
         proto_decls = ""                                                             \
-            + "extern \"C\" __device__ int _initialize(void*, void* prog);\n"        \
-            + "extern \"C\" __device__ int _finalize  (void*, void* prog);\n"        \
-            + "extern \"C\" __device__ int _make_work (bool* result, void* prog);\n"
+            + f"extern \"C\" __device__ int _initialize_{suffix}(void*, void* prog);\n"        \
+            + f"extern \"C\" __device__ int _finalize_{suffix}  (void*, void* prog);\n"        \
+            + f"extern \"C\" __device__ int _make_work_{suffix} (bool* result, void* prog);\n"
 
         # Generate and accumulate prototypes for other async function definitons
         for func in self.async_fns:
@@ -1281,8 +728,8 @@ class RuntimeSpec():
             return_type = "void"
             if 'return' in func.__annotations__:
                 return_type = map_type_name(self.type_map, func.__annotations__['return'])
-            proto_decls += "extern \"C\" __device__ int _"+func.__name__ \
-                        +  "("+return_type+"*"+param_text+");\n"
+            proto_decls += f"extern \"C\" __device__ int _{func.__name__}_{suffix}" \
+                        +  f"({return_type}*{param_text});\n"
 
         # Accumulator for async function definitions
         async_defs = ""
@@ -1297,7 +744,7 @@ class RuntimeSpec():
         # a call to a matching extern function, allowing the scheduling
         # program to jump to the appropriate logic
         for func in self.async_fns:
-            async_defs += harm_async_func(func,self.function_map,self.type_map,inline)
+            async_defs += harm_async_func(func,self.function_map,self.type_map,inline,suffix)
 
         # The metaparameters of the program specification, indicating the sizes
         # of the data structures used
@@ -1321,9 +768,9 @@ class RuntimeSpec():
         # The base function definitions
         spec_def = "struct " + self.spec_name + "{\n"                                                     \
                  + meta_defs + union_def + state_defs                                                     \
-                 + harm_template_func(self.init_fn  ,"initialize",self.function_map,self.type_map,inline,True) \
-                 + harm_template_func(self.final_fn ,"finalize"  ,self.function_map,self.type_map,inline,True) \
-                 + harm_template_func(self.source_fn,"make_work" ,self.function_map,self.type_map,inline,True) \
+                 + harm_template_func(self.init_fn  ,"initialize",self.function_map,self.type_map,inline,suffix,True) \
+                 + harm_template_func(self.final_fn ,"finalize"  ,self.function_map,self.type_map,inline,suffix,True) \
+                 + harm_template_func(self.source_fn,"make_work" ,self.function_map,self.type_map,inline,suffix,True) \
                  + "};\n"
 
         return type_defs + param_decls + proto_decls + async_defs + spec_def
@@ -1393,11 +840,12 @@ class RuntimeSpec():
                     params=param_text,
                     args=arg_text,
                     kind=kind,
+                    suffix=suffix,
                 )
 
         # Creates a field accesing function for each field
         for (field,prefix) in program_fields:
-            accessor_defs += accessor_template.format(short_name=short_name,field=field,prefix=prefix)
+            accessor_defs += accessor_template.format(short_name=short_name,field=field,prefix=prefix,suffix=suffix)
 
         # Query definitions currently disabled
         fn_query_defs = ""
@@ -1436,9 +884,11 @@ class RuntimeSpec():
         # Folder used to cache cuda and ptx code
         cache_path = "__ptxcache__/"
 
+        suffix = self.spec_name+"_evt"
+
         makedirs(cache_path,exist_ok=True)
         # Generate and save generic program specification
-        base_code = self.generate_specification_code()
+        base_code = self.generate_specification_code(suffix)
         base_filename = cache_path+self.spec_name
         base_file = open(base_filename+".cu",mode='w')
         base_file.write(base_code)
@@ -1456,6 +906,11 @@ class RuntimeSpec():
         # of each async function definition
         self.fn_def_list = []
 
+        rep_list  = [ f"_{fn.__name__}" for fn in comp_list]
+        rep_list += [ f"dispatch_{fn.__name__}_async" for fn in comp_list ]
+        rep_list += [ f"dispatch_{fn.__name__}_sync" for fn in comp_list ]
+        rep_list += [ f"access_{state}" for state in ["device","group","thread"] ]
+
         # Compile each user-provided function defintion to ptx
         # and save it to an appropriately named file
         for fn in comp_list:
@@ -1464,7 +919,14 @@ class RuntimeSpec():
                 base_name = self.spec_name + "_" + base_name
             base_name = cache_path + base_name
             ptx_file  = open(base_name+".ptx",mode='w')
-            ptx_file.write(extern_device_ptx(fn,self.type_map))
+            ptx_text  = extern_device_ptx(fn,self.type_map,suffix)
+            for term in rep_list:
+                ptx_text = re.sub( \
+                    f'(?P<before>[^a-zA-Z0-9_])(?P<name>{term})(?P<after>[^a-zA-Z0-9_])', \
+                    f"\g<before>\g<name>_{suffix}\g<after>", \
+                    ptx_text \
+                )
+            ptx_file.write(ptx_text)
             # Record the path of the generated ptx
             self.fn_def_list.append(base_name)
             ptx_file.close()

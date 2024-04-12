@@ -112,7 +112,7 @@ int complete_{suffix}(void *instance_ptr) {{
 # String template for async function dispatches
 dispatch_template = """
 extern "C" __device__
-int dispatch_{fn}_{kind}(void*{params}){{
+int dispatch_{fn}_{kind}_{suffix}(void*{params}){{
 	(({short_name}*)fn_param_1)->template {kind}<{fn_type}>({args});
     //printf("{{ {fn} wrapper }}");
 	return 0;
@@ -122,7 +122,7 @@ int dispatch_{fn}_{kind}(void*{params}){{
 # String template for the program execution wrapper
 fn_query_template = """
 extern "C" __device__
-int query_{field}(void *result, void *prog){{
+int query_{field}_{suffix}(void *result, void *prog){{
 	(*({kind}*)result) = {prefix}(({short_name}*)prog)->template {field}<{fn_type}>();
 	return 0;
 }}
@@ -131,7 +131,7 @@ int query_{field}(void *result, void *prog){{
 # String template for the program execution wrapper
 query_template = """
 extern "C" __device__
-int query_{field}(void *result, void *prog){{
+int query_{field}_{suffix}(void *result, void *prog){{
 	(*({kind}*)result) = {prefix}(({short_name}*)prog)->{field}();
 	return 0;
 }}
@@ -141,7 +141,7 @@ int query_{field}(void *result, void *prog){{
 # String template for field accessors
 accessor_template = """
 extern "C" __device__
-int access_{field}(void* result, void* prog){{
+int access_{field}_{suffix}(void* result, void* prog){{
 	(*(void**)result) = {prefix}(({short_name}*)prog)->{field};
     // printf("{{ {field} accessor }}");
     // printf("{{prog %p}}",prog);
