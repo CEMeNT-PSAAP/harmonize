@@ -15,7 +15,7 @@ import sys
 
 
 HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))
-HARMONIZE_ROOT_CPP = HARMONIZE_ROOT_DIR+"/harmonize.cpp"
+HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/harmonize.h"
 
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
@@ -796,7 +796,6 @@ class RuntimeSpec():
 
         # Accumulator for includes and initial declarations/typedefs
         preamble      = ""
-        preamble     += "#include \""+self.spec_name+".cu\"\n"
 
         # Accumulator for init/exec/async/sync wrappers
         dispatch_defs = ""
@@ -874,37 +873,13 @@ class RuntimeSpec():
         return preamble + dispatch_defs + accessor_defs + fn_query_defs + query_defs
 
 
-
-    # Generates the CUDA/C++ code specifying the structure of the program, for later
-    # specialization to a specific program type, and compiles the ptx for each async
-    # function supplied to the specfication. Both this cuda code and the ptx are
-    # saved to the `__ptxcache__` directory for future re-use.
-    def generate_code(self):
-
-        # Folder used to cache cuda and ptx code
-        cache_path = "__ptxcache__/"
-
-        suffix = self.spec_name+"_evt"
-
-        makedirs(cache_path,exist_ok=True)
-        # Generate and save generic program specification
-        base_code = self.generate_specification_code(suffix)
-        base_filename = cache_path+self.spec_name
-        base_file = open(base_filename+".cu",mode='w')
-        base_file.write(base_code)
-        base_file.close()
-
-        # Compile the async function definitions to ptx
-
+    def generate_async_ptx(self,cache_path,suffix):
         # The list of required async functions
         base_fns = [self.init_fn, self.final_fn, self.source_fn]
         # The full list of async functions
         comp_list = [fn for fn in base_fns] + self.async_fns
 
 
-        # A list to record the files containing the definitions
-        # of each async function definition
-        self.fn_def_list = []
 
         rep_list  = [ f"_{fn.__name__}" for fn in comp_list]
         rep_list += [ f"dispatch_{fn.__name__}_async" for fn in comp_list ]
@@ -931,7 +906,23 @@ class RuntimeSpec():
             self.fn_def_list.append(base_name)
             ptx_file.close()
 
+
+    # Generates the CUDA/C++ code specifying the structure of the program, for later
+    # specialization to a specific program type, and compiles the ptx for each async
+    # function supplied to the specfication. Both this cuda code and the ptx are
+    # saved to the `__ptxcache__` directory for future re-use.
+    def generate_code(self):
+
+        # Folder used to cache cuda and ptx code
+        cache_path = "__ptxcache__/"
+
+        makedirs(cache_path,exist_ok=True)
+
         self.fn = {}
+
+        # A list to record the files containing the definitions
+        # of each async function definition
+        self.fn_def_list = []
 
         # Generate and compile specializations of the specification for
         # each kind of runtime
@@ -941,11 +932,18 @@ class RuntimeSpec():
 
             # Generate the cuda code implementing the specialization
             suffix = self.spec_name+"_"+shortname
+
+            # Generate and save generic program specification
+            base_code = self.generate_specification_code(suffix)
+
+            # Compile the async function definitions to ptx
+            self.generate_async_ptx(cache_path,suffix)
+
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
             # Save the code to an appropriately named file
             spec_filename = cache_path+suffix
             spec_file = open(spec_filename+".cu",mode='w')
-            spec_file.write(spec_code)
+            spec_file.write(base_code+spec_code)
             spec_file.close()
 
 
@@ -963,7 +961,7 @@ class RuntimeSpec():
                 #print(dev_comp_cmd)
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
-            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {spec_filename}.cu -include {HARMONIZE_ROOT_CPP} -o {spec_filename}.o {debug_flag}"
+            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {spec_filename}.cu -include {HARMONIZE_ROOT_HEADER} -o {spec_filename}.o {debug_flag}"
             #print(dev_comp_cmd)
             subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
