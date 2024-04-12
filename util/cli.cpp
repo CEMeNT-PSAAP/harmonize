@@ -1,37 +1,16 @@
+#include "cli.h"
 
 
+namespace util {
+
+namespace cli {
 
 
-
-
-
-
-struct GraphStyle {
-
-	int rows;
-	int cols;
-	const char** tiles;
-
-	GraphStyle (unsigned int r, unsigned int c, const char** t)
-		: rows(r)
-		, cols(c)
-		, tiles(t)
-	{}
-
-};
-
-
-struct GraphShape {
-
-	int width;
-	int height;
-
-	float x_min;
-	float x_max;
-	float y_min;
-	float y_max;
-
-};
+GraphStyle::GraphStyle (unsigned int r, unsigned int c, const char** t)
+	: rows(r)
+	, cols(c)
+	, tiles(t)
+{}
 
 
 
@@ -70,16 +49,16 @@ const char* BrailleFillTiles[25] = {
 	"⡀","⣀","⣠","⣰","⣸",
 	"⡄","⣄","⣤","⣴","⣼",
 	"⡆","⣆","⣦","⣶","⣾",
-	"⡇","⣇","⣧","⣷","⣿"	
+	"⡇","⣇","⣧","⣷","⣿"
 };
 
 
 
-const GraphStyle BlockFill    = GraphStyle( 9, 1, BlockFillTiles  ); 
-const GraphStyle Block2x2Fill = GraphStyle( 2, 2, Block2x2FillTiles  ); 
-const GraphStyle Block2x3Fill = GraphStyle( 3, 2, Block2x3FillTiles  ); 
-const GraphStyle AsciiFill    = GraphStyle( 4, 2, AsciiFillTiles  ); 
-const GraphStyle BrailleFill  = GraphStyle( 4, 2, BrailleFillTiles); 
+const GraphStyle BlockFill    = GraphStyle( 9, 1, BlockFillTiles  );
+const GraphStyle Block2x2Fill = GraphStyle( 2, 2, Block2x2FillTiles  );
+const GraphStyle Block2x3Fill = GraphStyle( 3, 2, Block2x3FillTiles  );
+const GraphStyle AsciiFill    = GraphStyle( 4, 2, AsciiFillTiles  );
+const GraphStyle BrailleFill  = GraphStyle( 4, 2, BrailleFillTiles);
 
 
 unsigned int lead_char_count(float val) {
@@ -101,7 +80,7 @@ unsigned int lead_char_count(float val) {
 void cli_graph(float* data, int size, GraphShape shape, GraphStyle style){
 
 	// Local function for finding the width of a value's sign and leading digits
-	// Find upper and lower bounds 
+	// Find upper and lower bounds
 	/*
 	float max = data[0];
 	float min = data[0];
@@ -166,7 +145,7 @@ void cli_graph(float* data, int size, GraphShape shape, GraphStyle style){
 	}
 
 	int   rule_size = 8*shape.width/2;
-	char* rule_vals = new char[rule_size]; 
+	char* rule_vals = new char[rule_size];
 	memset(rule_vals,'\0',rule_size);
 
 	printf("        ");
@@ -224,7 +203,7 @@ void cli_graph(float* data, int size, int width, int height, float low, float hi
 		"i","j","d",":","%",
 		"|","J","d","4","#"
 	};
-	#endif	
+	#endif
 
 	float max = 0;
 	for( int i=0; i<size; i++){
@@ -286,7 +265,7 @@ void cli_graph(float* data, int size, int width, int height, float low, float hi
 	}
 
 	int   rule_size = 8*width/2;
-	char* rule_vals = new char[rule_size]; 
+	char* rule_vals = new char[rule_size];
 	memset(rule_vals,'\0',rule_size);
 
 	printf("        ");
@@ -317,198 +296,128 @@ void cli_graph(float* data, int size, int width, int height, float low, float hi
 
 
 
-struct ArgSet
-{
 
-	int    argc;
-	char** argv;
-
-	int get_flag_idx(char* flag){
-		for(int i=0; i<argc; i++){
-			char* str = argv[i];
-			if(    (str    != NULL )
-			    && (str[0] == '-'  )
-			    && (strcmp(str+1,flag) == 0)
-                        ){
-				return i;
-			}
+int ArgSet::get_flag_idx(char* flag){
+	for(int i=0; i<argc; i++){
+		char* str = argv[i];
+		if(    (str    != NULL )
+			&& (str[0] == '-'  )
+			&& (strcmp(str+1,flag) == 0)
+					){
+			return i;
 		}
-		return -1;
 	}
+	return -1;
+}
 
 
-	char* get_flag_str(char* flag){
-		int idx = get_flag_idx(flag);
-		if( idx == -1 ) {
-			return NULL;
-		} else if (idx == (argc-1) ) {
-			return (char*) "";
-		}
-		return argv[idx+1];
+char* ArgSet::get_flag_str(char* flag){
+	int idx = get_flag_idx(flag);
+	if( idx == -1 ) {
+		return NULL;
+	} else if (idx == (argc-1) ) {
+		return (char*) "";
 	}
+	return argv[idx+1];
+}
 
 
 
-	template<typename T>
-	struct ArgVal {
+bool ArgSet::ArgQuery::scan_arg(char *str, unsigned char &dest) const {
+	return ( 0 < sscanf(str,"%hhu",&dest) );
+}
 
-		T     value;
+bool ArgSet::ArgQuery::scan_arg(char *str, unsigned short int &dest) const {
+	return ( 0 < sscanf(str,"%hu",&dest) );
+}
 
-		ArgVal(T val) : value(val)  {}
-		
-		ArgVal<T> operator| (T other) {
-			return *this;
-		}
+bool ArgSet::ArgQuery::scan_arg(char *str, unsigned int &dest) const {
+	return ( 0 < sscanf(str,"%u",&dest) );
+}
 
-		operator T() const {
-			return value;
-		}
+bool ArgSet::ArgQuery::scan_arg(char *str, unsigned long int &dest) const {
+	return ( 0 < sscanf(str,"%lu",&dest) );
+}
 
-	};
-
-
-	struct ArgQuery {
-
-		char* flag_str;
-		char* value_str;
+bool ArgSet::ArgQuery::scan_arg(char *str, unsigned long long int &dest) const {
+	return ( 0 < sscanf(str,"%llu",&dest) );
+}
 
 
-		template<typename T>
-		bool scan_arg(char *str, T &dest) const {
-			return false;
-		}
+bool ArgSet::ArgQuery::scan_arg(char *str,   signed char &dest) const {
+	return ( 0 < sscanf(str,"%hhd",&dest) );
+}
+
+bool ArgSet::ArgQuery::scan_arg(char *str,   signed short int &dest) const {
+	return ( 0 < sscanf(str,"%hd",&dest) );
+}
+
+bool ArgSet::ArgQuery::scan_arg(char *str,   signed int &dest) const {
+	return ( 0 < sscanf(str,"%d",&dest) );
+}
+
+bool ArgSet::ArgQuery::scan_arg(char *str,   signed long int &dest) const {
+	return ( 0 < sscanf(str,"%ld",&dest) );
+}
+
+bool ArgSet::ArgQuery::scan_arg(char *str,   signed long long int &dest) const {
+	return ( 0 < sscanf(str,"%lld",&dest) );
+}
 
 
-		bool scan_arg(char *str, unsigned char &dest) const {	
-			return ( 0 < sscanf(str,"%hhu",&dest) );
-		}
 
-		bool scan_arg(char *str, unsigned short int &dest) const {	
-			return ( 0 < sscanf(str,"%hu",&dest) );
-		}
+bool ArgSet::ArgQuery::scan_arg(char *str, float &dest) const {
+	return ( 0 < sscanf(str,"%f",&dest) );
+}
 
-		bool scan_arg(char *str, unsigned int &dest) const {	
-			return ( 0 < sscanf(str,"%u",&dest) );
-		}
-		
-		bool scan_arg(char *str, unsigned long int &dest) const {	
-			return ( 0 < sscanf(str,"%lu",&dest) );
-		}
-	
-		bool scan_arg(char *str, unsigned long long int &dest) const {	
-			return ( 0 < sscanf(str,"%llu",&dest) );
-		}
+bool ArgSet::ArgQuery::scan_arg(char *str, double &dest) const {
+	return ( 0 < sscanf(str,"%lf",&dest) );
+}
 
 
-		bool scan_arg(char *str,   signed char &dest) const {	
-			return ( 0 < sscanf(str,"%hhd",&dest) );
-		}
-
-		bool scan_arg(char *str,   signed short int &dest) const {	
-			return ( 0 < sscanf(str,"%hd",&dest) );
-		}
-
-		bool scan_arg(char *str,   signed int &dest) const {	
-			return ( 0 < sscanf(str,"%d",&dest) );
-		}
-		
-		bool scan_arg(char *str,   signed long int &dest) const {	
-			return ( 0 < sscanf(str,"%ld",&dest) );
-		}
-	
-		bool scan_arg(char *str,   signed long long int &dest) const {	
-			return ( 0 < sscanf(str,"%lld",&dest) );
-		}
-
-
-		
-		bool scan_arg(char *str, float &dest) const {	
-			return ( 0 < sscanf(str,"%f",&dest) );
-		}
-		
-		bool scan_arg(char *str, double &dest) const {	
-			return ( 0 < sscanf(str,"%lf",&dest) );
-		}
-
-		
-		bool scan_arg(char *str, bool &dest) const{
-			if        ( strcmp(str,"false") == 0 ){
-				dest = false;
-			} else if ( strcmp(str,"true" ) == 0 ){
-				dest = true;
-			} else {
-				return false;
-			}
-			return true;
-		}
-
-		template<typename T>
-		void scan_or_fail(T& dest) const{
-			if(value_str == NULL) {
-				printf("No value provided for flag '-%s'\n", flag_str);
-				std::exit(1);
-			}
-			if( !scan_arg(value_str,dest) ){
-				printf("Value string '%s' provided for flag '-%s' "
-					"could not be parsed\n",
-					value_str,flag_str
-				);
-				std::exit(1);
-			}
-		}
-
-		void scan_or_fail(bool& dest) const{
-			dest = (value_str != NULL);
-		}
-
-		template<typename T>
-		ArgVal<T> operator| (T other) {
-			if(value_str == NULL){
-				return ArgVal<T>(other);
-			} else {
-				T value;
-				scan_or_fail(value);
-				return ArgVal<T>(value);
-			}
-		}
-
-		ArgQuery operator| (ArgQuery other) {
-			if(value_str == NULL){
-				return other;
-			} else {
-				return *this;
-			}
-		}
-
-
-		template<typename T>
-		operator T() const {
-			T value;
-			scan_or_fail(value);
-			return value;
-		}
-
-
-		ArgQuery(char* f, char* v) : flag_str(f), value_str(v) {}
-
-	};
-
-
-	ArgQuery operator[] (char* flag_str) {
-		char* val_str = get_flag_str(flag_str);
-		return ArgQuery(flag_str,val_str);
+bool ArgSet::ArgQuery::scan_arg(char *str, bool &dest) const{
+	if        ( strcmp(str,"false") == 0 ){
+		dest = false;
+	} else if ( strcmp(str,"true" ) == 0 ){
+		dest = true;
+	} else {
+		return false;
 	}
-	
-	ArgQuery operator[] (const char* flag_str) {
-		return (*this)[(char*)flag_str];
+	return true;
+}
+
+
+void ArgSet::ArgQuery::scan_or_fail(bool& dest) const{
+	dest = (value_str != NULL);
+}
+
+
+ArgSet::ArgQuery ArgSet::ArgQuery::operator| (ArgQuery other) {
+	if(value_str == NULL){
+		return other;
+	} else {
+		return *this;
 	}
+}
 
-	ArgSet(int c, char** v) : argc(c), argv(v) {}
-
-};
-
+ArgSet::ArgQuery::ArgQuery(char* f, char* v) : flag_str(f), value_str(v) {}
 
 
+ArgSet::ArgQuery ArgSet::operator[] (char* flag_str) {
+	char* val_str = get_flag_str(flag_str);
+	return ArgQuery(flag_str,val_str);
+}
+
+ArgSet::ArgQuery ArgSet::operator[] (const char* flag_str) {
+	return (*this)[(char*)flag_str];
+}
+
+ArgSet::ArgSet(int c, char** v) : argc(c), argv(v) {}
+
+
+}
+
+}
 
 
 

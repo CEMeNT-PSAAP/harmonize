@@ -44,7 +44,7 @@
 	#define end_time(idx) ;
 #endif
 
-#include "util/util.cpp"
+#include "util/util.h"
 
 //#define ASYNC_LOADS
 

@@ -1,18 +1,7 @@
-#pragma once
-
-#include "math.h"
-#include <vector>
-#include <cstdint>
-#include <cstdio>
-#include <type_traits>
-#include <limits>
-#include <memory>
-#include <stdexcept>
-
+#include "util.h"
 
 
 namespace util {
-
 
 /*
 // Gives a count of how many threads in the current warp with a lower warp-local id are currently
@@ -90,84 +79,47 @@ __device__ unsigned int random_uint(unsigned int& rand_state){
 #endif
 
 
-struct Stopwatch {
+Stopwatch::Stopwatch() {
 
-	cudaEvent_t beg;
-	cudaEvent_t end;
-	float duration;
+	cudaError_t beg_stat = cudaEventCreate( &beg );
+	cudaError_t end_stat = cudaEventCreate( &end );
 
-	Stopwatch() {
-
-		cudaError_t beg_stat = cudaEventCreate( &beg );
-		cudaError_t end_stat = cudaEventCreate( &end );
-
-		if(beg_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(beg_stat);
-			printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
-		}
-
-		if(end_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(end_stat);
-			printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
-		}
-
-		if( (beg_stat != cudaSuccess) || (end_stat != cudaSuccess) ) {
-			printf("Failed to create one or more Stopwatch events\n");
-			std::exit(1);
-		}
+	if(beg_stat != cudaSuccess){
+		const char* err_str = cudaGetErrorString(beg_stat);
+		printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
 	}
 
-
-	bool start() {
-		return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+	if(end_stat != cudaSuccess){
+		const char* err_str = cudaGetErrorString(end_stat);
+		printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
 	}
 
-	bool stop() {
-		if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
-			return false;
-		}
-		cudaEventSynchronize( end );
-        	cudaEventElapsedTime( &duration, beg, end );
-		return true;
+	if( (beg_stat != cudaSuccess) || (end_stat != cudaSuccess) ) {
+		printf("Failed to create one or more Stopwatch events\n");
+		std::exit(1);
 	}
+}
 
-	float ms_duration(){
-		return duration;
+
+bool Stopwatch::start() {
+	return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+}
+
+bool Stopwatch::stop() {
+	if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
+		return false;
 	}
-
-};
-
-
-
-namespace func {
-	#include "func.cpp"
+	cudaEventSynchronize( end );
+		cudaEventElapsedTime( &duration, beg, end );
+	return true;
 }
 
-namespace host {
-	#include "host.cpp"
-}
-
-namespace mem {
-	#include "mem.cpp"
-}
-
-namespace iter {
-	#include "iter.cpp"
-}
-
-namespace cli {
-	#include "cli.cpp"
+float Stopwatch::ms_duration(){
+	return duration;
 }
 
 
-
-
-
-
-
-
 }
-
 
 
 

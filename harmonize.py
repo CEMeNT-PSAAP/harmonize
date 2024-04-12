@@ -16,6 +16,7 @@ import sys
 
 HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/harmonize.h"
+HARMONIZE_UTIL = ["util","host","cli"]
 
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
@@ -958,15 +959,18 @@ class RuntimeSpec():
 
             for path in self.fn_def_list:
                 dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {path}.ptx -o {path}.o {debug_flag}"
-                #print(dev_comp_cmd)
+                print(dev_comp_cmd)
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
-            dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {spec_filename}.cu -include {HARMONIZE_ROOT_HEADER} -o {spec_filename}.o {debug_flag}"
-            #print(dev_comp_cmd)
-            subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+            source_list  = [ (f"{HARMONIZE_ROOT_DIR}/util/{name}.cpp", f"util_{name}.o") for name in HARMONIZE_UTIL ]
+            source_list += [ (f"{spec_filename}.cu", f"{spec_filename}.o") ]
+            for (source,obj) in source_list:
+                dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {debug_flag}"
+                print(dev_comp_cmd)
+                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
 
-            link_list = [ f"{spec_filename}.o" ] + [ path+".o" for path in self.fn_def_list ]
+            link_list = [ path+".o" for path in self.fn_def_list ] + [ obj for (_,obj) in source_list ]
 
             dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{compute_level} --cudart shared -o {spec_filename}_device.o --compiler-options -fPIC {debug_flag}"
 

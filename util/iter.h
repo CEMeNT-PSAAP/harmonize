@@ -1,8 +1,11 @@
 
 
+#ifndef HARMONIZE_ITER
+#define HARMONIZE_ITER
 
+namespace util {
 
-
+namespace iter {
 
 
 template<typename ITER_TYPE>
@@ -62,9 +65,9 @@ struct GroupIter
 
 
 	 __device__ bool step(IterType& iter_val) {
-		
+
 		if( value < limit ){
-			IterType val = value + threadIdx.x;	
+			IterType val = value + threadIdx.x;
 			if ( val < limit ){
 				iter_val = val;
 			}
@@ -76,15 +79,15 @@ struct GroupIter
 			return val < limit;
 		}
 		return false;
-		
+
 	}
 
 
 	 __device__ Iter<IterType> leap(IterType length) {
-	
+
 		Iter<IterType> result(0,0,blockDim.x);
 		if( value < limit ){
-			IterType start_val = value + threadIdx.x;	
+			IterType start_val = value + threadIdx.x;
 			IterType limit_val = start_val + blockDim.x * length;
 			result.value = (start_val < limit) ? start_val : limit;
 			result.limit = (limit_val < limit) ? limit_val : limit;
@@ -95,14 +98,14 @@ struct GroupIter
 			__syncthreads();
 		}
 		return result;
-		
+
 	}
 
 
 	 __device__ bool done() const {
-		
+
 		return ( value >= limit );
-		
+
 	}
 
 };
@@ -132,23 +135,23 @@ struct AtomicIter
 
 
 	 __device__ GroupIter<IterType> group_leap(IterType leap_size) {
-	
+
 		GroupIter<IterType> result;
 		result.value = limit;
 		result.limit = limit;
-	
+
 		if( value <= limit ){
-			IterType start_val = atomicAdd(&value,leap_size);	
+			IterType start_val = atomicAdd(&value,leap_size);
 			IterType limit_val = start_val + leap_size;
 			result.value = (start_val < limit) ? start_val : limit;
 			result.limit = (limit_val < limit) ? limit_val : limit;
 		}
 		return result;
-		
+
 	}
 
 	 __device__ Iter<IterType> leap(IterType leap_size) {
-	
+
 		Iter<IterType> result(0,0,0);
 
 		__shared__ IterType start_val;
@@ -171,7 +174,7 @@ struct AtomicIter
 		result.tempo = blockDim.x;
 
 		return result;
-		
+
 	}
 
 
@@ -182,7 +185,7 @@ struct AtomicIter
 		}
 
 		IterType try_val = atomicAdd(&value,1);
-		
+
 		if( try_val >= limit ){
 			return false;
 		}
@@ -190,11 +193,11 @@ struct AtomicIter
 		iter_val = try_val;
 
 		return true;
-		
+
 	}
 
 	 __device__ bool sync_done() const {
-		
+
 		__shared__ bool result;
 		if(current_leader()){
 			result = (value>=limit);
@@ -202,13 +205,13 @@ struct AtomicIter
 		__syncwarp();
 
 		return result;
-		
+
 	}
 
 	 __device__ bool done() const {
-		
+
 		return ( value >= limit );
-		
+
 	}
 
 
@@ -285,7 +288,7 @@ struct ArrayIter {
 		}
 		return false;
 	}
-	
+
 	__device__ bool step_idx_ptr(IterType& idx, T *&val){
 		IterType index;
 		if( iter.step(index) ){
@@ -300,7 +303,7 @@ struct ArrayIter {
 		: array(adr)
 		, iter (itr)
 	{}
-	
+
 	__device__ ArrayIter<T,IterType> ()
 		: array(NULL)
 		, iter(0,0,0)
@@ -350,7 +353,7 @@ struct GroupArrayIter {
 		}
 		return false;
 	}
-	
+
 	__device__ bool step_ptr_idx(T *&val, IterType& idx){
 		IterType index;
 		if( iter.step(index) ){
@@ -375,7 +378,7 @@ struct GroupArrayIter {
 	__device__ ArrayIter<T,IterType> leap(IterType length) {
 		return ArrayIter<T,IterType>(array,iter.leap(length));
 	}
-	
+
 };
 
 
@@ -420,7 +423,7 @@ struct IOBuffer
 		, input_iter (0,0  )
 		, output_iter(0,cap)
 	{}
- 
+
 	__host__ void host_init()
 	{
 		data_a = host::hardMalloc<T>( capacity );
@@ -513,14 +516,14 @@ struct IOBuffer
 	{
 		return input_iter.done();
 	}
-	
+
 	__device__ bool output_full()
 	{
 		return output_iter.done();
 	}
 
 	__device__ float output_fill_fraction(){
-		return ((float) atomicAdd(&(output_iter.value),0u)) / ((float) capacity); 
+		return ((float) atomicAdd(&(output_iter.value),0u)) / ((float) capacity);
 	}
 
 
@@ -534,7 +537,7 @@ struct IOBuffer
 		}
 		__syncthreads();
 
-		return ((float) progress) / ((float) capacity); 
+		return ((float) progress) / ((float) capacity);
 	}
 };
 
@@ -594,12 +597,12 @@ struct MCPCBuffer {
 	__device__ void push(T value, IndexType index, HashType hash){
 		HashType atom_max = atomicMax(&(LinkJump[index].hash),hash);
 		if ( atom_max <= hash ) {
-			
+
 		} else if ( atom_max == hash ) {
-			
+
 		}
 
-		
+
 	}
 
 	__device__ void flip(){
@@ -610,17 +613,21 @@ struct MCPCBuffer {
 	__device__ bool input_empty() {
 		return link_buffer.input_empty();
 	}
-	
+
 	__device__ bool output_full() {
 		return link_buffer.output_full();
 	}
-	
+
 };
 #endif
 
 
+}
+}
 
 
 
+
+#endif
 
 

@@ -1,8 +1,13 @@
 
 
 
+#ifndef HARMONIZE_MEM
+#define HARMONIZE_MEM
 
 
+namespace util {
+
+namespace mem {
 
 template<typename T>
 struct PairEquivalent;
@@ -178,12 +183,12 @@ struct PoolQueue <Adr<ADR_TYPE>>
 
 
 
-	
+
 template<typename T, typename AdrType>
 __host__ void mempool_check(T* arena, size_t arena_size, PoolQueue<AdrType>* pool, size_t pool_size){
 
-	
-	
+
+
 
 }
 
@@ -320,7 +325,7 @@ struct MemPool {
 
 			/* Set the right half of the left_queue handle to index the new tail. */
 			dst.set_tail(right_tail_adr);
-			
+
 			return dst;
 		}
 		//arena[dst.get_tail().adr].next = src.get_head();
@@ -329,7 +334,7 @@ struct MemPool {
 	}
 
 
-	__device__ QueueType pull_queue(Index& pull_idx){	
+	__device__ QueueType pull_queue(Index& pull_idx){
 		Index start_idx = pull_idx;
 		//printf("Pulling from %d",start_idx);
 		bool done = false;
@@ -360,8 +365,8 @@ struct MemPool {
 	}
 
 
-	
-	__device__ void push_queue(QueueType queue, Index push_idx){	
+
+	__device__ void push_queue(QueueType queue, Index push_idx){
 		if( queue.is_null() ){
 			return;
 		}
@@ -383,7 +388,7 @@ struct MemPool {
 
 
 	__device__ Index pull_span( Index* dst, Index count, Index stride, unsigned int& rand_state ){
-		
+
 		Index result = 0;
 		for(unsigned int t=0; t<RETRY_COUNT; t++){
 			Index queue_index = random_uint(rand_state) % pool_size.adr;
@@ -432,7 +437,7 @@ struct MemPool {
 
 
 	__device__ Index pull_span_atomic( Index* dst, Index count, Index stride, unsigned int& rand_state ){
-		
+
 		Index result = 0;
 		for(unsigned int t=0; t<RETRY_COUNT; t++){
 			Index queue_index = random_uint(rand_state) % pool_size.adr;
@@ -517,7 +522,7 @@ struct MemPool {
 
 	__device__ Index alloc_index(unsigned int& rand_state){
 
-	
+
 		#ifdef LAZY_MEM
 		Index result = lazy_alloc_index(rand_state);
 		if( result != AdrType::null ){
@@ -584,7 +589,7 @@ struct MemPool {
 
 		typedef MemPool<T,INDEX> PoolType;
 		typedef INDEX Index;
-		
+
 		#ifdef LAZY_MEM
 		claim_count = 0;
 
@@ -594,7 +599,7 @@ struct MemPool {
 		}
 
 		#else
-		
+
 		Index span = arena_size.adr / pool_size.adr;
 
 		Index limit = arena_size.adr;
@@ -627,7 +632,7 @@ struct MemPool {
 
 template<typename T, typename INDEX>
 __global__ void mempool_init(MemPool<T,INDEX> mempool){
-		
+
 	typedef INDEX Index;
 
 	Index thread_count = blockDim.x * gridDim.x;
@@ -809,7 +814,7 @@ struct SimpleMemCache {
 		#define atomicCAS_block  atomicCAS
 	#endif
 
-	
+
 	__device__ Index& get_index( unsigned int offset ){
 		unsigned int real_offset = (WARP_SIZE*offset + threadIdx.x + (offset/SIZE)) % (SIZE*WARP_SIZE);
 		return indexes[real_offset];
@@ -863,7 +868,7 @@ struct SimpleMemCache {
 
 
 	__device__ void free(Index index, unsigned int& rand_state){
-		
+
 		unsigned int& count = counts[threadIdx.x];
 		if( count < SIZE ){
 			get_index(count) = index;
@@ -910,7 +915,7 @@ struct MemChunk {
 
 	Mask fill_mask;
 	T data[SIZE];
-	
+
 	__device__ Index offset(PoolType& parent){
 		return (this - parent.arena);
 	}
@@ -918,15 +923,15 @@ struct MemChunk {
 	__device__ bool full(){
 		return (fill_mask == FULL);
 	}
-	
+
 	__device__ bool empty(){
 		return (fill_mask == 0);
 	}
-		
+
 	__device__ bool fill_count(){
 		return __popc(fill_mask);
 	}
-	
+
 	__device__ MemChunk<T,Index,Mask>()
 		: fill_mask(0)
 	{}
@@ -968,7 +973,7 @@ struct MemPoolBank {
 	typedef MASK  MaskType;
 	typedef MemChunk<T,Index,MaskType> ChunkType;
 	typedef MemPool<ChunkType,Index>   PoolType;
-	
+
 	static const Index SIZE = SIZE_VAL;
 
 	unsigned int rand_state;
@@ -1003,7 +1008,7 @@ struct MemPoolBank {
 			if( chunks[i] == Adr<Index>::null ){
 				continue;
 			}
-			
+
 		}
 	}
 
@@ -1022,7 +1027,7 @@ struct MemPoolBank {
 
 
 	__device__ Index coalesce(Index original) {
-		
+
 	}
 
 	__device__ void free(Index index) {
@@ -1035,9 +1040,11 @@ struct MemPoolBank {
 };
 
 
+}
+
+}
 
 
-
-
+#endif
 
 
