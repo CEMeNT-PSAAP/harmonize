@@ -19,11 +19,11 @@ struct Neutron {
 	float m_z;
 	float time;
 	unsigned int seed;
-	
+
 	float weight;
 
 	Neutron() = default;
-	
+
 	__device__ Neutron(unsigned int s, float t, float x, float y, float z, float w)
 		: seed(s)
 		, time(t)
@@ -66,11 +66,11 @@ struct MyDeviceState {
 
 	iter::IOBuffer<unsigned int> *neutron_io;
 
-	float* halted;
+	float*  halted;
 
 	float	div_width;
 	float	pos_limit;
-	int	div_count;
+	int	    div_count;
 
 	float	fission_x;
 	float	capture_x;
@@ -85,7 +85,7 @@ struct MyDeviceState {
 	int     fiss_mult;
 
 	bool    is_async;
-	
+
 };
 
 
@@ -178,11 +178,11 @@ __device__ float clamp(float val, float low, float high){
 // on fission, with the positive number being the number of neutrons produced by the fission
 __device__ int step_neutron(MyDeviceState params, Neutron& n){
 
-	
+
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Advance particle position
 	///////////////////////////////////////////////////////////////////////////////////////////
-	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;	
+	float step = - logf( 1 - random_unorm(n.seed) ) / params.combine_x;
 
 	bool halt = false;
 	if( n.time + step > params.time_limit){
@@ -211,7 +211,7 @@ __device__ int step_neutron(MyDeviceState params, Neutron& n){
 	if( (index < 0) || (index >= params.div_count*2) ){
 		return -1;
 	}
-	
+
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Sample the event that occurs, branching by event
 	///////////////////////////////////////////////////////////////////////////////////////////

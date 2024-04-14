@@ -10,6 +10,7 @@ test_problems/simple_neutron/neut_evt
 *.exe
 *.so
 *.ptx
+*.pyc
 
 __pycache__/
 __ptxcache__/
