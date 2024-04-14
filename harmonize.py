@@ -458,8 +458,13 @@ class EventRuntime(Runtime):
 # runtime meta-parameters
 class RuntimeSpec():
 
-    dev_ir_registry = {}
-    code_registry   = {}
+    obj_set    = set()
+    registry   = {}
+    kinds = [("Event","evt")] #,("Harmonize","hrm")]:
+    compute_level = native_cuda_compute_level()
+    cache_path = "__ptxcache__/"
+    debug_flag = " -g "
+
 
     def __init__(
             self,
@@ -503,6 +508,8 @@ class RuntimeSpec():
 
         self.generate_meta()
         self.generate_code()
+
+        RuntimeSpec.registry[self.spec_name] = self
 
 
 
@@ -915,9 +922,8 @@ class RuntimeSpec():
     def generate_code(self):
 
         # Folder used to cache cuda and ptx code
-        cache_path = "__ptxcache__/"
 
-        makedirs(cache_path,exist_ok=True)
+        makedirs(RuntimeSpec.cache_path,exist_ok=True)
 
         self.fn = {}
 
@@ -925,9 +931,11 @@ class RuntimeSpec():
         # of each async function definition
         self.fn_def_list = []
 
+        self.link_list = []
+
         # Generate and compile specializations of the specification for
         # each kind of runtime
-        for kind, shortname in [("Event","evt")]: #,("Harmonize","hrm")]:
+        for kind, shortname in RuntimeSpec.kinds: #,("Harmonize","hrm")]:
 
             self.fn[kind] = {}
 
@@ -938,104 +946,34 @@ class RuntimeSpec():
             base_code = self.generate_specification_code(suffix)
 
             # Compile the async function definitions to ptx
-            self.generate_async_ptx(cache_path,suffix)
+            self.generate_async_ptx(RuntimeSpec.cache_path,suffix)
 
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
             # Save the code to an appropriately named file
-            spec_filename = cache_path+suffix
+            spec_filename = RuntimeSpec.cache_path+suffix
             spec_file = open(spec_filename+".cu",mode='w')
             spec_file.write(base_code+spec_code)
             spec_file.close()
 
 
-            # Compile the specialization to ptx
-            compute_level = native_cuda_compute_level()
             #print(self.fn_def_list)
-
-            debug_flag = ""
-            if DEBUG:
-                debug_flag = "-g"
 
 
             for path in self.fn_def_list:
-                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {path}.ptx -o {path}.o {debug_flag}"
+                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {path}.ptx -o {path}.o {RuntimeSpec.debug_flag}"
                 print(dev_comp_cmd)
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                RuntimeSpec.obj_set.add(f"{path}.o")
 
-            source_list  = [ (f"{HARMONIZE_ROOT_DIR}/util/{name}.cpp", f"util_{name}.o") for name in HARMONIZE_UTIL ]
+            source_list  = [ (f"{HARMONIZE_ROOT_DIR}/util/{name}.cpp", f"{RuntimeSpec.cache_path}util_{name}.o") for name in HARMONIZE_UTIL ]
             source_list += [ (f"{spec_filename}.cu", f"{spec_filename}.o") ]
             for (source,obj) in source_list:
-                dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {debug_flag}"
+                dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                 print(dev_comp_cmd)
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                RuntimeSpec.obj_set.add(obj)
 
 
-            link_list = [ path+".o" for path in self.fn_def_list ] + [ obj for (_,obj) in source_list ]
-
-            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{compute_level} --cudart shared -o {spec_filename}_device.o --compiler-options -fPIC {debug_flag}"
-
-            comp_cmd = f"nvcc -shared {' '.join(link_list)} {spec_filename}_device.o -arch=compute_{compute_level} --cudart shared -o {spec_filename}.so {debug_flag}"
-
-
-
-            #print(dev_link_cmd)
-            subprocess.run(dev_link_cmd.split(),shell=False,check=True)
-            #print(comp_cmd)
-            subprocess.run(comp_cmd.split(),shell=False,check=True)
-            path = abspath(spec_filename+".so")
-            #print(path)
-            binding.load_library_permanently(path)
-
-            # Create handles to reference the cuda entry wrapper functions
-            void    = numba.types.void
-            vp      = numba.types.voidptr
-            i32     = numba.types.int32
-            usize   = numba.types.uintp
-            sig     = numba.core.typing.signature
-            ext_fn  = numba.types.ExternalFunction
-            context = numba.from_dtype(self.meta['DEV_CTX_TYPE'][kind])
-            boolean = numba.types.boolean
-            #print("\n\n\n\n",self.dev_state,"\n\n\n")
-            state   = self.dev_state #numba.from_dtype(self.dev_state)
-
-            init_program  = ext_fn(f"init_program_{suffix}",  sig(void, vp, usize))
-            exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
-            store_state   = ext_fn(f"store_state_{suffix}",   sig(void, vp, state))
-            load_state    = ext_fn(f"load_state_{suffix}",    sig(void, state, vp))
-
-            if kind == "Event":
-                # IO_SIZE, LOAD_MARGIN
-                alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
-                free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
-            else:
-                # ARENA SIZE, POOL SIZE, STACK SIZE
-                alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
-                free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
-
-            alloc_state   = ext_fn(f"alloc_state_{suffix}",   sig(vp))
-            free_state    = ext_fn(f"free_state_{suffix}",    sig(void,vp))
-
-            complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
-
-            # Finally, compile the entry functions, saving it for later use
-            self.fn[kind]['init_program']  = init_program
-            self.fn[kind]['exec_program']  = exec_program
-
-            self.fn[kind]['store_state']   = store_state
-            self.fn[kind]['load_state']    = load_state
-
-            self.fn[kind]['alloc_program'] = alloc_program
-            self.fn[kind]['free_program']  = free_program
-
-            self.fn[kind]['alloc_state']   = alloc_state
-            self.fn[kind]['free_state']    = free_state
-
-            @njit(sig(boolean,vp))
-            def complete_wrapper(instance):
-                result = complete(instance)
-                return (result != 0)
-
-            self.fn[kind]['complete']      = complete_wrapper
 
 
 
@@ -1130,5 +1068,76 @@ class RuntimeSpec():
         return RuntimeSpec.dispatch_fns("sync",async_fns)
 
 
+    @staticmethod
+    def bind_and_load():
 
+        link_list = [ obj for obj in  RuntimeSpec.obj_set ]
+
+        dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {RuntimeSpec.cache_path}harmonize_device.o --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+
+        comp_cmd = f"nvcc -shared {' '.join(link_list)} {RuntimeSpec.cache_path}harmonize_device.o -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {RuntimeSpec.cache_path}harmonize.so {RuntimeSpec.debug_flag}"
+
+        print(dev_link_cmd)
+        subprocess.run(dev_link_cmd.split(),shell=False,check=True)
+        print(comp_cmd)
+        subprocess.run(comp_cmd.split(),shell=False,check=True)
+        path = abspath(f"{RuntimeSpec.cache_path}/harmonize.so")
+        #print(path)
+        binding.load_library_permanently(path)
+
+        for name, spec in RuntimeSpec.registry.items():
+            for kind, shortname in RuntimeSpec.kinds:
+
+                suffix = spec.spec_name+"_"+shortname
+
+                # Create handles to reference the cuda entry wrapper functions
+                void    = numba.types.void
+                vp      = numba.types.voidptr
+                i32     = numba.types.int32
+                usize   = numba.types.uintp
+                sig     = numba.core.typing.signature
+                ext_fn  = numba.types.ExternalFunction
+                context = numba.from_dtype(spec.meta['DEV_CTX_TYPE'][kind])
+                boolean = numba.types.boolean
+                #print("\n\n\n\n",self.dev_state,"\n\n\n")
+                state   = spec.dev_state #numba.from_dtype(self.dev_state)
+
+                init_program  = ext_fn(f"init_program_{suffix}",  sig(void, vp, usize))
+                exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
+                store_state   = ext_fn(f"store_state_{suffix}",   sig(void, vp, state))
+                load_state    = ext_fn(f"load_state_{suffix}",    sig(void, state, vp))
+
+                if kind == "Event":
+                    # IO_SIZE, LOAD_MARGIN
+                    alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
+                    free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
+                else:
+                    # ARENA SIZE, POOL SIZE, STACK SIZE
+                    alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
+                    free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
+
+                alloc_state   = ext_fn(f"alloc_state_{suffix}",   sig(vp))
+                free_state    = ext_fn(f"free_state_{suffix}",    sig(void,vp))
+
+                complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
+
+                # Finally, compile the entry functions, saving it for later use
+                spec.fn[kind]['init_program']  = init_program
+                spec.fn[kind]['exec_program']  = exec_program
+
+                spec.fn[kind]['store_state']   = store_state
+                spec.fn[kind]['load_state']    = load_state
+
+                spec.fn[kind]['alloc_program'] = alloc_program
+                spec.fn[kind]['free_program']  = free_program
+
+                spec.fn[kind]['alloc_state']   = alloc_state
+                spec.fn[kind]['free_state']    = free_state
+
+                @njit(sig(boolean,vp))
+                def complete_wrapper(instance):
+                    result = complete(instance)
+                    return (result != 0)
+
+                spec.fn[kind]['complete']      = complete_wrapper
 
