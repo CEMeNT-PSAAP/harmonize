@@ -460,7 +460,7 @@ class RuntimeSpec():
 
     obj_set    = set()
     registry   = {}
-    kinds = [("Event","evt")] #,("Harmonize","hrm")]:
+    kinds = [("Event","evt"),("Harmonize","hrm")]
     compute_level = native_cuda_compute_level()
     cache_path = "__ptxcache__/"
     debug_flag = " -g "
@@ -898,8 +898,7 @@ class RuntimeSpec():
         # and save it to an appropriately named file
         for fn in comp_list:
             base_name = fn.__name__
-            if fn in base_fns:
-                base_name = self.spec_name + "_" + base_name
+            base_name = base_name + "_" + suffix
             base_name = cache_path + base_name
             ptx_file  = open(base_name+".ptx",mode='w')
             ptx_text  = extern_device_ptx(fn,self.type_map,suffix)
