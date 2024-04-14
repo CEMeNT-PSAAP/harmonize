@@ -1,8 +1,8 @@
 
 
 
-#ifndef HARMONIZE_MEM
-#define HARMONIZE_MEM
+#ifndef HARMONIZE_UTIL_MEM
+#define HARMONIZE_UTIL_MEM
 
 
 namespace util {

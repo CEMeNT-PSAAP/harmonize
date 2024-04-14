@@ -1,7 +1,7 @@
 
 
-#ifndef HARMONIZE_ITER
-#define HARMONIZE_ITER
+#ifndef HARMONIZE_UTIL_ITER
+#define HARMONIZE_UTIL_ITER
 
 namespace util {
 

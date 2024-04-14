@@ -91,7 +91,7 @@ struct MyProgramSpec {
 	// Defines the initialization function for programs of type 'ProgType'. This function is called by
 	// all threads in all work groups just prior to beginning normal execution. States are accessible
 	// through the 'device', 'group', and 'thread' variables, just like when defining async functions.
-	// 
+	//
 	// Here, we initialize the work iterator to iterate over a range of integers unique to the work
 	// group, distributing the set of integers to process more or less evenly across the set of
 	// work groups.
@@ -134,7 +134,7 @@ struct MyProgramSpec {
 		unsigned int iter_step_length = 1u;
 
 		iter::Iter<unsigned int> iter = prog.device.iterator->leap(iter_step_length);
-		
+
 		unsigned int index;
 		while(iter.step(index)){
 			if( (index % 2) == 0 ){
@@ -153,7 +153,7 @@ struct MyProgramSpec {
 };
 
 
-typedef  HarmonizeProgram < MyProgramSpec > ProgType;
+using ProgType = AsyncProgram < MyProgramSpec >;
 
 
 
@@ -193,7 +193,7 @@ int main(int argc, char* argv[]){
 	// Define the range of values to process through the collaz iteration
 	ds.start  = 0;
 	ds.limit  = args["limit"];
-	
+
 	// Define a device-side buffer of type 'unsigned int' with size 'ds.limit'
 	host::DevBuf<unsigned int> dev_out = host::DevBuf<unsigned int>((size_t)ds.limit);
 	// Assign the address of the device-side buffer to the device state so that the program
@@ -214,7 +214,7 @@ int main(int argc, char* argv[]){
 	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
 	cudaDeviceSynchronize();
 	host::check_error();
-	
+
 	// Initialize the instance using 32 work groups
 	init<ProgType>(instance,32);
 	cudaDeviceSynchronize();
@@ -225,7 +225,7 @@ int main(int argc, char* argv[]){
 	// before this, the program exits early.
 	exec<ProgType>(instance,wg_count,cycle_count);
 	cudaDeviceSynchronize();
-	host::check_error();	
+	host::check_error();
 
 	watch.stop();
 
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]){
 	// Retrieve the data from the device-side buffer into a host-side vector.
 	std::vector<unsigned int> host_out(ds.limit);
 	dev_out >> host_out;
-	host::check_error();	
+	host::check_error();
 
 
 	// Double-check that the program has accurately evaluated the iterations assigned to it.

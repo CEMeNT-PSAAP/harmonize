@@ -1,6 +1,6 @@
 
-#ifndef HARMONIZE_HOST
-#define HARMONIZE_HOST
+#ifndef HARMONIZE_UTIL_HOST
+#define HARMONIZE_UTIL_HOST
 
 namespace util {
 

@@ -1,6 +1,6 @@
 
-#ifndef HARMONIZE_CLI
-#define HARMONIZE_CLI
+#ifndef HARMONIZE_UTIL_CLI
+#define HARMONIZE_UTIL_CLI
 
 
 

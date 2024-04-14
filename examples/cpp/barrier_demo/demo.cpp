@@ -45,25 +45,25 @@ struct Step {
 
 
 struct MyProgramSpec {
-	
+
 	using OpSet =  OpUnion<Step>;
-	
+
 	//template<typename T> using DeviceState = MyDeviceState<T>;
 	using DeviceState = MyDeviceState;
-	
+
 	using AdrType = unsigned int;
-	
+
 	template<typename PROGRAM>
 	struct GroupState {};
-	
+
 	template<typename PROGRAM>
 	struct ThreadState {};
-	
-	
+
+
 	static const size_t STASH_SIZE = 8;
 	static const size_t FRAME_SIZE = 8191;
 	static const size_t POOL_SIZE  = 8191;
-	
+
 	template<typename PROGRAM>
 	__device__ static void initialize(PROGRAM prog) {}
 
@@ -76,13 +76,13 @@ struct MyProgramSpec {
 		unsigned int id;
 
 		iter::Iter<unsigned int> iter = prog.device.source_id_iter->leap(1);
-		
+
 		while(iter.step(id)){
 			//printf("Got id %d as thread %d\n",id,threadIdx.x);
 			prog.template sync<Step>(id);
 		}
 
-		
+
 		// Return whether or not the ID iterator has any IDs left
 		return !prog.device.source_id_iter->sync_done();
 
@@ -94,7 +94,7 @@ struct MyProgramSpec {
 
 
 
-using AsyncProgram = HarmonizeProgram <MyProgramSpec>;
+using ProgType = AsyncProgram <MyProgramSpec>;
 
 
 
@@ -118,11 +118,11 @@ int main(int argc, char *argv[]){
 	size_t wg_count = args["wg_count"];
 
 	unsigned int dev_idx  = args["dev_idx"] | 0;
-	cudaSetDevice(dev_idx); 
+	cudaSetDevice(dev_idx);
 
 	unsigned int arena_size = args["pool"] | 0x800000;
-	
-	//MyDeviceState<AsyncProgram>  dev_state;
+
+	//MyDeviceState<ProgType>  dev_state;
 	MyDeviceState dev_state;
 
 	dev_state.dep_count = args["dep"];
@@ -149,7 +149,7 @@ int main(int argc, char *argv[]){
 	// Set the ID iterator to the range from zero to the number of source neutrons
 	source_id_iter<< iter::AtomicIter<unsigned int>(0,dev_state.dep_count+dev_state.non_dep_count);
 	dev_state.source_id_iter = source_id_iter;
-	
+
 	std::vector<RemappingBarrier<OpUnion<Step>>> barrier_init;
 	for(size_t i=0; i < dev_state.barrier_count; i++){
 		size_t wait_count = (dev_state.dep_count / dev_state.barrier_count);
@@ -169,24 +169,24 @@ int main(int argc, char *argv[]){
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Execution
 	///////////////////////////////////////////////////////////////////////////////////////////
-	
-		
-	AsyncProgram::Instance instance(arena_size/32u,dev_state);
+
+
+	ProgType::Instance instance(arena_size/32u,dev_state);
 
 	// Sync for safety and report any errors
 	cudaDeviceSynchronize();
 	check_error();
-	
-	init<AsyncProgram>(instance,wg_count);
+
+	init<ProgType>(instance,wg_count);
 	cudaDeviceSynchronize();
 	check_error();
 	int num = 0;
-	
+
 	// While the instance has not yet completed, execute, sync, and report any errors
 	do {
 		// Give the number of work groups used and the number of iterations
 		// to perform before halting early, to prevent GPU timeouts
-		exec<AsyncProgram>(instance,wg_count,0x1000000);
+		exec<ProgType>(instance,wg_count,0x1000000);
 		cudaDeviceSynchronize();
 		if( check_error() ) {
 			break;
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]){
 
 
 
-	
+
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Program Wrap-up
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]){
 	// Stop timer and get the intervening milliseconds
 	watch.stop();
 	float msec_total = watch.ms_duration();
-	
+
 	// Declare container for result data
 	std::vector<unsigned int> result;
 
@@ -215,13 +215,13 @@ int main(int argc, char *argv[]){
 
 	//printf("\nProcessing took %f milliseconds\n",msec_total);
 	total+= msec_total;
-	
+
 	}
 
 
 	printf("%f",total/samp_count);
 
-	
+
 
 	return 0;
 

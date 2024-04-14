@@ -24,7 +24,7 @@ struct Step {
 				break;
 			}
 		}
-		
+
 		// If result is positive, generate that number of neutrons from fission
 		for(int i=0; i<result; i++){
 			Neutron new_neutron = n.child();
@@ -37,14 +37,14 @@ struct Step {
 		}
 
 		// If result is negative, do nothing
-		
+
 
 	}
 
 };
 
 
-// Define a specification for our program 
+// Define a specification for our program
 struct MyProgramSpec {
 
 	// Define a type called OpSet (specializing OpUnion) to define what operations
@@ -62,7 +62,7 @@ struct MyProgramSpec {
 	// The device state, itself, is an immutable struct, but can contain references
 	// and pointers to non-const data.
 	typedef MyDeviceState DeviceState;
-	
+
 	// Same idea as DeviceState, but it is a state tracked on a per-group basis, and
 	// the state provided will be directly mutable.
 	struct GroupState {
@@ -73,7 +73,7 @@ struct MyProgramSpec {
 	struct ThreadState {
 		// Nothing here, to keep things simple
 	};
-	
+
 
 	// Defines what integer type is used to represent the address of intermediate
 	// data stored in global memory. If unset, the default type assumed is uint32_t.
@@ -89,7 +89,7 @@ struct MyProgramSpec {
 	// The number of queues used by the asynchronous method to store valid work in main memory.
 	// The current default, if undecleared, is 32
 	static const size_t FRAME_SIZE = 16069;//8191;
-	
+
 	// The number of queues used by the asynchronous method to store unused intermediate data storage.
 	// The current default, if undecleared, is 32
 	static const size_t POOL_SIZE  = 16069;//8191;
@@ -110,7 +110,7 @@ struct MyProgramSpec {
 
 	// A function called by each work group if it detects scarcity of work. This function is called
 	// every time such a detection occurs during an execution pass until the first time a false
-	// value is returned for that work group during that execution pass. This function may be 
+	// value is returned for that work group during that execution pass. This function may be
 	// subsequently called in different execution passes.
 	template<typename PROGRAM>
 	__device__ static bool make_work(PROGRAM prog) {
@@ -131,7 +131,7 @@ struct MyProgramSpec {
 
 		// Claim the next set of IDs
 		iter::Iter<unsigned int> iter = prog.device.source_id_iter->leap(iter_step_length);
-		
+
 		// Keep processing new neutrons until the iterator runs out
 		while(iter.step(id)){
 			Neutron n(id,0.0,0.0,0.0,0.0,1.0);
@@ -150,8 +150,8 @@ struct MyProgramSpec {
 
 
 // Define our program types
-using  SyncProgram = EventProgram     <MyProgramSpec>;
-using AsyncProgram = HarmonizeProgram <MyProgramSpec>;
+using  SyncProg = EventProgram<MyProgramSpec>;
+using AsyncProg = AsyncProgram<MyProgramSpec>;
 
 
 
@@ -184,17 +184,17 @@ int main(int argc, char *argv[]){
 
 	// The device index to use (zero is default)
 	unsigned int dev_idx  = args["dev_idx"] | 0;
-	cudaSetDevice(dev_idx); 
+	cudaSetDevice(dev_idx);
 
 	// Whether or not to show a graph on the command line
 	bool	    show = args["show"];
 
 	// Whether or not to output census data as CSV to standard out
 	bool	    csv  = args["csv"];
-	
+
 	// The size of the arena/io buffer used by the async/event-based program
 	unsigned int arena_size = args["pool"] | 0x8000000;
-	
+
 	MyDeviceState  dev_state;
 
 	// The source ID iterator
@@ -207,9 +207,9 @@ int main(int argc, char *argv[]){
 	// A timer to judge program performance
 	Stopwatch watch;
 
-	// How many times a neutron is stepped before being re-queued 
+	// How many times a neutron is stepped before being re-queued
 	dev_state.horizon    = args["hrzn"] | 1u;
-	
+
 	// How many neutrons the source generates
 	dev_state.source_count  = args["num"]  | 1000u;
 
@@ -221,7 +221,7 @@ int main(int argc, char *argv[]){
 
 	// The bounds of the tallies in space
 	dev_state.pos_limit  = args["size"] | 1.0f;
-	
+
 	// Used to determine size of tally array
 	dev_state.div_count  = dev_state.pos_limit/dev_state.div_width;
 
@@ -270,42 +270,42 @@ int main(int argc, char *argv[]){
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Execution
 	///////////////////////////////////////////////////////////////////////////////////////////
-	
+
 	if( !dev_state.is_async ){
 
-		SyncProgram::Instance instance(arena_size,dev_state);
+		SyncProg::Instance instance(arena_size,dev_state);
 
 		// Sync for safety and report any errors
 		cudaDeviceSynchronize();
 		check_error();
-		
+
 		// While the instance has not yet completed, execute, sync, and report any errors
 		do {
 			// Give the number of work groups and the size of the chunks pulled from
 			// the io buffer
-			exec<SyncProgram>(instance,wg_count,1);
+			exec<SyncProg>(instance,wg_count,1);
 			cudaDeviceSynchronize();
 			check_error();
 		} while ( ! instance.complete() );
 
 	} else {
-		
-		AsyncProgram::Instance instance(arena_size/32u,dev_state);
+
+		AsyncProg::Instance instance(arena_size/32u,dev_state);
 
 		// Sync for safety and report any errors
 		cudaDeviceSynchronize();
 		check_error();
-		
-		init<AsyncProgram>(instance,wg_count);
+
+		init<AsyncProg>(instance,wg_count);
 		cudaDeviceSynchronize();
 		check_error();
 		int num = 0;
-		
+
 		// While the instance has not yet completed, execute, sync, and report any errors
 		do {
 			// Give the number of work groups used and the number of iterations
 			// to perform before halting early, to prevent GPU timeouts
-			exec<AsyncProgram>(instance,wg_count,0x1000000);
+			exec<AsyncProg>(instance,wg_count,0x1000000);
 			cudaDeviceSynchronize();
 			check_error();
 			num++;
@@ -314,7 +314,7 @@ int main(int argc, char *argv[]){
 	}
 
 
-	
+
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// Program Wrap-up
 	///////////////////////////////////////////////////////////////////////////////////////////
@@ -323,7 +323,7 @@ int main(int argc, char *argv[]){
 	// Stop timer and get the intervening milliseconds
 	watch.stop();
 	float msec_total = watch.ms_duration();
-	
+
 	// Declare container for result data
 	std::vector<float> result;
 
@@ -364,11 +364,11 @@ int main(int argc, char *argv[]){
 			}
 		}
 		printf("\n");
-	
+
 		return 0;
 	}
 
-	// If not, and show is true, feed data into cli graphing tool	
+	// If not, and show is true, feed data into cli graphing tool
 	if( show ){
 
 		util::cli::GraphShape shape;
@@ -385,7 +385,7 @@ int main(int argc, char *argv[]){
 
 	printf("\nProcessing took %f milliseconds\n",msec_total);
 
-	
+
 
 	return 0;
 

@@ -94,7 +94,7 @@ collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 
 harm.RuntimeSpec.bind_and_load()
 
-fns = collaz_spec.harmonize_fns()
+fns = collaz_spec.async_functions()
 
 async_alloc_state   = fns["alloc_state"]
 async_free_state    = fns["free_state"]
@@ -128,7 +128,7 @@ def async_exec_fn(state):
 
 
 
-fns = collaz_spec.event_fns()
+fns = collaz_spec.event_functions()
 
 event_alloc_state   = fns["alloc_state"]
 event_free_state    = fns["free_state"]

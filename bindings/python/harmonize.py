@@ -358,9 +358,9 @@ class Runtime():
 
 
 
-# The class representing the default Harmonize runtime type, which
+# The class representing the Async runtime type, which
 # asynchronously schedules calls on-GPU and within a single kernel
-class HarmonizeRuntime(Runtime):
+class AsyncRuntime(Runtime):
 
     def __init__(self,spec,context,state,fn,gpu_objects):
         self.spec          = spec
@@ -459,7 +459,7 @@ class RuntimeSpec():
 
     obj_set    = set()
     registry   = {}
-    kinds = [("Event","evt"),("Harmonize","hrm")]
+    kinds = [("Event","event"),("Async","async")]
     compute_level = native_cuda_compute_level()
     cache_path = "__ptxcache__/"
     debug_flag = " -g "
@@ -648,7 +648,7 @@ class RuntimeSpec():
         # promises waiting for processing
         self.meta['DEV_CTX_TYPE'] = {}
 
-        self.meta['DEV_CTX_TYPE']["Harmonize"] = np.dtype([
+        self.meta['DEV_CTX_TYPE']["Async"] = np.dtype([
             ('claim_count',np.intp),
             ('arena',      self.meta['WORK_ARENA_TYPE']),
             ('pool' ,      np.intp),
@@ -965,7 +965,7 @@ class RuntimeSpec():
 
         # Generate and compile specializations of the specification for
         # each kind of runtime
-        for kind, shortname in RuntimeSpec.kinds: #,("Harmonize","hrm")]:
+        for kind, shortname in RuntimeSpec.kinds:
 
             self.fn[kind] = {}
 
@@ -1013,16 +1013,10 @@ class RuntimeSpec():
 
 
 
-    # Returns a HarmonizeRuntime instance based off of the program specification
-    def harmonize_fns(self):
-        return self.fn["Harmonize"]
+    def async_functions(self):
+        return self.fn["Async"]
 
-
-    # Returns an EventRuntime instance based off of the program specification, using
-    # buffers of size `io_capacity` to store intermediate data for each event type and
-    # halting work generation when the space left in any buffer is less than or equal to
-    # `load_margin`.
-    def event_fns(self):
+    def event_functions(self):
         return self.fn["Event"]
 
 
