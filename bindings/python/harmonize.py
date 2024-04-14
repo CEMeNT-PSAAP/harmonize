@@ -21,9 +21,8 @@ HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/include/harmonize.h"
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
 def native_cuda_compute_level():
-    query_cmd = "nvidia-smi --query-gpu compute_cap --format=csv,noheader"
-    completed = subprocess.run(query_cmd.split(),shell=False,check=True, capture_output=True)
-    output = completed.stdout.decode("utf-8").strip().replace(".","")
+    capability = numba.cuda.get_current_device().compute_capability
+    output = f"{capability[0]}{capability[1]}"
     return output
 
 
