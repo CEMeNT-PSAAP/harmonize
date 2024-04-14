@@ -1,10 +1,4 @@
-
-#use if on DGX or other OSU GPU systems
-#CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
-
-#otherwise, use this
 CUDA_NVCC	=	nvcc
-
 FLAGS		=	-std=c++11 --compiler-options -fdiagnostics-color=always -g
 
 HARMONIZE_PATH  =       ../../../../include/harmonize.h

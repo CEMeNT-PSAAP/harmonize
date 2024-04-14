@@ -1,11 +1,4 @@
-
-#use if on DGX or other OSU GPU systems
-#CUDA_NVCC	=	/usr/local/apps/cuda/cuda-10.1/bin/nvcc
-
-#otherwise, use this
 CUDA_NVCC	=	nvcc
-
-
 HARMONIZE_PATH  =       ../../../include/harmonize.h
 
 all: clz_hrm.exe clz_std.exe
