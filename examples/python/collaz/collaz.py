@@ -10,7 +10,9 @@ sys.path.append("../../../bindings/python")
 
 import harmonize as harm
 
-
+# On systems where there are multiple nvcc versions, a path to 
+# a particular one may be provieded (this path below is used on lassen)
+# harm.NVCC_PATH = "/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc" 
 
 mode = "async"
 
@@ -119,8 +121,13 @@ def async_exec_fn(state):
 
     iter_count = 65536
     async_exec_program(program,grid_size,iter_count)
+    step_count = 0
     while (not async_complete(program)):
+        if step_count > 4:
+            break
+        print(step_count)
         async_exec_program(program,grid_size,iter_count)
+        step_count += 1
     async_load_state(state,gpu_state)
 
     async_free_program(program)

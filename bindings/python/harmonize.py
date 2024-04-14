@@ -13,7 +13,7 @@ from templates import *
 import inspect
 import sys
 
-
+NVCC_PATH = "nvcc"
 HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))+"/../.."
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/include/harmonize.h"
 
@@ -27,7 +27,7 @@ def native_cuda_compute_level():
 
 
 
-DEBUG = True
+DEBUG = False #True
 
 # Injects `value` as the value of the global variable named `name` in the module
 # that defined the function `index` calls down the stack, from the perspective
@@ -828,6 +828,7 @@ class RuntimeSpec():
         dispatch_defs += load_state_template .format(state_struct=state_struct,suffix=suffix)
         dispatch_defs += store_state_template.format(state_struct=state_struct,suffix=suffix)
         dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
+        dispatch_defs += clear_flags_template.format(short_name=short_name,suffix=suffix)
 
 
         # Generate the dispatch functions for each async function
@@ -936,7 +937,7 @@ class RuntimeSpec():
                 ptx_file.close()
 
                 if dirty:
-                    dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
+                    dev_comp_cmd = f"{NVCC_PATH} -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
                     print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
@@ -1003,7 +1004,7 @@ class RuntimeSpec():
 
                 if touched:
                     RuntimeSpec.dirty = True
-                    dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                    dev_comp_cmd = f"{NVCC_PATH} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                     print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                 RuntimeSpec.obj_set.add(obj)
@@ -1112,9 +1113,9 @@ class RuntimeSpec():
         if touched or RuntimeSpec.dirty:
             link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+            dev_link_cmd = f"{NVCC_PATH} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
 
-            comp_cmd = f"nvcc -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+            comp_cmd = f"{NVCC_PATH} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
             print(dev_link_cmd)
             subprocess.run(dev_link_cmd.split(),shell=False,check=True)
@@ -1161,6 +1162,7 @@ class RuntimeSpec():
                 free_state    = ext_fn(f"free_state_{suffix}",    sig(void,vp))
 
                 complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
+                clear_flags   = ext_fn(f"clear_flags_{suffix}", sig(void,vp))
 
                 # Finally, compile the entry functions, saving it for later use
                 spec.fn[kind]['init_program']  = init_program
@@ -1181,4 +1183,5 @@ class RuntimeSpec():
                     return (result != 0)
 
                 spec.fn[kind]['complete']      = complete_wrapper
+                spec.fn[kind]['clear_flags']   = clear_flags
 

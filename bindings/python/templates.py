@@ -7,7 +7,7 @@ void init_program_{suffix}(
     size_t  grid_size
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    printf("\\n\\nINIT\\n\\n");
+    //printf("\\n\\nINIT\\n\\n");
     init<{short_name}>(*instance,grid_size);
     util::host::auto_throw(cudaDeviceSynchronize());
 }}
@@ -34,7 +34,7 @@ extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
     auto  state  = (typename {short_name}::DeviceState) device_arg;
     void *result = new {short_name}::Instance(io_size,state);
-    printf("prog:%p\\n",result);
+    //printf("prog:%p\\n",result);
     return result;
 }}
 """
@@ -44,7 +44,7 @@ extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t arena_size) {{
 	auto  state  = (typename {short_name}::DeviceState) device_arg;
 	void *result = new {short_name}::Instance(arena_size,state);
-    printf("prog:%p\\n",result);
+	//printf("prog:%p\\n",result);
 	return result;
 }}
 """
@@ -62,7 +62,7 @@ extern "C"
 void *alloc_state_{suffix}() {{
 	void *result = nullptr;
 	util::host::auto_throw(cudaMalloc(&result,sizeof({state_struct})));
-    printf("gpu_state:%p\\n",result);
+	//printf("gpu_state:%p\\n",result);
 	return result;
 }}
 """
@@ -71,8 +71,8 @@ load_state_template = """
 extern "C"
 void load_state_{suffix}(void *host_ptr, void *dev_ptr) {{
     util::host::auto_throw(cudaMemcpy (host_ptr,dev_ptr,sizeof({state_struct}),cudaMemcpyDeviceToHost));
-    printf("cpu_state:%p\\n",host_ptr);
-    printf("gpu_state:%p\\n", dev_ptr);
+    //printf("cpu_state:%p\\n",host_ptr);
+    //printf("gpu_state:%p\\n", dev_ptr);
     //size_t *data = (size_t*) host_ptr;
     //for(int i=0; i<10; i++) {{
     //    printf("%d,",data[i]);
@@ -105,7 +105,15 @@ extern "C"
 int complete_{suffix}(void *instance_ptr) {{
 	auto instance  = (typename {short_name}::Instance*) instance_ptr;
 	bool result = instance->complete();
-    return result;
+	return result;
+}}
+"""
+
+clear_flags_template = """
+extern "C"
+void clear_flags_{suffix}(void *instance_ptr) {{
+	auto instance  = (typename {short_name}::Instance*) instance_ptr;
+	instance->clear_flags();
 }}
 """
 
@@ -114,7 +122,7 @@ dispatch_template = """
 extern "C" __device__
 int dispatch_{fn}_{kind}_{suffix}(void*{params}){{
 	(({short_name}*)fn_param_1)->template {kind}<{fn_type}>({args});
-    //printf("{{ {fn} wrapper }}");
+	//printf("{{ {fn} wrapper }}");
 	return 0;
 }}
 """
@@ -143,9 +151,9 @@ accessor_template = """
 extern "C" __device__
 int access_{field}_{suffix}(void* result, void* prog){{
 	(*(void**)result) = {prefix}(({short_name}*)prog)->{field};
-    // printf("{{ {field} accessor }}");
-    // printf("{{prog %p}}",prog);
-    // printf("{{field%p}}",*(void**)result);
+	// printf("{{ {field} accessor }}");
+	// printf("{{prog %p}}",prog);
+	// printf("{{field%p}}",*(void**)result);
 	return 0;
 }}
 """

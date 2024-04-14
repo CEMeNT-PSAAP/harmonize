@@ -172,6 +172,10 @@ class EventProgram
 
 		}
 
+		__host__ void clear_flags(){
+
+		}
+
 	};
 
 

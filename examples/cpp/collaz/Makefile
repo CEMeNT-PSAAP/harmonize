@@ -1,5 +1,9 @@
-CUDA_NVCC	=	nvcc
-HARMONIZE_PATH  =       ../../../include/harmonize.h
+
+# Use this on lassen
+# CUDA_NVCC	= /usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc
+
+CUDA_NVCC       = nvcc
+HARMONIZE_PATH  = ../../../include/harmonize.h
 
 all: clz_hrm.exe clz_std.exe
 

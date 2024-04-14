@@ -367,11 +367,18 @@ class AsyncProgram
 
 		__host__ bool complete(){
 
-			unsigned int* base_cr_ptr = &(((StackType*)stack)->status_flags);
-			unsigned int  base_cr = 0;
-			cudaMemcpy(&base_cr,base_cr_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
+			unsigned int  flags = 0;
+			cudaMemcpy(&flags,flags_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
 			check_error();
-			return (base_cr == 0);
+			return ((flags & COMPLETION_FLAG) != 0);
+		}
+
+		__host__ void clear_flags(){
+			unsigned int  flags = 0;
+			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
+			cudaMemcpy(flags_ptr,&flags,sizeof(unsigned int),cudaMemcpyHostToDevice);
+			check_error();
 		}
 
 	};
@@ -2190,15 +2197,30 @@ class AsyncProgram
 		end_time(1);
 
 		beg_time(5);
-		while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
-			_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
-			if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
-				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
-				_grp_ctx.busy = true;
-				//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
+
+		if (_grp_ctx.main_queue.full_head == STASH_SIZE){
+
+
+			#ifdef EAGER_FILLING
+			const PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
+			if( ((_dev_ctx.stack->frames[0].children_residents.get_right()) ) > GLOBAL_WORK_THRESHOLD ) {
+				fill_stash(STASH_HIGH_WATER,false);
+			} else {
+			#endif
+				while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
+					_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
+					if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
+						unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
+						_grp_ctx.busy = true;
+						//printf("{made self busy %d depth_live=(%d,%d)}",blockIdx.x,(depth_live & 0xFFFF0000)>>16u, depth_live & 0xFFFF);
+					}
+					__syncwarp();
+				}
+			#ifdef EAGER_FILLING
 			}
-			__syncwarp();
-		}
+			#endif
+		}		
+
 		end_time(5);
 
 		#ifdef ASYNC_LOADS
