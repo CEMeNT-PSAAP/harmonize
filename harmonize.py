@@ -1,6 +1,6 @@
 import numpy as np
 from os.path import getmtime, exists, dirname, abspath
-from os      import makedirs, getcwd
+from os      import makedirs, getcwd, path
 from numba import njit, cuda
 import numba
 import re
@@ -464,7 +464,7 @@ class RuntimeSpec():
     compute_level = native_cuda_compute_level()
     cache_path = "__ptxcache__/"
     debug_flag = " -g "
-
+    dirty      = False
 
     def __init__(
             self,
@@ -900,18 +900,50 @@ class RuntimeSpec():
             base_name = fn.__name__
             base_name = base_name + "_" + suffix
             base_name = cache_path + base_name
-            ptx_file  = open(base_name+".ptx",mode='w')
-            ptx_text  = extern_device_ptx(fn,self.type_map,suffix)
-            for term in rep_list:
-                ptx_text = re.sub( \
-                    f'(?P<before>[^a-zA-Z0-9_])(?P<name>{term})(?P<after>[^a-zA-Z0-9_])', \
-                    f"\g<before>\g<name>_{suffix}\g<after>", \
-                    ptx_text \
-                )
-            ptx_file.write(ptx_text)
-            # Record the path of the generated ptx
-            self.fn_def_list.append(base_name)
-            ptx_file.close()
+
+            ptx_path = f"{base_name}.ptx"
+            obj_path = f"{base_name}.o"
+            def_path = inspect.getfile(fn)
+
+            touched = False
+            if not path.isfile(def_path):
+                touched = True
+            elif not path.isfile(ptx_path):
+                touched = True
+            elif getmtime(def_path) > getmtime(ptx_path):
+                touched = True
+
+            if touched:
+
+                ptx_text  = extern_device_ptx(fn,self.type_map,suffix)
+                for term in rep_list:
+                    ptx_text = re.sub( \
+                        f'(?P<before>[^a-zA-Z0-9_])(?P<name>{term})(?P<after>[^a-zA-Z0-9_])', \
+                        f"\g<before>\g<name>_{suffix}\g<after>", \
+                        ptx_text \
+                    )
+                ptx_file  = open(ptx_path,mode='a+')
+                ptx_file.seek(0)
+                old_text  = ptx_file.read()
+
+                dirty = False
+                if old_text != ptx_text:
+                    dirty = True
+                    RuntimeSpec.dirty = True
+
+                if touched or dirty:
+                    ptx_file.seek(0)
+                    ptx_file.truncate()
+                    ptx_file.write(ptx_text)
+                ptx_file.close()
+
+                if dirty:
+                    dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
+                    print(dev_comp_cmd)
+                    subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+            # Record the path of the generated (or pre-existing) object
+            RuntimeSpec.obj_set.add(obj_path)
 
 
     # Generates the CUDA/C++ code specifying the structure of the program, for later
@@ -950,26 +982,33 @@ class RuntimeSpec():
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
             # Save the code to an appropriately named file
             spec_filename = RuntimeSpec.cache_path+suffix
-            spec_file = open(spec_filename+".cu",mode='w')
-            spec_file.write(base_code+spec_code)
+            spec_file = open(spec_filename+".cu",mode='a+')
+            spec_file.seek(0)
+            old_text = spec_file.read()
+            new_text = base_code + spec_code
+            if old_text != new_text:
+                RuntimeSpec.dirty = True
+                spec_file.seek(0)
+                spec_file.truncate()
+                spec_file.write(new_text)
             spec_file.close()
 
-
-            #print(self.fn_def_list)
-
-
-            for path in self.fn_def_list:
-                dev_comp_cmd = f"nvcc -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {path}.ptx -o {path}.o {RuntimeSpec.debug_flag}"
-                print(dev_comp_cmd)
-                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
-                RuntimeSpec.obj_set.add(f"{path}.o")
 
             source_list  = [ (f"{HARMONIZE_ROOT_DIR}/util/{name}.cpp", f"{RuntimeSpec.cache_path}util_{name}.o") for name in HARMONIZE_UTIL ]
             source_list += [ (f"{spec_filename}.cu", f"{spec_filename}.o") ]
             for (source,obj) in source_list:
-                dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
-                print(dev_comp_cmd)
-                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+                touched = False
+                if not path.isfile(obj):
+                    touched = True
+                elif getmtime(source) > getmtime(obj):
+                    touched = True
+
+                if touched:
+                    RuntimeSpec.dirty = True
+                    dev_comp_cmd = f"nvcc -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                    print(dev_comp_cmd)
+                    subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                 RuntimeSpec.obj_set.add(obj)
 
 
@@ -1070,19 +1109,31 @@ class RuntimeSpec():
     @staticmethod
     def bind_and_load():
 
-        link_list = [ obj for obj in  RuntimeSpec.obj_set ]
+        dev_path = f"{RuntimeSpec.cache_path}/harmonize_device.o"
+        so_path  = f"{RuntimeSpec.cache_path}/harmonize.so"
+        touched = False
 
-        dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {RuntimeSpec.cache_path}harmonize_device.o --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+        if not path.isfile(dev_path):
+            touched = True
+        elif not path.isfile(so_path):
+            touched = True
 
-        comp_cmd = f"nvcc -shared {' '.join(link_list)} {RuntimeSpec.cache_path}harmonize_device.o -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {RuntimeSpec.cache_path}harmonize.so {RuntimeSpec.debug_flag}"
+        if touched or RuntimeSpec.dirty:
+            link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-        print(dev_link_cmd)
-        subprocess.run(dev_link_cmd.split(),shell=False,check=True)
-        print(comp_cmd)
-        subprocess.run(comp_cmd.split(),shell=False,check=True)
-        path = abspath(f"{RuntimeSpec.cache_path}/harmonize.so")
+            dev_link_cmd = f"nvcc -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+
+            comp_cmd = f"nvcc -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+
+            print(dev_link_cmd)
+            subprocess.run(dev_link_cmd.split(),shell=False,check=True)
+            print(comp_cmd)
+            subprocess.run(comp_cmd.split(),shell=False,check=True)
+
+
+        abs_so_path = abspath(so_path)
         #print(path)
-        binding.load_library_permanently(path)
+        binding.load_library_permanently(abs_so_path)
 
         for name, spec in RuntimeSpec.registry.items():
             for kind, shortname in RuntimeSpec.kinds:

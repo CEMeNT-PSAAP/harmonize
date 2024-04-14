@@ -2,6 +2,7 @@ import numpy as np
 from numba import cuda, njit
 import numba
 from numba import config
+import time
 
 import sys
 
@@ -56,6 +57,8 @@ def initialize(prog: numba.uintp):
 def finalize(prog: numba.uintp):
     pass
 
+
+
 def make_work(prog: numba.uintp) -> numba.boolean:
     step_max = 4
     old = numba.cuda.atomic.add(device(prog)['val'],0,step_max)
@@ -93,70 +96,70 @@ harm.RuntimeSpec.bind_and_load()
 
 fns = collaz_spec.harmonize_fns()
 
-alloc_state   = fns["alloc_state"]
-free_state    = fns["free_state"]
-alloc_program = fns["alloc_program"]
-free_program  = fns["free_program"]
-load_state    = fns["load_state"]
-store_state   = fns["store_state"]
-init_program  = fns["init_program"]
-exec_program  = fns["exec_program"]
-complete      = fns["complete"]
+async_alloc_state   = fns["alloc_state"]
+async_free_state    = fns["free_state"]
+async_alloc_program = fns["alloc_program"]
+async_free_program  = fns["free_program"]
+async_load_state    = fns["load_state"]
+async_store_state   = fns["store_state"]
+async_init_program  = fns["init_program"]
+async_exec_program  = fns["exec_program"]
+async_complete      = fns["complete"]
 
 @njit
 def async_exec_fn(state):
-    arena_size = 0x100000
+    arena_size = 0x10000
 
-    gpu_state  = alloc_state()
-    program    = alloc_program(gpu_state,arena_size)
+    gpu_state  = async_alloc_state()
+    program    = async_alloc_program(gpu_state,arena_size)
 
     grid_size  = 4096
-    store_state(gpu_state,state)
-    init_program(program,grid_size)
+    async_store_state(gpu_state,state)
+    async_init_program(program,grid_size)
 
     iter_count = 65536
-    exec_program(program,grid_size,iter_count)
-    while (not complete(program)):
-        exec_program(program,grid_size,iter_count)
-    load_state(state,gpu_state)
+    async_exec_program(program,grid_size,iter_count)
+    while (not async_complete(program)):
+        async_exec_program(program,grid_size,iter_count)
+    async_load_state(state,gpu_state)
 
-    free_program(program)
-    free_state(gpu_state)
+    async_free_program(program)
+    async_free_state(gpu_state)
 
 
 
 fns = collaz_spec.event_fns()
 
-alloc_state   = fns["alloc_state"]
-free_state    = fns["free_state"]
-alloc_program = fns["alloc_program"]
-free_program  = fns["free_program"]
-load_state    = fns["load_state"]
-store_state   = fns["store_state"]
-init_program  = fns["init_program"]
-exec_program  = fns["exec_program"]
-complete      = fns["complete"]
+event_alloc_state   = fns["alloc_state"]
+event_free_state    = fns["free_state"]
+event_alloc_program = fns["alloc_program"]
+event_free_program  = fns["free_program"]
+event_load_state    = fns["load_state"]
+event_store_state   = fns["store_state"]
+event_init_program  = fns["init_program"]
+event_exec_program  = fns["exec_program"]
+event_complete      = fns["complete"]
 
 @njit
 def event_exec_fn(state):
     io_size = 0x10000
 
-    gpu_state  = alloc_state()
-    program    = alloc_program(gpu_state,io_size)
+    gpu_state  = event_alloc_state()
+    program    = event_alloc_program(gpu_state,io_size)
 
     grid_size  = 4096
-    store_state(gpu_state,state)
-    init_program(program,grid_size)
+    event_store_state(gpu_state,state)
+    event_init_program(program,grid_size)
 
     chunk_size = 1
-    exec_program(program,grid_size,chunk_size)
-    while (not complete(program)) :
-        exec_program(program,grid_size,chunk_size)
+    event_exec_program(program,grid_size,chunk_size)
+    while (not event_complete(program)) :
+        event_exec_program(program,grid_size,chunk_size)
 
-    load_state(state,gpu_state)
+    event_load_state(state,gpu_state)
 
-    free_program(program)
-    free_state(gpu_state)
+    event_free_program(program)
+    event_free_state(gpu_state)
 
 
 @njit
@@ -187,19 +190,26 @@ def collaz_check(state):
 
 
 @njit
-def run():
+def async_run():
 
     state = np.zeros((1,),dev_state_type)
     async_exec_fn(state[0])
     print("Finished async GPU Pass")
     collaz_check(state)
 
+@njit
+def event_run():
     state = np.zeros((1,),dev_state_type)
     event_exec_fn(state[0])
     print("Finished event GPU Pass")
     collaz_check(state)
 
 
+t0 = time.time()
+async_run()
+t1 = time.time()
+event_run()
+t2 = time.time()
 
-run()
-
+print("Async runtime: ",t1-t0)
+print("Event runtime: ",t2-t1)
