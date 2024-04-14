@@ -14,3 +14,7 @@ test_problems/simple_neutron/neut_evt
 __pycache__/
 __ptxcache__/
 
+build/
+
+CMakeLists.txt
+
