@@ -1109,8 +1109,8 @@ class RuntimeSpec():
     @staticmethod
     def bind_and_load():
 
-        dev_path = f"{RuntimeSpec.cache_path}/harmonize_device.o"
-        so_path  = f"{RuntimeSpec.cache_path}/harmonize.so"
+        dev_path = f"{RuntimeSpec.cache_path}harmonize_device.o"
+        so_path  = f"{RuntimeSpec.cache_path}harmonize.so"
         touched = False
 
         if not path.isfile(dev_path):
