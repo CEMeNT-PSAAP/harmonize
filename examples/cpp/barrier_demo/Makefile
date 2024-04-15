@@ -1,3 +1,6 @@
+# Use this on lassen
+# CUDA_NVCC	= /usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc
+
 CUDA_NVCC	=	nvcc
 FLAGS		=	-std=c++11 --compiler-options -fdiagnostics-color=always -g
 HARMONIZE_PATH  = ../../../include/harmonize.h
