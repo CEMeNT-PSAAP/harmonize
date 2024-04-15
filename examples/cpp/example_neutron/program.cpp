@@ -376,7 +376,7 @@ int main(int argc, char *argv[]){
 		shape.y_max  = y_max;
 		shape.x_min  = -dev_state.pos_limit;
 		shape.x_max  =  dev_state.pos_limit;
-		shape.width  = 100;
+		shape.width  = 50;
 		shape.height = 16;
 
 		util::cli::cli_graph(result.data(),elem_count,shape,util::cli::Block2x2Fill);

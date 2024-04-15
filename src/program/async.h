@@ -2374,13 +2374,6 @@ class AsyncProgram
 
 				if( (!halted_early) && (!work_left) ){
 					set_flags(COMPLETION_FLAG);
-				} else {
-					if (halted_early) {
-						printf("{halted_early!}");
-					}
-					if (work_left) {
-						printf("{work_left!: %d}",depth_live);
-					}
 				}
 
 				//printf("{depth_live is (%d,%d)}",(depth_live&0xFFFF0000)>>16,depth_live&0xFFFF );
