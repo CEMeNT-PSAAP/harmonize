@@ -1097,7 +1097,7 @@ class AsyncProgram
 			} else {
 				PromiseCountPair neg_delta = -((PromiseCountPair) (-promise_delta));
 				old_count = atomicAdd(&dest.children_residents.data,neg_delta);
-				new_count = old_count - neg_delta;
+				new_count = old_count + neg_delta;
 				if(old_count < new_count){
 					rc_printf("\n\nUNDERFLOW\n\n");
 				}
@@ -2219,7 +2219,7 @@ class AsyncProgram
 			#ifdef EAGER_FILLING
 			}
 			#endif
-		}		
+		}
 
 		end_time(5);
 
@@ -2364,7 +2364,6 @@ class AsyncProgram
 		if(threadIdx.x == 0){
 			unsigned int checkout_index = atomicAdd(&(_dev_ctx.stack->checkout),1);
 			__threadfence();
-			//printf("{%d}",checkout_index);
 			if( checkout_index == (gridDim.x-1) ){
 				//printf("{Final}\n");
 				atomicExch(&(_dev_ctx.stack->checkout),0);
@@ -2375,6 +2374,13 @@ class AsyncProgram
 
 				if( (!halted_early) && (!work_left) ){
 					set_flags(COMPLETION_FLAG);
+				} else {
+					if (halted_early) {
+						printf("{halted_early!}");
+					}
+					if (work_left) {
+						printf("{work_left!: %d}",depth_live);
+					}
 				}
 
 				//printf("{depth_live is (%d,%d)}",(depth_live&0xFFFF0000)>>16,depth_live&0xFFFF );
