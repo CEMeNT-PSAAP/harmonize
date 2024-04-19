@@ -14,8 +14,8 @@ import inspect
 import sys
 
 NVCC_PATH = "nvcc"
-HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))+"/../.."
-HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/include/harmonize.h"
+HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))+"/../"
+HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"harmonize.h"
 
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This

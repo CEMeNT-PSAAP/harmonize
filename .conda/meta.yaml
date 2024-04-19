@@ -1,0 +1,36 @@
+package:
+  name: harmonize-async
+  version: "0.0.1"
+
+source:
+  git_url: git@github.com:CEMeNT-PSAAP/harmonize.git
+  git_rev: "0.0.1"
+  git_depth: 1
+
+requirements:
+  build:
+    - python
+    - setuptools
+    - wheel
+  run:
+    - gxx
+    - python>=3.11
+    - numba>=0.58
+    - numpy
+
+test:
+  imports:
+    - harmonize-async
+
+about:
+  home: https://github.com/CEMeNT-PSAAP/harmonize
+  license: BSD 3-Clause
+  summary: 'An async execution framework for GPU.'
+
+outputs:
+  - name : harmonize-async
+  - type : wheel
+
+build:
+  script :
+
