@@ -1,0 +1,38 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'harmonize'
+message: >-
+  An a-synchronous GPU scheduler for deceasing thread divergence on GPU
+type: software
+authors:
+  - name: >-
+      Center for Exascale Monte Carlo Neutron Transport
+      (CEMeNT)
+    website: 'https://cement-psaap.github.io/'
+  - given-names: Braxton
+    family-names: Cuneo
+    email: bcuneo@seattleu.edu
+    affiliation: Seattle University
+    orcid: 'https://orcid.org/0000-0002-6493-0990'
+  - given-names: Joanna Piper
+    family-names: Morgan
+    email: morgajoa@oregonstate.edu
+    affiliation: Oregon State University
+    orcid: 'https://orcid.org/0000-0003-1379-5431'
+identifiers:
+  - type: doi
+    value: 10.1145/3626957
+    description: Divergence Reduction in Monte Carlo Neutron Transport with On-GPU Asynchronous Scheduling
+repository-code: 'https://github.com/CEMeNT-PSAAP/harmonize'
+abstract: >-
+  An a-synchronous GPU scheduler for deceasing thread divergence on GPU
+keywords:
+  - gpu
+  - cuda
+  - hip
+  - scheduler 
+license: BSD-3-Clause
+version: 0.0.1
+date-released: '2024-04-14'

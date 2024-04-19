@@ -1,4 +1,3 @@
-
 # String template for the program initialization wrapper
 init_template = """
 extern "C"
@@ -157,6 +156,3 @@ int access_{field}_{suffix}(void* result, void* prog){{
 	return 0;
 }}
 """
-
-
-
