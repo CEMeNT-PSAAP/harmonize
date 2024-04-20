@@ -6,7 +6,6 @@ import time
 
 import sys
 
-sys.path.append("../../../bindings/python")
 
 import harmonize as harm
 

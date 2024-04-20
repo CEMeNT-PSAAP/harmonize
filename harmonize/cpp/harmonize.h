@@ -1,4 +1,4 @@
 
-#include "../src/program/mod.h"
-#include "../src/sync/mod.h"
+#include "program/mod.h"
+#include "sync/mod.h"
 

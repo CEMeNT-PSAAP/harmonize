@@ -15,10 +15,11 @@ requirements:
     - python
     - setuptools
     - wheel
+    - pip
   run:
     - gxx
     - python>=3.11
-    - numba>=0.58
+    - numba>=0.58.0
     - numpy
 
 test:

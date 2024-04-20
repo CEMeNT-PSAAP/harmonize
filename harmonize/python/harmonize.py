@@ -18,7 +18,7 @@ from llvmlite import binding
 from time import sleep
 
 # abs import
-from templates import *
+from .templates import *
 
 import inspect
 import sys
@@ -36,8 +36,8 @@ def native_cuda_compute_level():
     return output
 
 
-DEBUG = False  # True
-
+DEBUG = False
+VERBOSE = False
 
 # Injects `value` as the value of the global variable named `name` in the module
 # that defined the function `index` calls down the stack, from the perspective
@@ -1067,7 +1067,8 @@ class RuntimeSpec:
 
                 if dirty:
                     dev_comp_cmd = f"{NVCC_PATH} -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
-                    print(dev_comp_cmd)
+                    if VERBOSE:
+                        print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(), shell=False, check=True)
 
             # Record the path of the generated (or pre-existing) object
@@ -1132,7 +1133,8 @@ class RuntimeSpec:
                 if touched:
                     RuntimeSpec.dirty = True
                     dev_comp_cmd = f"{NVCC_PATH} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
-                    print(dev_comp_cmd)
+                    if VERBOSE:
+                        print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(), shell=False, check=True)
                 RuntimeSpec.obj_set.add(obj)
 
@@ -1235,9 +1237,11 @@ class RuntimeSpec:
 
             comp_cmd = f"{NVCC_PATH} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
-            print(dev_link_cmd)
+            if VERBOSE:
+                print(dev_link_cmd)
             subprocess.run(dev_link_cmd.split(), shell=False, check=True)
-            print(comp_cmd)
+            if VERBOSE:
+                print(comp_cmd)
             subprocess.run(comp_cmd.split(), shell=False, check=True)
 
         abs_so_path = abspath(so_path)
