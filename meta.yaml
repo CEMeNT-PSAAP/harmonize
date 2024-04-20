@@ -41,5 +41,5 @@ outputs:
 
 build:
   number : 0
-  script: conda list; pip list; pip install hatchling; pip install . -vv
+  script: conda list; conda install hatchling; conda list; pip list; pip install hatchling; pip list; pip install . -vv
 
