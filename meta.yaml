@@ -39,5 +39,5 @@ outputs:
 
 build:
   number : 0
-  script: pip install . -vv
+  script: conda list; pip list; pip install . -vv
 
