@@ -15,8 +15,8 @@ requirements:
     - setuptools
     - wheel
     - pip
-    - hatchling
   run:
+    - hatchling
     - gxx
     - python>=3.11
     - numba>=0.58.0
