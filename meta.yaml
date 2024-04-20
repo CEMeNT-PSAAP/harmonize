@@ -14,8 +14,8 @@ requirements:
     - python
     - setuptools
     - wheel
-    - pip
   run:
+    - pip
     - hatchling
     - gxx
     - python>=3.11
