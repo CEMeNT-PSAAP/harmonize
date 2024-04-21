@@ -1,0 +1,44 @@
+[build-system]
+
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+
+[project]
+name = "harmonize"
+version = "0.0.1"
+authors = [
+  { name="Braxton Cuneo", email="bcuneo@seattleu.edu" },
+  { name="Joanna Morgan", email="morgajoa@oregonstate.edu" },
+]
+
+maintainers = [
+    { name="Braxton Cuneo", email="bcuneo@seattleu.edu" },
+]
+
+description = "Hamronize, an async GPU scheduler"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+keywords = ["HPC", "GPU"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    'License :: OSI Approved :: BSD License',
+    'Intended Audience :: Science/Research',
+    'Typing :: Typed',
+    'Natural Language :: English',
+    'Operating System :: Unix',
+]
+
+dependencies = [
+    "numba>=0.58.0",
+    "numpy",
+    "colorama",
+    "black",
+]
+
+[project.urls]
+Repository = "https://github.com/CEMeNT-PSAAP/harmonize"
+Issues = "https://github.com/CEMeNT-PSAAP/harmonize/issues"
