@@ -11,8 +11,6 @@ source:
 #  git_rev: "v0.0.1"
 
 requirements:
-  host:
-    - python>=3.11,<3.11.8
   build:
     - python>=3.11,<3.11.8
     - setuptools
@@ -44,5 +42,6 @@ outputs:
 
 build:
   number : 0
-  script: conda install -y hatch; conda info; {{ PYTHON }} -m pip list; {{ PYTHON }} -m pip install . -vv
+  script:
+  #conda install -y hatch; conda info; {{ PYTHON }} -m pip list; {{ PYTHON }} -m pip install . -vv
 
