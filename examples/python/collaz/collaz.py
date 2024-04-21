@@ -10,7 +10,8 @@ import harmonize as harm
 
 # On systems where there are multiple nvcc versions, a path to
 # a particular one may be provided (this path below is used on lassen)
-# harm.NVCC_PATH = "/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc"
+#harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
+
 
 mode = "async"
 

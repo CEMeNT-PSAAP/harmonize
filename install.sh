@@ -1,2 +1,3 @@
-conda install -y -c conda-forge gxx python=3.11 numba install numpy upgrade numba
+conda install -c conda-forge gxx python=3.11 numba numpy
+conda upgrade numba -y
 pip install -e .

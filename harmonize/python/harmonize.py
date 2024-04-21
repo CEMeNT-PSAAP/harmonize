@@ -20,6 +20,19 @@ HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
 DEBUG   = False
 VERBOSE = False
 
+def set_nvcc_path(path):
+    global NVCC_PATH
+    NVCC_PATH = path
+
+def set_debug(debug):
+    global DEBUG
+    DEBUG = debug
+
+def set_verbose(verbose):
+    global VERBOSE
+    VERBOSE = verbose
+
+
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
 def native_cuda_compute_level():
