@@ -44,5 +44,5 @@ outputs:
 
 build:
   number : 0
-  script: {{ PYTHON }} -m conda list; {{ PYTHON }} -m conda install -y hatch; {{ PYTHON }} -m conda info; {{ PYTHON }} -m pip list; {{ PYTHON }} -m pip install . -vv
+  script: conda install -y hatch; conda info; {{ PYTHON }} -m pip list; {{ PYTHON }} -m pip install . -vv
 
