@@ -19,7 +19,7 @@ maintainers = [
 
 description = "Hamronize, an async GPU scheduler"
 readme = "README.md"
-requires-python = ">=3.9, <=3.11.10"
+requires-python = ">=3.9"
 license = {file = "LICENSE"}
 keywords = ["HPC", "GPU"]
 classifiers = [
