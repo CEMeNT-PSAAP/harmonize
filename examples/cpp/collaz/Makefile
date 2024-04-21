@@ -3,7 +3,7 @@
 # CUDA_NVCC	= /usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc
 
 CUDA_NVCC       = nvcc
-HARMONIZE_PATH  = ../../../include/harmonize.h
+HARMONIZE_PATH  = ../../../harmonize/cpp/harmonize.h
 
 all: clz_hrm.exe clz_std.exe
 

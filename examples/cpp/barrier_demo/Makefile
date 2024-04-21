@@ -3,7 +3,7 @@
 
 CUDA_NVCC	=	nvcc
 FLAGS		=	-std=c++11 --compiler-options -fdiagnostics-color=always -g
-HARMONIZE_PATH  = ../../../include/harmonize.h
+HARMONIZE_PATH  = ../../../harmonize/cpp/harmonize.h
 
 
 ifndef ARCH

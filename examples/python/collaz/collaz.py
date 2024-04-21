@@ -6,8 +6,6 @@ import time
 
 import sys
 
-sys.path.append("../../../bindings/python")
-
 import harmonize as harm
 
 # On systems where there are multiple nvcc versions, a path to
