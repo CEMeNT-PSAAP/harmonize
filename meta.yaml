@@ -6,21 +6,24 @@ package:
   version: {{ version }}
 
 source:
-  git_url: git@github.com:CEMeNT-PSAAP/harmonize.git
-  git_rev: "v0.0.1"
+  path: .
+#  git_url: git@github.com:CEMeNT-PSAAP/harmonize.git
+#  git_rev: "v0.0.1"
 
 requirements:
+  host:
+    - python>=3.11,<3.11.8
   build:
-    - python
+    - python>=3.11,<3.11.8
     - setuptools
     - wheel
     - pip
-    - hatchling
+    - hatch
   run:
     - pip
-    - hatchling
+    - hatch
     - gxx
-    - python>=3.11
+    - python>=3.11,<3.11.8
     - numba>=0.58.0
     - numpy
 
@@ -41,5 +44,5 @@ outputs:
 
 build:
   number : 0
-  script: conda list; conda install hatchling; conda list; pip list; pip install hatchling; pip list; pip install . -vv
+  script: {{ PYTHON }} -m conda list; {{ PYTHON }} -m conda install -y hatch; {{ PYTHON }} -m conda info; {{ PYTHON }} -m pip list; {{ PYTHON }} -m pip install . -vv
 
