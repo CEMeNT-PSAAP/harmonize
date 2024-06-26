@@ -2,10 +2,6 @@
 using namespace util;
 
 
-
-// Define a 'collaz' struct to hold the arguments for the even and odd async functions
-struct Collaz{ unsigned int step; unsigned int original; unsigned long long int val; };
-
 struct Even;
 struct Odd;
 
@@ -23,6 +19,7 @@ struct Even {
 			return;
 		}
 
+		atomicAdd(&prog.group.step_counter,1);
 		step += 1;
 		val  /= 2;
 
@@ -50,6 +47,7 @@ struct Odd{
 			return;
 		}
 
+		atomicAdd(&prog.group.step_counter,1);
 		step += 1;
 		val  *= 3;
 		val  += 1;
@@ -73,12 +71,16 @@ struct MyDeviceState{
 };
 
 
+struct MyGroupState {
+	int step_counter;
+};
+
 
 struct MyProgramSpec {
 
-
 	typedef OpUnion<Even,Odd>       OpSet;
 	typedef     MyDeviceState DeviceState;
+	typedef     MyGroupState   GroupState;
 
 	static const size_t STASH_SIZE =   16;
 	static const size_t FRAME_SIZE = 8191;
@@ -98,7 +100,8 @@ struct MyProgramSpec {
 	*/
 	template<typename PROGRAM>
 	__device__ static void initialize(PROGRAM prog){
-
+		prog.group.step_counter = 0;
+		__syncthreads();
 	}
 
 	/*
@@ -115,8 +118,9 @@ struct MyProgramSpec {
 	*/
 	template<typename PROGRAM>
 	__device__ static void finalize(PROGRAM prog){
-
-
+		if ( util::current_leader() ) {
+			printf("(Work group %d : count is %d)",blockIdx.x,prog.group.step_counter);
+		}
 	}
 
 

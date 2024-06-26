@@ -2207,7 +2207,7 @@ class AsyncProgram
 				fill_stash(STASH_HIGH_WATER,false);
 			} else {
 			#endif
-				while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
+				if ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
 					_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
 					if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
 						unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
