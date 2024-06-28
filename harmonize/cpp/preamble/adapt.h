@@ -1,4 +1,6 @@
-#pragma once
+
+#ifndef HARMONIZE_ADAPT
+#define HARMONIZE_ADAPT
 
 
 namespace adapt {
@@ -10,14 +12,14 @@ namespace adapt {
 
     size_t const WARP_SIZE = 32;
 
-    #define CUDA_TYPE_ALIAS(thing) using gpurt ## thing = cuda ## thing;
+    #define CUDA_TYPE_ALIAS(thing) using rt ## thing = cuda ## thing;
         CUDA_TYPE_ALIAS( Error_t );
         CUDA_TYPE_ALIAS( Event_t );
         CUDA_TYPE_ALIAS( Stream_t );
     #undef CUDA_TYPE_ALIAS
 
 
-    #define CUDA_CONST_ALIAS(thing) auto const gpurt ## thing = cuda ## thing;
+    #define CUDA_CONST_ALIAS(thing) auto const rt ## thing = cuda ## thing;
         CUDA_CONST_ALIAS( Success );
         CUDA_CONST_ALIAS( MemcpyDeviceToDevice );
         CUDA_CONST_ALIAS( MemcpyDeviceToHost );
@@ -28,7 +30,7 @@ namespace adapt {
 
     #define CUDA_FN_ALIAS(thing)                               \
     template<typename... ARGS>                                 \
-    auto gpurt ## thing (ARGS... args)                         \
+    auto rt ## thing (ARGS... args)                         \
         -> decltype(cuda ## thing (std::declval<ARGS>()...))   \
     {                                                          \
         return cuda ## thing(args...);                         \
@@ -77,14 +79,14 @@ namespace adapt {
 
     size_t const WARP_SIZE = 64;
 
-    #define HIP_TYPE_ALIAS(thing) using gpurt ## thing = hip ## thing;
+    #define HIP_TYPE_ALIAS(thing) using rt ## thing = hip ## thing;
         HIP_TYPE_ALIAS( Error_t );
         HIP_TYPE_ALIAS( Event_t );
         HIP_TYPE_ALIAS( Stream_t );
     #undef HIP_TYPE_ALIAS
 
 
-    #define HIP_CONST_ALIAS(thing) auto const gpurt ## thing = hip ## thing;
+    #define HIP_CONST_ALIAS(thing) auto const rt ## thing = hip ## thing;
         HIP_CONST_ALIAS( Success );
         HIP_CONST_ALIAS( MemcpyDeviceToDevice );
         HIP_CONST_ALIAS( MemcpyDeviceToHost );
@@ -95,7 +97,7 @@ namespace adapt {
 
     #define HIP_FN_ALIAS(thing)                                \
     template<typename... ARGS>                                 \
-    auto gpurt ## thing (ARGS... args)                         \
+    auto rt ## thing (ARGS... args)                         \
         -> decltype(hip ## thing (std::declval<ARGS>()...))    \
     {                                                          \
         return hip ## thing(args...);                          \
@@ -122,4 +124,7 @@ namespace adapt {
 #endif
 
 };
+
+
+#endif
 

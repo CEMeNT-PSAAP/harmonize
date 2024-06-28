@@ -216,7 +216,7 @@ class AsyncProgram
 
 		#ifdef ASYNC_LOADS
 		RemapQueue			load_queue;
-		cuda::barrier<cuda::thread_scope_system> load_barrier;
+		adapt::rt::barrier<adapt::rt::thread_scope_system> load_barrier;
 		#endif
 
 		unsigned char			link_stash_count; // Number of device-space links stored
@@ -328,7 +328,7 @@ class AsyncProgram
 			#endif
 		{
 			#ifdef HRM_TIME
-			cudaMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
+			adapt::rtMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
 			#endif
 		}
 
@@ -369,7 +369,7 @@ class AsyncProgram
 
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  flags = 0;
-			cudaMemcpy(&flags,flags_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			adapt::rtMemcpy(&flags,flags_ptr,sizeof(unsigned int),adapt::rtMemcpyDeviceToHost);
 			check_error();
 			return ((flags & COMPLETION_FLAG) != 0);
 		}
@@ -377,7 +377,7 @@ class AsyncProgram
 		__host__ void clear_flags(){
 			unsigned int  flags = 0;
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
-			cudaMemcpy(flags_ptr,&flags,sizeof(unsigned int),cudaMemcpyHostToDevice);
+			adapt::rtMemcpy(flags_ptr,&flags,sizeof(unsigned int),adapt::rtMemcpyHostToDevice);
 			check_error();
 		}
 
@@ -2552,10 +2552,10 @@ class AsyncProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		adapt::rtError_t status = adapt::rtGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != adapt::rtSuccess){
+			const char* err_str = adapt::rtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -2571,7 +2571,7 @@ class AsyncProgram
 	 static void remote_call(Instance &instance, unsigned char func_id, PromiseUnionType promise){
 
 		LinkType* call_buffer;
-		cudaMalloc( (void**) &call_buffer, sizeof(LinkType) );
+		adapt::rtMalloc( (void**) &call_buffer, sizeof(LinkType) );
 
 		LinkType host_link;
 		host_link.count		= 1;
@@ -2581,14 +2581,14 @@ class AsyncProgram
 		host_link.meta_data.data= 0;
 		host_link.data.data[0]	= promise;
 
-		cudaMemcpy(call_buffer,&host_link,sizeof(LinkType),cudaMemcpyHostToDevice);
+		adapt::rtMemcpy(call_buffer,&host_link,sizeof(LinkType),adapt::rtMemcpyHostToDevice);
 
 
 		push_runtime<<<1,WORK_GROUP_SIZE>>>(instance.to_context(),call_buffer,1);
 
 		check_error();
 
-		cudaFree(call_buffer);
+		adapt::rtFree(call_buffer);
 
 	}
 
@@ -2793,9 +2793,9 @@ class AsyncProgram
 
 		LinkAdrType link_total = 0;
 
-		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,cudaMemcpyDeviceToHost);
+		adapt::rtMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,adapt::rtMemcpyDeviceToHost);
+		adapt::rtMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,adapt::rtMemcpyDeviceToHost);
+		adapt::rtMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,adapt::rtMemcpyDeviceToHost);
 
 
 		for(AdrType i = 0; i < runtime.arena_size; i++){

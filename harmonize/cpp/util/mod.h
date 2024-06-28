@@ -86,26 +86,26 @@ static __device__ unsigned int random_uint(unsigned int& rand_state){
 
 struct Stopwatch {
 
-	cudaEvent_t beg;
-	cudaEvent_t end;
+	adapt::rtEvent_t beg;
+	adapt::rtEvent_t end;
 	float duration;
 
 	Stopwatch() {
 
-		cudaError_t beg_stat = cudaEventCreate( &beg );
-		cudaError_t end_stat = cudaEventCreate( &end );
+		adapt::rtError_t beg_stat = adapt::rtEventCreate( &beg );
+		adapt::rtError_t end_stat = adapt::rtEventCreate( &end );
 
-		if(beg_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(beg_stat);
+		if(beg_stat != adapt::rtSuccess){
+			const char* err_str = adapt::rtGetErrorString(beg_stat);
 			printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
 		}
 
-		if(end_stat != cudaSuccess){
-			const char* err_str = cudaGetErrorString(end_stat);
+		if(end_stat != adapt::rtSuccess){
+			const char* err_str = adapt::rtGetErrorString(end_stat);
 			printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
 		}
 
-		if( (beg_stat != cudaSuccess) || (end_stat != cudaSuccess) ) {
+		if( (beg_stat != adapt::rtSuccess) || (end_stat != adapt::rtSuccess) ) {
 			printf("Failed to create one or more Stopwatch events\n");
 			std::exit(1);
 		}
@@ -113,15 +113,15 @@ struct Stopwatch {
 
 
 	bool start() {
-		return ( cudaEventRecord( beg, NULL ) == cudaSuccess);
+		return ( adapt::rtEventRecord( beg, nullptr ) == adapt::rtSuccess);
 	}
 
 	bool stop() {
-		if ( cudaEventRecord( end, NULL ) != cudaSuccess ){
+		if ( adapt::rtEventRecord( end, nullptr ) != adapt::rtSuccess ){
 			return false;
 		}
-		cudaEventSynchronize( end );
-			cudaEventElapsedTime( &duration, beg, end );
+		adapt::rtEventSynchronize( end );
+			adapt::rtEventElapsedTime( &duration, beg, end );
 		return true;
 	}
 

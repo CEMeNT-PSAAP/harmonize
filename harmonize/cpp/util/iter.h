@@ -433,11 +433,11 @@ struct IOBuffer
 	__host__ void host_free()
 	{
 		if ( data_a != NULL ) {
-			host::auto_throw( cudaFree( data_a ) );
+			host::auto_throw( adapt::rtFree( data_a ) );
 		}
 
 		if ( data_b != NULL ) {
-			host::auto_throw( cudaFree( data_b ) );
+			host::auto_throw( adapt::rtFree( data_b ) );
 		}
 	}
 

@@ -9,24 +9,24 @@ namespace host {
 
 static bool check_error(){
 
-	cudaError_t status = cudaGetLastError();
+	adapt::rtError_t status = adapt::rtGetLastError();
 
-	if(status != cudaSuccess){
-		const char* err_str = cudaGetErrorString(status);
+	if(status != adapt::rtSuccess){
+		const char* err_str = adapt::rtGetErrorString(status);
 		printf("ERROR: \"%s\"\n",err_str);
 	}
 
-	return (status != cudaSuccess);
+	return (status != adapt::rtSuccess);
 
 }
 
 
 
 
-static void auto_throw(cudaError_t status){
-	if ( status != cudaSuccess ) {
+static void auto_throw(adapt::rtError_t status){
+	if ( status != adapt::rtSuccess ) {
 		std::string message = "GPU Runtime Error: ";
-		message += cudaGetErrorString(status);
+		message += adapt::rtGetErrorString(status);
 		throw std::runtime_error(message);
 	}
 }
@@ -35,7 +35,7 @@ static void auto_throw(cudaError_t status){
 template<typename T>
 T* hardMalloc(size_t size){
 	T* result;
-	auto_throw( cudaMalloc(&result, sizeof(T)*size) );
+	auto_throw( adapt::rtMalloc(&result, sizeof(T)*size) );
 	return result;
 }
 
@@ -58,7 +58,7 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				cudaFree(adr);
+				adapt::rtFree(adr);
 			}
 		}
 
@@ -74,14 +74,14 @@ class DevBuf {
 	__host__ void resize(size_t s){
 		T* new_adr = hardMalloc<T>(s);
 		size_t copy_count = ( s < inner->size ) ? s : inner->size;
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			new_adr,
 			inner->adr,
 			sizeof(T)*copy_count,
-			cudaMemcpyDeviceToDevice
+			adapt::rtMemcpyDeviceToDevice
 		) );
 		if( inner->adr != NULL ) {
-			auto_throw( cudaFree(inner->adr) );
+			auto_throw( adapt::rtFree(inner->adr) );
 		}
 		inner->size = s;
 		inner->adr = new_adr;
@@ -91,11 +91,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			resize(other.size());
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			inner->adr,
 			other.data(),
 			sizeof(T)*inner->size,
-			cudaMemcpyHostToDevice
+			adapt::rtMemcpyHostToDevice
 		) );
 	}
 
@@ -103,11 +103,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			other.resize(inner->size);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			other.data(),
 			inner->adr,
 			sizeof(T)*inner->size,
-			cudaMemcpyDeviceToHost
+			adapt::rtMemcpyDeviceToHost
 		) );
 	}
 
@@ -116,11 +116,11 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			inner->adr,
 			&other,
 			sizeof(T),
-			cudaMemcpyHostToDevice
+			adapt::rtMemcpyHostToDevice
 		) );
 	}
 
@@ -129,21 +129,21 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			inner->adr,
 			&host_copy,
 			sizeof(T),
-			cudaMemcpyHostToDevice
+			adapt::rtMemcpyHostToDevice
 		) );
 	}
 
 
 	__host__ void operator>>(T &other) {
-		auto_throw( cudaMemcpy(
+		auto_throw( adapt::rtMemcpy(
 			&other,
 			inner->adr,
 			sizeof(T),
-			cudaMemcpyDeviceToHost
+			adapt::rtMemcpyDeviceToHost
 		) );
 	}
 
@@ -198,21 +198,21 @@ class DevObj {
 
 		void push_data(){
 			//printf("Pushing data into %p\n",adr);
-			auto_throw( cudaMemcpy(
+			auto_throw( adapt::rtMemcpy(
 				adr,
 				&host_copy,
 				sizeof(T),
-				cudaMemcpyHostToDevice
+				adapt::rtMemcpyHostToDevice
 			) );
 		}
 
 		void pull_data(){
 			//printf("Pulling data from %p\n",adr);
-			auto_throw( cudaMemcpy(
+			auto_throw( adapt::rtMemcpy(
 				&host_copy,
 				adr,
 				sizeof(T),
-				cudaMemcpyDefault
+				adapt::rtMemcpyDefault
 			) );
 		}
 
@@ -230,7 +230,7 @@ class DevObj {
 				//printf("Doing a free\n");
 				pull_data();
 				host_copy.host_free();
-				cudaFree(adr);
+				adapt::rtFree(adr);
 			}
 		}
 

@@ -257,10 +257,10 @@ class EventProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		adapt::rtError_t status = adapt::rtGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != adapt::rtSuccess){
+			const char* err_str = adapt::rtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
