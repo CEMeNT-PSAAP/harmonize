@@ -29,5 +29,5 @@ clz_hrm.exe: collaz_hrm.cpp $(HARMONIZE_PATH) $(UTIL_SOURCE)
 	$(CC_PATH) -std=c++17 $(OPTS) -o clz_hrm.exe collaz_hrm.cpp -include $(HARMONIZE_PATH)
 
 clz_std.exe: collaz_std.cpp $(HARMONIZE_PATH)
-	$(CC_PATH) -std=c++17 -o clz_std.exe collaz_std.cpp -include $(HARMONIZE_PATH)
+	$(CC_PATH) -std=c++17 $(OPTS) -o clz_std.exe collaz_std.cpp -include $(HARMONIZE_PATH)
 
