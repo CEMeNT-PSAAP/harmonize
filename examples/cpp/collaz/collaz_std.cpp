@@ -43,7 +43,7 @@ unsigned int checker(unsigned long long int val){
 
 
 
-int main(int argc, char* argv[]){
+int main(int argc, char const *argv[]){
 
 	cli::ArgSet args(argc,argv);
 
@@ -61,12 +61,10 @@ int main(int argc, char* argv[]){
 
 	// Make device-side output buffer
 	host::DevBuf<unsigned int> dev_out((size_t)limit);	
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::rtDeviceSynchronize());
 
 	collaz<<<wg_count,wg_size>>>(0,limit,dev_out);
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::rtDeviceSynchronize());
 
 	if( ! watch.stop() ){
 		printf("B\n");

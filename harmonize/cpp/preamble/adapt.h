@@ -2,13 +2,14 @@
 #ifndef HARMONIZE_ADAPT
 #define HARMONIZE_ADAPT
 
+#define __HIP_PLATFORM_AMD__
 
-namespace adapt {
 
 
 
 #if defined(__NVCC__) || defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC__)
 
+    namespace adapt {
 
     size_t const WARP_SIZE = 32;
 
@@ -66,12 +67,15 @@ namespace adapt {
 
     #undef FN_ALIAS
 
-
+    }
 
 
 #elif defined(__HIP_PLATFORM_AMD__)
 
     #include <hip/hip_runtime.h>
+
+
+    namespace adapt {
 
     #define __syncwarp(mask) ;
     #define __activemask()   0x3F
@@ -117,13 +121,13 @@ namespace adapt {
 
     #undef HIP_FN_ALIAS
 
+    }
+
 #else
 
     #error "Platform not recognized. Valid platforms include CUDA and HIP."
 
 #endif
-
-};
 
 
 #endif

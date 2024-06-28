@@ -66,7 +66,7 @@ class EventProgram
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 	template<typename TYPE>
-	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
+	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 
 	CONST_SWITCH(size_t,GROUP_SIZE,32)

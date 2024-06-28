@@ -120,8 +120,8 @@ struct Stopwatch {
 		if ( adapt::rtEventRecord( end, nullptr ) != adapt::rtSuccess ){
 			return false;
 		}
-		adapt::rtEventSynchronize( end );
-			adapt::rtEventElapsedTime( &duration, beg, end );
+		auto _x = adapt::rtEventSynchronize( end );
+		auto _y = adapt::rtEventElapsedTime( &duration, beg, end );
 		return true;
 	}
 

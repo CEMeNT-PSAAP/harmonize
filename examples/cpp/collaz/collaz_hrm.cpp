@@ -119,7 +119,8 @@ struct MyProgramSpec {
 	template<typename PROGRAM>
 	__device__ static void finalize(PROGRAM prog){
 		if ( util::current_leader() ) {
-			printf("(Work group %d : count is %d)",blockIdx.x,prog.group.step_counter);
+			int block_index = blockIdx.x;
+			printf("(Work group %d : count is %d)",block_index,prog.group.step_counter);
 		}
 	}
 
@@ -179,7 +180,7 @@ unsigned int checker(unsigned long long int val){
 
 
 
-int main(int argc, char* argv[]){
+int main(int argc, char const* argv[]){
 
 	cli::ArgSet args(argc,argv);
 
@@ -216,20 +217,17 @@ int main(int argc, char* argv[]){
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// main memory, you may get some performance benefits by seting the arena size to zero.
 	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::rtDeviceSynchronize());
 
 	// Initialize the instance using 32 work groups
 	init<ProgType>(instance,32);
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::rtDeviceSynchronize());
 
 	// Execute the instance using 240 work groups, with each work group performing up to
 	// 65536 promise executions per thread before halting. If all promises are exhausted
 	// before this, the program exits early.
 	exec<ProgType>(instance,wg_count,cycle_count);
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::rtDeviceSynchronize());
 
 	watch.stop();
 

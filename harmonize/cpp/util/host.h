@@ -58,7 +58,7 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				adapt::rtFree(adr);
+				auto _ = adapt::rtFree(adr);
 			}
 		}
 

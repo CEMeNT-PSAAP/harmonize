@@ -120,7 +120,7 @@ class AsyncProgram
 
 	//! Used to look up information about the primary `PromiseUnion` type used
 	template<typename TYPE>
-	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
+	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 	//! Define internal constants based off of the program specification, or
 	//! fall back onto defaults.
