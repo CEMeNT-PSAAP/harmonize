@@ -1,5 +1,5 @@
 import numpy as np
-from numba import cuda, njit
+from numba import njit, hip as cuda
 import numba
 from numba import config
 import time
@@ -10,7 +10,7 @@ import harmonize as harm
 
 # On systems where there are multiple nvcc versions, a path to
 # a particular one may be provided (this path below is used on lassen)
-#harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
+# harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
 
 
 mode = "async"
@@ -66,7 +66,7 @@ def make_work(prog: numba.uintp) -> numba.boolean:
     if old >= val_count:
         return False
 
-    iter = numba.cuda.local.array(1,collaz_iter)
+    iter = cuda.local.array(1,collaz_iter)
     step = 0
     while (old+step < val_count) and (step < step_max):
         val = old + step

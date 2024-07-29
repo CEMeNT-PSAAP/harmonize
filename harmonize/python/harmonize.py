@@ -1,28 +1,46 @@
 import numpy as np
 from os.path import getmtime, exists, dirname, abspath
 from os      import makedirs, getcwd, path
-from numba import njit, cuda
+from numba   import njit, hip as cuda
 import numba
 import re
 import subprocess
-from llvmlite import binding
-from time import sleep
+from llvmlite   import binding
+from time       import sleep
 
 from .templates import *
 
 import inspect
 import sys
 
-NVCC_PATH = "nvcc"
-HARMONIZE_ROOT_DIR =  dirname(abspath(__file__))+"/.."
+
+class GPUPlatform(Enum):
+    CUDA = 1
+    HIP  = 2
+
+
+NVCC_PATH  = "nvcc"
+HIPCC_PATH = "hipcc"
+
+HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/.."
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
 
 DEBUG   = False
 VERBOSE = False
 
+
+def set_platform(platform):
+    global GPU_PLATFORM
+    GPU_PLATFORM = platform
+
 def set_nvcc_path(path):
     global NVCC_PATH
     NVCC_PATH = path
+
+def set_hipcc_path(path):
+    global HIPCC_PATH
+    HIPCC_PATH = path
+
 
 def set_debug(debug):
     global DEBUG
@@ -36,9 +54,12 @@ def set_verbose(verbose):
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
 def native_cuda_compute_level():
-    capability = numba.cuda.get_current_device().compute_capability
-    output = f"{capability[0]}{capability[1]}"
-    return output
+    if GPU_PLATFORM == GPUPlatform.HIP:
+        return ""
+    else:
+        capability = cuda.get_current_device().compute_capability
+        output = f"{capability[0]}{capability[1]}"
+        return output
 
 
 # Injects `value` as the value of the global variable named `name` in the module
@@ -96,14 +117,14 @@ def assert_fn_res_ano( func, res_type ):
 
 # Returns the ptx of the input function, as a global CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
-def global_ptx( func ):
+def global_ir( func ):
     ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
     return ptx
 
 # Returns the ptx of the input function, as a device CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
-def device_ptx( func ):
+def device_ir( func ):
     #print(func.__name__)
     ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
@@ -116,9 +137,9 @@ def func_defn_time(func):
 
 
 
-def extern_device_ptx( func, type_map, suffix ):
+def extern_device_ir( func, type_map, suffix ):
     arg_types   = fn_arg_ano_list(func)
-    ptx_text, res_type = device_ptx(func)
+    ptx_text, res_type = device_ir(func)
     ptx_text = re.sub( \
         r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
         r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
@@ -302,7 +323,7 @@ def harm_template_func(func,template_name,function_map,type_map,inline,suffix,ba
     #code += "\t//printf(\"{pre%p}\",preamble(prog.device));\n"
 
     if inline:
-        code += inlined_device_ptx(func,function_map,type_map)
+        code += inlined_device_ir(func,function_map,type_map)
     else:
         code += f"\t\t_{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
         pass
@@ -468,11 +489,12 @@ class EventRuntime(Runtime):
 # runtime meta-parameters
 class RuntimeSpec():
 
+    platforms  = set()
     obj_set    = set()
     registry   = {}
     kinds = [("Event","event"),("Async","async")]
     compute_level = native_cuda_compute_level()
-    cache_path = "__ptxcache__/"
+    cache_path = "__harmonize_cache__/"
     debug_flag = " -g "
     dirty      = False
 
@@ -490,8 +512,29 @@ class RuntimeSpec():
             # A list of python functions that are to be
             # included as async functions in the program
             async_fns,
+            # A value of the GPUPlatform enum, indicating the
+            # platform that the runtime will be executed on.
+            # Currently, only one platform may be used for
+            # a given program using Harmonize.
+            gpu_platform,
             **kwargs
         ):
+
+        if not(isinstance(item, GPUPlatform) or item in [v.value for v in GPUPlatform.__members__.values()]):
+            raise RuntimeError(
+                "Provided GPU platform is not valid.\n\n"
+                "Please provide a non-NULL member of the harmonize.GPUPlatform enum.\n\n"
+                "Valid enum members include: CUDA, HIP"
+            )
+
+
+        if len(RuntimeSpec.gpu_platforms) == 0:
+            RuntimeSpec.gpu_platforms.add(gpu_platform)
+        elif gpu_platform not in RuntimeSpec.gpu_platforms:
+            raise RuntimeError(
+                "A different GPUPlatform has previously been provided to the RuntimeSpec constructor\n\n"
+                "Currently, only one GPU platform may be used at a time across all instances."
+            )
 
         self.spec_name = spec_name
 
@@ -926,7 +969,7 @@ class RuntimeSpec():
 
             if touched:
 
-                ptx_text  = extern_device_ptx(fn,self.type_map,suffix)
+                ptx_text  = extern_device_ir(fn,self.type_map,suffix)
                 for term in rep_list:
                     ptx_text = re.sub( \
                         f'(?P<before>[^a-zA-Z0-9_])(?P<name>{term})(?P<after>[^a-zA-Z0-9_])', \
@@ -949,7 +992,10 @@ class RuntimeSpec():
                 ptx_file.close()
 
                 if dirty:
-                    dev_comp_cmd = f"{NVCC_PATH} -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
+                    if GPU_PLATFORM == GPUPlatform.HIP:
+                        dev_comp_cmd = f"{HIPCC_PATH} -fgpu-rdc -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
+                    else:
+                        dev_comp_cmd = f"{NVCC_PATH} -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
                     if VERBOSE:
                         print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
@@ -1017,7 +1063,7 @@ class RuntimeSpec():
 
                 if touched:
                     RuntimeSpec.dirty = True
-                    dev_comp_cmd = f"{NVCC_PATH} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                    dev_comp_cmd = f"{CC_PATH} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                     if VERBOSE:
                         print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
@@ -1115,6 +1161,17 @@ class RuntimeSpec():
     @staticmethod
     def bind_and_load():
 
+        if len(RuntimeSpec.gpu_platforms) == 0:
+            raise RuntimeError(
+                "No GPU platforms are registered for any RuntimeSpec. "
+                "It is likely no RuntimeSpec has been constructed yet."
+            )
+        elif len(RuntimeSpec.gpu_platforms) >  1:
+            raise RuntimeError(
+                "Multiple GPU platforms are registered under the RuntimeSpec class. "
+                "Currently, only one GPU platform may be used at a time across all instances."
+            )
+
         dev_path = f"{RuntimeSpec.cache_path}harmonize_device.o"
         so_path  = f"{RuntimeSpec.cache_path}harmonize.so"
         touched = False
@@ -1127,9 +1184,9 @@ class RuntimeSpec():
         if touched or RuntimeSpec.dirty:
             link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-            dev_link_cmd = f"{NVCC_PATH} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
 
-            comp_cmd = f"{NVCC_PATH} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+            dev_link_cmd = f"{CC_PATH} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+            comp_cmd = f"{CC_PATH} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
             if VERBOSE:
                 print(dev_link_cmd)
@@ -1158,8 +1215,8 @@ class RuntimeSpec():
                 ext_fn  = numba.types.ExternalFunction
                 context = numba.from_dtype(spec.meta['DEV_CTX_TYPE'][kind])
                 boolean = numba.types.boolean
-                #print("\n\n\n\n",self.dev_state,"\n\n\n")
-                state   = spec.dev_state #numba.from_dtype(self.dev_state)
+
+                state   = spec.dev_state
 
                 init_program  = ext_fn(f"init_program_{suffix}",  sig(void, vp, usize))
                 exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))

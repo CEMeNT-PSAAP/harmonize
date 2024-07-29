@@ -13,14 +13,14 @@
 
     size_t const WARP_SIZE = 32;
 
-    #define CUDA_TYPE_ALIAS(thing) using rt ## thing = cuda ## thing;
+    #define CUDA_TYPE_ALIAS(thing) using GPUrt ## thing = cuda ## thing;
         CUDA_TYPE_ALIAS( Error_t );
         CUDA_TYPE_ALIAS( Event_t );
         CUDA_TYPE_ALIAS( Stream_t );
     #undef CUDA_TYPE_ALIAS
 
 
-    #define CUDA_CONST_ALIAS(thing) auto const rt ## thing = cuda ## thing;
+    #define CUDA_CONST_ALIAS(thing) auto const GPUrt ## thing = cuda ## thing;
         CUDA_CONST_ALIAS( Success );
         CUDA_CONST_ALIAS( MemcpyDeviceToDevice );
         CUDA_CONST_ALIAS( MemcpyDeviceToHost );
@@ -31,7 +31,7 @@
 
     #define CUDA_FN_ALIAS(thing)                               \
     template<typename... ARGS>                                 \
-    auto rt ## thing (ARGS... args)                         \
+    auto GPUrt ## thing (ARGS... args)                         \
         -> decltype(cuda ## thing (std::declval<ARGS>()...))   \
     {                                                          \
         return cuda ## thing(args...);                         \
@@ -46,6 +46,7 @@
         CUDA_FN_ALIAS( EventElapsedTime );
         CUDA_FN_ALIAS( GetLastError );
         CUDA_FN_ALIAS( Memcpy );
+        CUDA_FN_ALIAS( Memset );
         CUDA_FN_ALIAS( SetDevice );
         CUDA_FN_ALIAS( Free );
 
@@ -83,14 +84,14 @@
 
     size_t const WARP_SIZE = 64;
 
-    #define HIP_TYPE_ALIAS(thing) using rt ## thing = hip ## thing;
+    #define HIP_TYPE_ALIAS(thing) using GPUrt ## thing = hip ## thing;
         HIP_TYPE_ALIAS( Error_t );
         HIP_TYPE_ALIAS( Event_t );
         HIP_TYPE_ALIAS( Stream_t );
     #undef HIP_TYPE_ALIAS
 
 
-    #define HIP_CONST_ALIAS(thing) auto const rt ## thing = hip ## thing;
+    #define HIP_CONST_ALIAS(thing) auto const GPUrt ## thing = hip ## thing;
         HIP_CONST_ALIAS( Success );
         HIP_CONST_ALIAS( MemcpyDeviceToDevice );
         HIP_CONST_ALIAS( MemcpyDeviceToHost );
@@ -101,7 +102,7 @@
 
     #define HIP_FN_ALIAS(thing)                                \
     template<typename... ARGS>                                 \
-    auto rt ## thing (ARGS... args)                         \
+    auto GPUrt ## thing (ARGS... args)                         \
         -> decltype(hip ## thing (std::declval<ARGS>()...))    \
     {                                                          \
         return hip ## thing(args...);                          \
@@ -116,6 +117,7 @@
         HIP_FN_ALIAS( EventElapsedTime );
         HIP_FN_ALIAS( GetLastError );
         HIP_FN_ALIAS( Memcpy );
+        HIP_FN_ALIAS( Memset );
         HIP_FN_ALIAS( SetDevice );
         HIP_FN_ALIAS( Free );
 

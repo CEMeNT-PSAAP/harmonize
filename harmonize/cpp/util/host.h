@@ -9,24 +9,24 @@ namespace host {
 
 static bool check_error(){
 
-	adapt::rtError_t status = adapt::rtGetLastError();
+	adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
 
-	if(status != adapt::rtSuccess){
-		const char* err_str = adapt::rtGetErrorString(status);
+	if(status != adapt::GPUrtSuccess){
+		const char* err_str = adapt::GPUrtGetErrorString(status);
 		printf("ERROR: \"%s\"\n",err_str);
 	}
 
-	return (status != adapt::rtSuccess);
+	return (status != adapt::GPUrtSuccess);
 
 }
 
 
 
 
-static void auto_throw(adapt::rtError_t status){
-	if ( status != adapt::rtSuccess ) {
+static void auto_throw(adapt::GPUrtError_t status){
+	if ( status != adapt::GPUrtSuccess ) {
 		std::string message = "GPU Runtime Error: ";
-		message += adapt::rtGetErrorString(status);
+		message += adapt::GPUrtGetErrorString(status);
 		throw std::runtime_error(message);
 	}
 }
@@ -35,7 +35,7 @@ static void auto_throw(adapt::rtError_t status){
 template<typename T>
 T* hardMalloc(size_t size){
 	T* result;
-	auto_throw( adapt::rtMalloc(&result, sizeof(T)*size) );
+	auto_throw( adapt::GPUrtMalloc(&result, sizeof(T)*size) );
 	return result;
 }
 
@@ -58,7 +58,7 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				auto _ = adapt::rtFree(adr);
+				auto _ = adapt::GPUrtFree(adr);
 			}
 		}
 
@@ -74,14 +74,14 @@ class DevBuf {
 	__host__ void resize(size_t s){
 		T* new_adr = hardMalloc<T>(s);
 		size_t copy_count = ( s < inner->size ) ? s : inner->size;
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			new_adr,
 			inner->adr,
 			sizeof(T)*copy_count,
-			adapt::rtMemcpyDeviceToDevice
+			adapt::GPUrtMemcpyDeviceToDevice
 		) );
 		if( inner->adr != NULL ) {
-			auto_throw( adapt::rtFree(inner->adr) );
+			auto_throw( adapt::GPUrtFree(inner->adr) );
 		}
 		inner->size = s;
 		inner->adr = new_adr;
@@ -91,11 +91,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			resize(other.size());
 		}
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			inner->adr,
 			other.data(),
 			sizeof(T)*inner->size,
-			adapt::rtMemcpyHostToDevice
+			adapt::GPUrtMemcpyHostToDevice
 		) );
 	}
 
@@ -103,11 +103,11 @@ class DevBuf {
 		if( other.size() != inner->size ){
 			other.resize(inner->size);
 		}
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			other.data(),
 			inner->adr,
 			sizeof(T)*inner->size,
-			adapt::rtMemcpyDeviceToHost
+			adapt::GPUrtMemcpyDeviceToHost
 		) );
 	}
 
@@ -116,11 +116,11 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			inner->adr,
 			&other,
 			sizeof(T),
-			adapt::rtMemcpyHostToDevice
+			adapt::GPUrtMemcpyHostToDevice
 		) );
 	}
 
@@ -129,21 +129,21 @@ class DevBuf {
 		if( inner->size != 1 ){
 			resize(1);
 		}
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			inner->adr,
 			&host_copy,
 			sizeof(T),
-			adapt::rtMemcpyHostToDevice
+			adapt::GPUrtMemcpyHostToDevice
 		) );
 	}
 
 
 	__host__ void operator>>(T &other) {
-		auto_throw( adapt::rtMemcpy(
+		auto_throw( adapt::GPUrtMemcpy(
 			&other,
 			inner->adr,
 			sizeof(T),
-			adapt::rtMemcpyDeviceToHost
+			adapt::GPUrtMemcpyDeviceToHost
 		) );
 	}
 
@@ -198,21 +198,21 @@ class DevObj {
 
 		void push_data(){
 			//printf("Pushing data into %p\n",adr);
-			auto_throw( adapt::rtMemcpy(
+			auto_throw( adapt::GPUrtMemcpy(
 				adr,
 				&host_copy,
 				sizeof(T),
-				adapt::rtMemcpyHostToDevice
+				adapt::GPUrtMemcpyHostToDevice
 			) );
 		}
 
 		void pull_data(){
 			//printf("Pulling data from %p\n",adr);
-			auto_throw( adapt::rtMemcpy(
+			auto_throw( adapt::GPUrtMemcpy(
 				&host_copy,
 				adr,
 				sizeof(T),
-				adapt::rtMemcpyDefault
+				adapt::GPUrtMemcpyDefault
 			) );
 		}
 
@@ -230,7 +230,7 @@ class DevObj {
 				//printf("Doing a free\n");
 				pull_data();
 				host_copy.host_free();
-				adapt::rtFree(adr);
+				util::host::auto_throw(adapt::GPUrtFree(adr));
 			}
 		}
 

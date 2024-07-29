@@ -45,13 +45,16 @@ unsigned int checker(unsigned long long int val){
 
 int main(int argc, char const *argv[]){
 
+
 	cli::ArgSet args(argc,argv);
 
 	// Take command line arguments. Work group size defaults to 32.
-	unsigned int wg_size  = args["wg_size"]  | 32u;
-	unsigned int wg_count = args["wg_count"];
-	unsigned int limit    = args["limit"]; 
+	unsigned int wg_size   = args["wg_size"]  | 32u;
+	unsigned int wg_count  = args["wg_count"];
+	unsigned int limit     = args["limit"];
+	unsigned int device_id = args["device_id"] | 0u;
 
+	host::auto_throw(adapt::GPUrtSetDevice(device_id));
 
 	Stopwatch watch;
 
@@ -60,18 +63,18 @@ int main(int argc, char const *argv[]){
 	}
 
 	// Make device-side output buffer
-	host::DevBuf<unsigned int> dev_out((size_t)limit);	
-	host::auto_throw(adapt::rtDeviceSynchronize());
+	host::DevBuf<unsigned int> dev_out((size_t)limit);
+	host::auto_throw(adapt::GPUrtDeviceSynchronize());
 
 	collaz<<<wg_count,wg_size>>>(0,limit,dev_out);
-	host::auto_throw(adapt::rtDeviceSynchronize());
+	host::auto_throw(adapt::GPUrtDeviceSynchronize());
 
 	if( ! watch.stop() ){
 		printf("B\n");
 	}
 
 	float msec = watch.ms_duration();
-	
+
 	// Get output from device
 	std::vector<unsigned int> host_out;
 	dev_out >> host_out;

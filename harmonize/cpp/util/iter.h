@@ -7,54 +7,78 @@ namespace util {
 
 namespace iter {
 
+template<typename INDEX_TYPE> struct GroupIter;
+template<typename INDEX_TYPE> struct AtomicIter;
 
-template<typename ITER_TYPE>
+template<typename INDEX_TYPE>
 struct Iter
 {
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
 
-	IterType value;
-	IterType limit;
-	IterType tempo;
+	IndexType value;
+	IndexType limit;
 
+	__host__ __device__ Iter<IndexType> (IndexType v, IndexType l)
+	: value(v), limit(l) {}
 
-	__host__ __device__ Iter<ITER_TYPE> (IterType v, IterType l, IterType w)
-	: value(v), limit(l), tempo(w) {}
+	__host__ __device__ Iter<IndexType> ( Iter<IndexType> const &iter )
+		: value(iter.value)
+		, limit(iter.limit)
+	{}
 
+	__host__ __device__ Iter<IndexType> () = default;
 
-	 __device__ bool step(IterType& iter_val){
+	__device__ void reset(IndexType start_val, IndexType limit_val) {
+		value = start_val;
+		limit = limit_val;
+	}
 
+	__host__ __device__ bool step(IndexType& iter_val){
 		if( value >= limit ){
 			return false;
 		}
 
 		iter_val = value;
-		value   += tempo;
+		value   += 1;
 
 		return true;
 	}
 
-	__device__ bool done() const {
-		return (value >= limit);
+	__host__ __device__ Iter<IndexType> leap(IndexType length) {
+		IndexType sub_limit = value + length;
+		sub_limit = (sub_limit > limit) ? limit : sub_limit;
+		IndexType old_value = value;
+		value = sub_limit;
+		return Iter<IndexType>(old_value,sub_limit);
 	}
 
+	__host__ __device__ bool done() const {
+		return (value >= limit);
+	}
 
 };
 
 
 
-template<typename ITER_TYPE>
+template<typename INDEX_TYPE>
 struct GroupIter
 {
 
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
 
-	IterType value;
-	IterType limit;
+	IndexType value;
+	IndexType limit;
 
-	 __device__ void reset(IterType start_val, IterType limit_val) {
+	__host__ __device__ GroupIter<IndexType> ( Iter<IndexType> iter )
+		: value(iter.value)
+		, limit(iter.limit)
+	{}
+
+	__host__ __device__ GroupIter<IndexType> () = default;
+
+	__device__ void reset(IndexType start_val, IndexType limit_val) {
 		__syncthreads();
 		if( current_leader() ){
 			value = start_val;
@@ -64,10 +88,10 @@ struct GroupIter
 	}
 
 
-	 __device__ bool step(IterType& iter_val) {
+	__device__ bool step(IndexType& iter_val) {
 
 		if( value < limit ){
-			IterType val = value + threadIdx.x;
+			IndexType val = value + threadIdx.x;
 			if ( val < limit ){
 				iter_val = val;
 			}
@@ -83,12 +107,12 @@ struct GroupIter
 	}
 
 
-	 __device__ Iter<IterType> leap(IterType length) {
+	__device__ Iter<IndexType> leap(IndexType length) {
 
-		Iter<IterType> result(0,0,blockDim.x);
+		Iter<IndexType> result(0,0,blockDim.x);
 		if( value < limit ){
-			IterType start_val = value + threadIdx.x;
-			IterType limit_val = start_val + blockDim.x * length;
+			IndexType start_val = value + threadIdx.x;
+			IndexType limit_val = start_val + blockDim.x * length;
 			result.value = (start_val < limit) ? start_val : limit;
 			result.limit = (limit_val < limit) ? limit_val : limit;
 			__syncthreads();
@@ -102,10 +126,8 @@ struct GroupIter
 	}
 
 
-	 __device__ bool done() const {
-
+	__host__ __device__ bool done() const {
 		return ( value >= limit );
-
 	}
 
 };
@@ -113,17 +135,30 @@ struct GroupIter
 
 
 
-template<typename ITER_TYPE>
+template<typename INDEX_TYPE>
 struct AtomicIter
 {
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
 
-	IterType value;
-	IterType limit;
+	IndexType value;
+	IndexType limit;
 
-	 __device__ void reset(IterType start_val, IterType limit_val) {
-		IterType old_limit = atomicAdd(&limit,0);
+
+	__host__ __device__ AtomicIter<IndexType> () = default;
+
+	__host__ __device__ AtomicIter<IndexType> ( IndexType start_val, IndexType limit_val )
+		: value(start_val)
+		, limit(limit_val)
+	{}
+
+	__host__ __device__ AtomicIter<IndexType> ( Iter<IndexType> iter )
+		: value(iter.value)
+		, limit(iter.limit)
+	{}
+
+	__device__ void reset(IndexType start_val, IndexType limit_val) {
+		IndexType old_limit = atomicAdd(&limit,0);
 		if( old_limit > limit_val ){
 			atomicExch(&limit,limit_val);
 		} else if ( old_limit < limit_val ) {
@@ -134,57 +169,33 @@ struct AtomicIter
 	}
 
 
-	 __device__ GroupIter<IterType> group_leap(IterType leap_size) {
+	__device__ Iter<IndexType> leap(IndexType leap_size) {
 
-		GroupIter<IterType> result;
-		result.value = limit;
-		result.limit = limit;
+		IndexType start_val = 0;
+		IndexType limit_val = 0;
 
-		if( value <= limit ){
-			IterType start_val = atomicAdd(&value,leap_size);
-			IterType limit_val = start_val + leap_size;
-			result.value = (start_val < limit) ? start_val : limit;
-			result.limit = (limit_val < limit) ? limit_val : limit;
+		if( value < limit ){
+			__threadfence();
+			start_val = atomicAdd(&value,leap_size);
+			__threadfence();
+			limit_val = start_val + leap_size;
+			start_val = (start_val < limit) ? start_val : limit;
+			limit_val = (limit_val < limit) ? limit_val : limit;
 		}
-		return result;
 
-	}
-
-	 __device__ Iter<IterType> leap(IterType leap_size) {
-
-		Iter<IterType> result(0,0,0);
-
-		__shared__ IterType start_val;
-		__shared__ IterType limit_val;
-
-		if( current_leader() ){
-			start_val = 0;
-			limit_val = 0;
-			if( value < limit ){
-				start_val = atomicAdd(&value,leap_size*blockDim.x);
-				limit_val = start_val + leap_size*blockDim.x;
-				start_val = (start_val < limit) ? start_val : limit;
-				limit_val = (limit_val < limit) ? limit_val : limit;
-			}
-		}
-		__syncthreads();
-
-		result.value = start_val + threadIdx.x;
-		result.limit = limit_val;
-		result.tempo = blockDim.x;
-
-		return result;
-
+		return Iter<IndexType>(start_val,limit_val);
 	}
 
 
-	 __device__ bool step(IterType& iter_val) {
+	__device__ bool step(IndexType& iter_val) {
 
 		if( value >= limit ){
 			return false;
 		}
 
-		IterType try_val = atomicAdd(&value,1);
+		__threadfence();
+		IndexType try_val = atomicAdd(&value,1);
+		__threadfence();
 
 		if( try_val >= limit ){
 			return false;
@@ -193,139 +204,52 @@ struct AtomicIter
 		iter_val = try_val;
 
 		return true;
-
 	}
 
-	 __device__ bool sync_done() const {
-
-		__shared__ bool result;
-		if(current_leader()){
-			result = (value>=limit);
-		}
-		__syncwarp();
-
+	__device__ bool done() const {
+		__threadfence();
+		bool result = ( value >= limit );
+		__threadfence();
 		return result;
-
 	}
-
-	 __device__ bool done() const {
-
-		return ( value >= limit );
-
-	}
-
-
-	__host__ __device__ AtomicIter<IterType> () {}
-
-	__host__ __device__ AtomicIter<IterType> ( IterType start_val, IterType limit_val )
-		: value(start_val)
-		, limit(limit_val)
-	{}
 
 };
 
 
 
 
-
-template<typename ITER_TYPE>
-__device__ Iter<ITER_TYPE> tiered_leap (
-	AtomicIter<ITER_TYPE> &glb, ITER_TYPE device_leap,
-	GroupIter  <ITER_TYPE> &wrp, ITER_TYPE group_leap
-) {
-
-	if( ! wrp.done() ){
-		return wrp.leap(group_leap);
-	}
-
-	if( !glb.done() ){
-		if( current_leader() ){
-			wrp = glb.group_leap(device_leap);
-		}
-		__syncthreads();
-		return wrp.leap(group_leap);
-	}
-
-	return Iter<ITER_TYPE>(0,0,0);
-
-}
-
-
-template<typename T,typename ITER_TYPE = unsigned int>
+template< typename T, template < typename > typename ITER_TYPE = Iter, typename INDEX_TYPE = unsigned int >
 struct ArrayIter {
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
+	typedef ITER_TYPE<IndexType> IterType;
 
 	T* array;
-	Iter<IterType> iter;
+	IterType iter;
 
-	__device__ bool step_val(T  &val){
-		IterType index;
-		if( iter.step(index) ){
-			val = array[index];
-			return true;
-		}
-		return false;
-	}
+	template<template < typename > class OTHER_ITER_TYPE>
+	__host__ __device__ ArrayIter<T,OTHER_ITER_TYPE,IndexType> (ArrayIter<T,OTHER_ITER_TYPE,IndexType> other_iter)
+		: array(other_iter.array)
+		, iter(other_iter.iter)
+	{}
 
 
-	__device__ bool step_idx_val(IterType& idx, T  &val){
-		IterType index;
-		if( iter.step(index) ){
-			idx = index;
-			val = array[index];
-			return true;
-		}
-		return false;
-	}
-
-
-	__device__ bool step_ptr(T *&val){
-		IterType index;
-		if( iter.step(index) ){
-			val = &(array[index]);
-			return true;
-		}
-		return false;
-	}
-
-	__device__ bool step_idx_ptr(IterType& idx, T *&val){
-		IterType index;
-		if( iter.step(index) ){
-			idx = index;
-			val = &(array[index]);
-			return true;
-		}
-		return false;
-	}
-
-	__device__ ArrayIter<T,IterType> (T* adr, Iter<IterType> itr)
+	__host__ __device__ ArrayIter<T,IterType,IndexType> (T* adr, IterType other_iter)
 		: array(adr)
-		, iter (itr)
+		, iter (other_iter)
 	{}
 
-	__device__ ArrayIter<T,IterType> ()
-		: array(NULL)
-		, iter(0,0,0)
-	{}
-
-};
+	__host__ __device__ ArrayIter<T,IterType,IndexType> () = default;
 
 
+	__device__ void reset(T* new_array, IterType new_iter) {
+		array = new_array;
+		iter  = new_iter;
+	}
 
-
-
-
-template<typename T,typename ITER_TYPE = unsigned int>
-struct GroupArrayIter {
-
-	typedef ITER_TYPE IterType;
-
-	T* array;
-	GroupIter<IterType> iter;
 
 	__device__ bool step_val(T  &val){
-		IterType index;
+		IndexType index;
 		if( iter.step(index) ){
 			val = array[index];
 			return true;
@@ -334,8 +258,8 @@ struct GroupArrayIter {
 	}
 
 
-	__device__ bool step_val_idx(T& val, IterType& idx){
-		IterType index;
+	__device__ bool step_idx_val(IndexType& idx, T  &val){
+		IndexType index;
 		if( iter.step(index) ){
 			idx = index;
 			val = array[index];
@@ -346,7 +270,7 @@ struct GroupArrayIter {
 
 
 	__device__ bool step_ptr(T *&val){
-		IterType index;
+		IndexType index;
 		if( iter.step(index) ){
 			val = &(array[index]);
 			return true;
@@ -354,8 +278,8 @@ struct GroupArrayIter {
 		return false;
 	}
 
-	__device__ bool step_ptr_idx(T *&val, IterType& idx){
-		IterType index;
+	__device__ bool step_idx_ptr(IndexType& idx, T *&val){
+		IndexType index;
 		if( iter.step(index) ){
 			idx = index;
 			val = &(array[index]);
@@ -364,42 +288,37 @@ struct GroupArrayIter {
 		return false;
 	}
 
-	__device__ bool done () {
+	__device__ ArrayIter<T,Iter,IndexType> leap(IndexType leap_size) {
+		return ArrayIter<T,Iter,IndexType>(array,iter.leap(leap_size));
+	}
+
+	__device__ bool done() {
 		return iter.done();
 	}
 
-	__device__ GroupArrayIter<T,IterType> (T* adr, GroupIter<IterType> itr)
-		: array(adr)
-		, iter (itr)
-	{}
-
-	GroupArrayIter<T,IterType> () = default;
-
-	__device__ ArrayIter<T,IterType> leap(IterType length) {
-		return ArrayIter<T,IterType>(array,iter.leap(length));
-	}
-
 };
 
 
 
-template<typename T, typename ITER_TYPE = unsigned int>
+
+
+template<typename T, typename INDEX_TYPE = unsigned int>
 struct IOBuffer
 {
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
 
 	bool  toggle; //True means A is in and B is out. False indicates vice-versa.
 	T    *data_a;
 	T    *data_b;
 
-	IterType capacity;
+	IndexType capacity;
 
-	AtomicIter<IterType> input_iter;
-	AtomicIter<IterType> output_iter;
+	AtomicIter<IndexType> input_iter;
+	AtomicIter<IndexType> output_iter;
 
 
-	__device__  IOBuffer<T,IterType>()
+	__host__ __device__  IOBuffer<T,IndexType>()
 		: capacity(0)
 		, toggle(false)
 		, input_iter (0,0)
@@ -408,7 +327,7 @@ struct IOBuffer
 		, data_b(NULL)
 	{}
 
-	__device__  IOBuffer<T,IterType>(IterType cap,T* a, T* b)
+	__device__  IOBuffer<T,IndexType>(IndexType cap,T* a, T* b)
 		: capacity(cap)
 		, toggle(false)
 		, input_iter (0,0  )
@@ -417,7 +336,7 @@ struct IOBuffer
 		, data_b(b)
 	{}
 
-	__host__  IOBuffer<T,IterType>(IterType cap)
+	__host__  IOBuffer<T,IndexType>(IndexType cap)
 		: capacity(cap)
 		, toggle(false)
 		, input_iter (0,0  )
@@ -433,83 +352,70 @@ struct IOBuffer
 	__host__ void host_free()
 	{
 		if ( data_a != NULL ) {
-			host::auto_throw( adapt::rtFree( data_a ) );
+			host::auto_throw( adapt::GPUrtFree( data_a ) );
 		}
 
 		if ( data_b != NULL ) {
-			host::auto_throw( adapt::rtFree( data_b ) );
+			host::auto_throw( adapt::GPUrtFree( data_b ) );
 		}
 	}
 
 
-	__device__ T* input_ptr(){
+	__host__ __device__ T* input_pointer(){
 		return toggle ? data_b : data_a;
 	}
 
-	__device__ T* output_ptr(){
+	__host__ __device__ T* output_pointer(){
 		return toggle ? data_a : data_b;
 	}
 
-	__device__ ArrayIter<T,IterType> pull_span(IterType pull_size)
+	__device__ ArrayIter<T,Iter,IndexType> pull_span(IndexType pull_size)
 	{
-		Iter<IterType> pull_iter = input_iter.leap(pull_size);
-		return ArrayIter<T,IterType>(input_ptr(),pull_iter);
+		Iter<IndexType> pull_iter = input_iter.leap(pull_size);
+		return ArrayIter<T,Iter,IndexType>(input_pointer(),pull_iter);
 	}
 
-	__device__ ArrayIter<T,IterType> push_span(IterType push_size)
+	__device__ ArrayIter<T,Iter,IndexType> push_span(IndexType push_size)
 	{
-		Iter<IterType> push_iter = output_iter.leap(push_size);
-		return ArrayIter<T,IterType>(output_ptr(),push_iter);
-	}
-
-
-	__device__ GroupArrayIter<T,IterType> pull_group_span(IterType pull_size)
-	{
-		GroupIter<IterType> pull_iter = input_iter.group_leap(pull_size);
-		return GroupArrayIter<T,IterType>(input_ptr(),pull_iter);
-	}
-
-	__device__ GroupArrayIter<T,IterType> push_group_span(IterType push_size)
-	{
-		GroupIter<IterType> push_iter = output_iter.group_leap(push_size);
-		return GroupArrayIter<T,IterType>(output_ptr(),push_iter);
+		Iter<IndexType> push_iter = output_iter.leap(push_size);
+		return ArrayIter<T,Iter>(output_pointer(),push_iter);
 	}
 
 	__device__ bool pull(T& value){
-		IterType index;
+		IndexType index;
 		if( ! input_iter.step(index) ){
 			return false;
 		}
-		value = input_ptr()[index];
+		value = input_pointer()[index];
 		return true;
 	}
 
-	__device__ bool pull_idx(IterType& index){
+	__device__ bool pull_index(IndexType& index){
 		return input_iter.step(index);
 	}
 
 	__device__ bool push(T value){
-		IterType index;
+		IndexType index;
 		if( ! input_iter.step(index) ){
 			return false;
 		}
-		input_ptr()[index] = value;
+		input_pointer()[index] = value;
 		return true;
 	}
 
 
 
-	__device__ bool push_idx(IterType& index){
+	__device__ bool push_index(IndexType& index){
 		return output_iter.step(index);
 	}
 
 	__device__ void flip()
 	{
 		toggle = !toggle;
-		IterType in_count = output_iter.value >= capacity ? capacity : output_iter.value;
+		IndexType in_count = output_iter.value >= capacity ? capacity : output_iter.value;
 		//printf("{Flipped with output at %d.}",in_count);
-		input_iter  = AtomicIter<IterType>(0,in_count);
-		output_iter = AtomicIter<IterType>(0,capacity);
+		input_iter  = AtomicIter<IndexType>(0,in_count);
+		output_iter = AtomicIter<IndexType>(0,capacity);
 	}
 
 	__device__ bool input_empty()
@@ -529,7 +435,7 @@ struct IOBuffer
 
 	__device__ float output_fill_fraction_sync(){
 
-		__shared__ ITER_TYPE progress;
+		__shared__ INDEX_TYPE progress;
 
 		__syncthreads();
 		if( threadIdx.x == 0 ){
@@ -549,38 +455,38 @@ template<typename T> bool tie_breaker (T& A, T& B);
 
 
 // Experimental population control mechanism
-template<typename T, typename ITER_TYPE = unsigned int, typename HASH_TYPE = unsigned int>
+template<typename T, typename INDEX_TYPE = unsigned int, typename HASH_TYPE = unsigned int>
 struct MCPCBuffer {
 
-	typedef ITER_TYPE IterType;
+	typedef INDEX_TYPE IndexType;
 	typedef HASH_TYPE HashType;
 
 	struct LinkType {
 		HashType hash;
-		IterType next;
+		IndexType next;
 		T        data;
 	};
 
 	struct LinkJump {
 		HashType hash;
-		IterType index;
+		IndexType index;
 	};
 
-	IterType capacity;
-	IterType overflow;
+	IndexType capacity;
+	IndexType overflow;
 
 
-	IOBuffer<LinkType,IterType> link_buffer;
+	IOBuffer<LinkType,IndexType> link_buffer;
 
-	IOBuffer<LinkJump,IterType> jump_buffer;
+	IOBuffer<LinkJump,IndexType> jump_buffer;
 
 
 	__device__ bool pull(T& dest){
 		while ( ! jump_buffer.input_empty() ) {
-			IterType idx;
+			IndexType idx;
 			if ( jump_buffer.pull_idx(idx) ){
 				LinkJump& jump = jump_buffer.input_ptr[idx];
-				if( jump.next == Adr<IterType>::null ){
+				if( jump.next == Adr<IndexType>::null ){
 					continue;
 				}
 				T best = link_buffer[];
@@ -588,7 +494,7 @@ struct MCPCBuffer {
 
 				}
 				jump.hash  = 0;
-				jump.index = Adr<IterType>::null;
+				jump.index = Adr<IndexType>::null;
 			}
 		}
 		return false;

@@ -216,7 +216,7 @@ class AsyncProgram
 
 		#ifdef ASYNC_LOADS
 		RemapQueue			load_queue;
-		adapt::rt::barrier<adapt::rt::thread_scope_system> load_barrier;
+		adapt::GPUrt::barrier<adapt::GPUrt::thread_scope_system> load_barrier;
 		#endif
 
 		unsigned char			link_stash_count; // Number of device-space links stored
@@ -328,7 +328,7 @@ class AsyncProgram
 			#endif
 		{
 			#ifdef HRM_TIME
-			adapt::rtMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
+			adapt::GPUrtMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
 			#endif
 		}
 
@@ -369,7 +369,7 @@ class AsyncProgram
 
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  flags = 0;
-			adapt::rtMemcpy(&flags,flags_ptr,sizeof(unsigned int),adapt::rtMemcpyDeviceToHost);
+			util::host::auto_throw(adapt::GPUrtMemcpy(&flags,flags_ptr,sizeof(unsigned int),adapt::GPUrtMemcpyDeviceToHost));
 			check_error();
 			return ((flags & COMPLETION_FLAG) != 0);
 		}
@@ -377,7 +377,7 @@ class AsyncProgram
 		__host__ void clear_flags(){
 			unsigned int  flags = 0;
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
-			adapt::rtMemcpy(flags_ptr,&flags,sizeof(unsigned int),adapt::rtMemcpyHostToDevice);
+			util::host::auto_throw(adapt::GPUrtMemcpy(flags_ptr,&flags,sizeof(unsigned int),adapt::GPUrtMemcpyHostToDevice));
 			check_error();
 		}
 
@@ -2369,7 +2369,7 @@ class AsyncProgram
 				atomicExch(&(_dev_ctx.stack->checkout),0);
 				unsigned int old_flags = atomicAnd(&(_dev_ctx.stack->status_flags),~EARLY_HALT_FLAG);
 				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),0);
-				bool halted_early       = ( old_flags && EARLY_HALT_FLAG );
+				bool halted_early       = ( old_flags & EARLY_HALT_FLAG );
 				bool work_left          = ( (depth_live & 0xFFFF0000) != 0 );
 
 				if( (!halted_early) && (!work_left) ){
@@ -2552,10 +2552,10 @@ class AsyncProgram
 
 	 static void check_error(){
 
-		adapt::rtError_t status = adapt::rtGetLastError();
+		adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
 
-		if(status != adapt::rtSuccess){
-			const char* err_str = adapt::rtGetErrorString(status);
+		if(status != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -2567,11 +2567,10 @@ class AsyncProgram
 
 	/*
 	// Places a single function call into the runtime.
-	*/
-	 static void remote_call(Instance &instance, unsigned char func_id, PromiseUnionType promise){
+	static void remote_call(Instance &instance, unsigned char func_id, PromiseUnionType promise){
 
 		LinkType* call_buffer;
-		adapt::rtMalloc( (void**) &call_buffer, sizeof(LinkType) );
+		util::host::auto_throw(adapt::GPUrtMalloc( (void**) &call_buffer, sizeof(LinkType) ));
 
 		LinkType host_link;
 		host_link.count		= 1;
@@ -2581,16 +2580,17 @@ class AsyncProgram
 		host_link.meta_data.data= 0;
 		host_link.data.data[0]	= promise;
 
-		adapt::rtMemcpy(call_buffer,&host_link,sizeof(LinkType),adapt::rtMemcpyHostToDevice);
+		util::host::auto_throw(adapt::GPUrtMemcpy(call_buffer,&host_link,sizeof(LinkType),adapt::GPUrtMemcpyHostToDevice));
 
 
 		push_runtime<<<1,WORK_GROUP_SIZE>>>(instance.to_context(),call_buffer,1);
 
 		check_error();
 
-		adapt::rtFree(call_buffer);
+		util::host::auto_throw(adapt::GPUrtFree(call_buffer));
 
 	}
+	*/
 
 
 
@@ -2793,9 +2793,9 @@ class AsyncProgram
 
 		LinkAdrType link_total = 0;
 
-		adapt::rtMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,adapt::rtMemcpyDeviceToHost);
-		adapt::rtMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,adapt::rtMemcpyDeviceToHost);
-		adapt::rtMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,adapt::rtMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,adapt::GPUrtMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,adapt::GPUrtMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,adapt::GPUrtMemcpyDeviceToHost);
 
 
 		for(AdrType i = 0; i < runtime.arena_size; i++){

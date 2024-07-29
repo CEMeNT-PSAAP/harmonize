@@ -34,6 +34,7 @@ static __device__ unsigned int active_count(){
 /*
 // This returns true only if the current thread is the active thread with the lowest warp-local id.
 // This is valuable for electing a "leader" to perform single-threaded work for a warp.
+// (__ffs (find first set) indexes bits from one, hence the -1 )
 */
 static __device__ bool current_leader(){
 	return ((__ffs(__activemask())-1) == threadIdx.x);
@@ -86,26 +87,26 @@ static __device__ unsigned int random_uint(unsigned int& rand_state){
 
 struct Stopwatch {
 
-	adapt::rtEvent_t beg;
-	adapt::rtEvent_t end;
+	adapt::GPUrtEvent_t beg;
+	adapt::GPUrtEvent_t end;
 	float duration;
 
 	Stopwatch() {
 
-		adapt::rtError_t beg_stat = adapt::rtEventCreate( &beg );
-		adapt::rtError_t end_stat = adapt::rtEventCreate( &end );
+		adapt::GPUrtError_t beg_stat = adapt::GPUrtEventCreate( &beg );
+		adapt::GPUrtError_t end_stat = adapt::GPUrtEventCreate( &end );
 
-		if(beg_stat != adapt::rtSuccess){
-			const char* err_str = adapt::rtGetErrorString(beg_stat);
+		if(beg_stat != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(beg_stat);
 			printf("Failed to create Stopwatch start event. ERROR: \"%s\"\n",err_str);
 		}
 
-		if(end_stat != adapt::rtSuccess){
-			const char* err_str = adapt::rtGetErrorString(end_stat);
+		if(end_stat != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(end_stat);
 			printf("Failed to create Stopwatch end event. ERROR: \"%s\"\n"  ,err_str);
 		}
 
-		if( (beg_stat != adapt::rtSuccess) || (end_stat != adapt::rtSuccess) ) {
+		if( (beg_stat != adapt::GPUrtSuccess) || (end_stat != adapt::GPUrtSuccess) ) {
 			printf("Failed to create one or more Stopwatch events\n");
 			std::exit(1);
 		}
@@ -113,15 +114,15 @@ struct Stopwatch {
 
 
 	bool start() {
-		return ( adapt::rtEventRecord( beg, nullptr ) == adapt::rtSuccess);
+		return ( adapt::GPUrtEventRecord( beg, nullptr ) == adapt::GPUrtSuccess);
 	}
 
 	bool stop() {
-		if ( adapt::rtEventRecord( end, nullptr ) != adapt::rtSuccess ){
+		if ( adapt::GPUrtEventRecord( end, nullptr ) != adapt::GPUrtSuccess ){
 			return false;
 		}
-		auto _x = adapt::rtEventSynchronize( end );
-		auto _y = adapt::rtEventElapsedTime( &duration, beg, end );
+		auto _x = adapt::GPUrtEventSynchronize( end );
+		auto _y = adapt::GPUrtEventElapsedTime( &duration, beg, end );
 		return true;
 	}
 

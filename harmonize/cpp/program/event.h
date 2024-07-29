@@ -69,7 +69,7 @@ class EventProgram
 	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 
-	CONST_SWITCH(size_t,GROUP_SIZE,32)
+	CONST_SWITCH(size_t,GROUP_SIZE,adapt::WARP_SIZE)
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -161,14 +161,34 @@ class EventProgram
 
 		__host__ bool complete(){
 
+			bool complete = true;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i].pull_data();
 				check_error();
-				if( ! event_io[i].host_copy().input_iter.limit == 0 ){
-					return false;
+				size_t item_count = event_io[i].host_copy().input_iter.limit;
+				if( item_count != 0 ){
+					complete = false;
 				}
+				/*
+				PromiseUnionType *host_array = new PromiseUnionType[item_count];
+				util::host::auto_throw(adapt::GPUrtMemcpy(
+					host_array,
+					event_io[i].host_copy().input_pointer(),
+					sizeof(PromiseUnionType)*item_count,
+					adapt::GPUrtMemcpyDeviceToHost
+				));
+				for(size_t i=0; i<item_count; i++) {
+					char * data = (char*) (host_array + i);
+					for(size_t j=0; j<sizeof(PromiseUnionType); j++) {
+						printf("%02hhx",data[j]);
+					}
+					printf(",\n");
+				}
+				printf("------\n");
+				delete[] host_array;
+				*/
 			}
-			return true;
+			return complete;
 
 		}
 
@@ -257,10 +277,10 @@ class EventProgram
 
 	 static void check_error(){
 
-		adapt::rtError_t status = adapt::rtGetLastError();
+		adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
 
-		if(status != adapt::rtSuccess){
-			const char* err_str = adapt::rtGetErrorString(status);
+		if(status != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -279,9 +299,15 @@ class EventProgram
 			_dev_ctx.event_io[io_index]->data_a,
 			_dev_ctx.event_io[io_index]->data_b
 		);
-		*/
-		if( _dev_ctx.event_io[io_index]->push_idx(promise_index) ){
-			_dev_ctx.event_io[io_index]->output_ptr()[promise_index].template cast<TYPE>() = param_value;
+		//*/
+
+		// Investigate push_idx
+
+		if( _dev_ctx.event_io[io_index]->push_index(promise_index) ){
+			//printf("{%d : -> %d}\n",io_index,promise_index);
+			_dev_ctx.event_io[io_index]->output_pointer()[promise_index].template cast<TYPE>() = param_value;
+		} else {
+			//printf("\n\nRan out of space\n\n");
 		}
 	}
 
@@ -318,18 +344,15 @@ class EventProgram
 
 		PROGRAM_SPEC::initialize(*this);
 
-		__shared__ util::iter::GroupArrayIter<PromiseUnionType,unsigned int> group_work;
+		__shared__ util::iter::ArrayIter<PromiseUnionType,util::iter::AtomicIter,unsigned int> group_work;
 		__shared__ bool done;
 		__shared__ OpDisc func_id;
 
-		util::iter::GroupIter<unsigned int> the_iter;
-		the_iter.reset(0,0);
 		__syncthreads();
 		if( util::current_leader() ){
-			group_work = util::iter::GroupArrayIter<PromiseUnionType,unsigned int> (NULL,the_iter);
+			group_work.reset(NULL,util::iter::Iter<unsigned int>(0,0));
 		}
 		__syncthreads();
-
 
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
@@ -342,8 +365,10 @@ class EventProgram
 					if( !_dev_ctx.event_io[i]->input_empty() ){
 						done = false;
 						func_id = static_cast<OpDisc>(i);
-						group_work = _dev_ctx.event_io[i]->pull_group_span(chunk_size*GROUP_SIZE);
-						break;
+						group_work = _dev_ctx.event_io[i]->pull_span(chunk_size*GROUP_SIZE);
+						if (!group_work.done()){
+							break;
+						}
 					}
 				}
 			}
@@ -359,18 +384,25 @@ class EventProgram
 						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
 							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
 							if(load >= _dev_ctx.load_margin){
+								rc_printf("(Hit load margin!)\n");
 								should_make_work = false;
 							}
 						}
 					}
 					if(should_make_work){
+						if( util::current_leader() ) {
+							rc_printf("(Making work!)\n");
+						}
 						should_make_work = PROGRAM_SPEC::make_work(*this);
+						if( util::current_leader() && !should_make_work) {
+							rc_printf("(No more work!)\n");
+						}
 					}
 				}
 				break;
 			} else {
 
-				util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
+				util::iter::ArrayIter<PromiseUnionType,util::iter::Iter,unsigned int> thread_work;
 				thread_work = group_work.leap(chunk_size);
 				PromiseUnionType promise;
 				while( thread_work.step_val(promise) ){
