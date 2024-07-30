@@ -15,11 +15,11 @@ import harmonize as harm
 
 harm.set_rocm_path('/opt/rocm-6.0.0')
 
-mode = "async"
+mode = "event"
 
 config.DISABLE_JIT = False
 
-val_count = 65536
+val_count = 10
 dev_state_type = numba.from_dtype(np.dtype([ ('val',np.dtype((np.uintp,val_count+1))) ]))
 grp_state_type = numba.from_dtype(np.dtype([ ]))
 thd_state_type = numba.from_dtype(np.dtype([ ]))
@@ -98,37 +98,6 @@ collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns,harm.GPUPl
 
 harm.RuntimeSpec.bind_and_load()
 
-fns = collaz_spec.async_functions()
-
-async_alloc_state   = fns["alloc_state"]
-async_free_state    = fns["free_state"]
-async_alloc_program = fns["alloc_program"]
-async_free_program  = fns["free_program"]
-async_load_state    = fns["load_state"]
-async_store_state   = fns["store_state"]
-async_init_program  = fns["init_program"]
-async_exec_program  = fns["exec_program"]
-async_complete      = fns["complete"]
-
-@njit
-def async_exec_fn(state):
-    arena_size = 0x10000
-
-    gpu_state  = async_alloc_state()
-    program    = async_alloc_program(gpu_state,arena_size)
-
-    grid_size  = 4096
-    async_store_state(gpu_state,state)
-    async_init_program(program,grid_size)
-
-    iter_count = 65536
-    async_exec_program(program,grid_size,iter_count)
-    while (not async_complete(program)):
-        async_exec_program(program,grid_size,iter_count)
-    async_load_state(state,gpu_state)
-
-    async_free_program(program)
-    async_free_state(gpu_state)
 
 
 
@@ -186,20 +155,12 @@ def collaz_check(state):
         gpu_steps = state[0]['val'][1+val]
         if steps != gpu_steps:
             diff += 1
-            #print(f"@{val} CPU {steps} different from {gpu_steps}")
+            print(f"@{val} CPU {steps} different from {gpu_steps}")
         total += steps
 
     print(f"Number of inconsistent results : {diff}")
 
 
-
-@njit
-def async_run():
-
-    state = np.zeros((1,),dev_state_type)
-    async_exec_fn(state[0])
-    print("Finished async GPU Pass")
-    collaz_check(state)
 
 @njit
 def event_run():
@@ -209,11 +170,8 @@ def event_run():
     collaz_check(state)
 
 
-t0 = time.time()
-async_run()
 t1 = time.time()
 event_run()
 t2 = time.time()
 
-print("Async runtime: ",t1-t0)
 print("Event runtime: ",t2-t1)

@@ -160,4 +160,13 @@ int access_{field}_{suffix}(void* result, void* prog){{
 """
 
 
+atomic_add_thing="""
+extern "C" __device__
+int array_atomic_add_int64(void* result, void* ptr, long long int value) {{
+    unsigned long long int *array = (unsigned long long int *) ptr;
+    long long int* ret = (long long int*) result;
+    (*ret) = atomicAdd(array,value);
+}}
+"""
+
 

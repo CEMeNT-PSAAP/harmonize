@@ -162,7 +162,7 @@ def global_ir( func ):
 def device_ir( func, platform ):
     #print(func.__name__)
     if platform == GPUPlatform.ROCM:
-        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG),name=func.__name__,link_in_hipdevicelib=False)
+        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG),name=f"_{func.__name__}",link_in_hipdevicelib=False)
     else :
         ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
@@ -908,7 +908,7 @@ class RuntimeSpec():
                  + harm_template_func(self.source_fn,"make_work" ,self.function_map,self.type_map,inline,suffix,True) \
                  + "};\n"
 
-        return type_defs + param_decls + proto_decls + async_defs + spec_def
+        return type_defs + param_decls + proto_decls + async_defs + spec_def + atomic_add_thing
 
 
 
