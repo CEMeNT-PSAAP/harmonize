@@ -5,6 +5,13 @@
 #define __HIP_PLATFORM_AMD__
 
 
+#ifdef  HARMONIZE_EXTERN_ATOMICS
+    #define HARMONIZE_MAYBE_EXTERN extern "C"
+#endif
+
+#ifndef HARMONIZE_EXTERN_ATOMICS
+    #define HARMONIZE_MAYBE_EXTERN
+#endif
 
 
 #if defined(__NVCC__) || defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC__)
@@ -123,6 +130,17 @@
 
     #undef HIP_FN_ALIAS
 
+
+
+
+    //! On AMD, unmasked atomics to the group state (though weirdly not the group context)
+    //! will cause all atomics to be unmasked.
+    //!
+    //! This is obviously very, very bad, and either a compiler bug or a monumentally awful
+    //! result of some yet-to-be-discovered invocation of undefined behavior.
+
+
+
     }
 
 #else
@@ -131,6 +149,8 @@
 
 #endif
 
+
+#undef HARMONIZE_MAYBE_EXTERN
 
 #endif
 

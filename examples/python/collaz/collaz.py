@@ -8,10 +8,12 @@ import sys
 
 import harmonize as harm
 
-# On systems where there are multiple nvcc versions, a path to
+# On systems where there are multiple cuda/rocm versions, a path to
 # a particular one may be provided (this path below is used on lassen)
 # harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
 
+
+harm.set_rocm_path('/opt/rocm-6.0.0')
 
 mode = "async"
 
@@ -62,7 +64,8 @@ def finalize(prog: numba.uintp):
 
 def make_work(prog: numba.uintp) -> numba.boolean:
     step_max = 4
-    old = numba.cuda.atomic.add(device(prog)['val'],0,step_max)
+    old = harm.array_atomic_add_i64(device(prog)['val'],0,step_max)
+    #old = cuda.atomic.add(device(prog)['val'],step_max)
     if old >= val_count:
         return False
 
@@ -91,7 +94,7 @@ async_fns  = [odd,even]
 device, group, thread = harm.RuntimeSpec.access_fns(state_spec)
 odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
 
-collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
+collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns,harm.GPUPlatform.ROCM)
 
 harm.RuntimeSpec.bind_and_load()
 

@@ -158,6 +158,7 @@ struct AtomicIter
 	{}
 
 	__device__ void reset(IndexType start_val, IndexType limit_val) {
+		__threadfence();
 		IndexType old_limit = atomicAdd(&limit,0);
 		if( old_limit > limit_val ){
 			atomicExch(&limit,limit_val);
@@ -166,6 +167,7 @@ struct AtomicIter
 			atomicExch(&limit,limit_val);
 		}
 		atomicExch(&value,start_val);
+		__threadfence();
 	}
 
 

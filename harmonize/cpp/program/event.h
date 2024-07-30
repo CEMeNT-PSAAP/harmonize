@@ -186,7 +186,7 @@ class EventProgram
 				}
 				printf("------\n");
 				delete[] host_array;
-				*/
+				//*/
 			}
 			return complete;
 
@@ -349,7 +349,7 @@ class EventProgram
 		__shared__ OpDisc func_id;
 
 		__syncthreads();
-		if( util::current_leader() ){
+		if( threadIdx.x == 0 ){
 			group_work.reset(NULL,util::iter::Iter<unsigned int>(0,0));
 		}
 		__syncthreads();
@@ -359,7 +359,7 @@ class EventProgram
 		unsigned int loop_count = 0;
 		while(true){
 			__syncthreads();
-			if( util::current_leader() ) {
+			if( threadIdx.x == 0 ) {
 				done = true;
 				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					if( !_dev_ctx.event_io[i]->input_empty() ){
@@ -375,12 +375,13 @@ class EventProgram
 			__syncthreads();
 			if( done ){
 				__shared__ bool should_make_work;
-				if( util::current_leader() ) {
+				__syncthreads();
+				if( threadIdx.x == 0 ) {
 					should_make_work = true;
 				}
 				__syncthreads();
 				while(should_make_work){
-					if( util::current_leader() ) {
+					if( threadIdx.x == 0 ) {
 						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
 							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
 							if(load >= _dev_ctx.load_margin){
@@ -390,11 +391,11 @@ class EventProgram
 						}
 					}
 					if(should_make_work){
-						if( util::current_leader() ) {
+						if( threadIdx.x == 0 ) {
 							rc_printf("(Making work!)\n");
 						}
 						should_make_work = PROGRAM_SPEC::make_work(*this);
-						if( util::current_leader() && !should_make_work) {
+						if( (threadIdx.x == 0) && !should_make_work) {
 							rc_printf("(No more work!)\n");
 						}
 					}
@@ -427,9 +428,12 @@ class EventProgram
 		__syncthreads();
 
 		if( threadIdx.x == 0 ){
+			__threadfence();
 			unsigned int checkout_index = atomicAdd(_dev_ctx.checkout,1);
 			if( checkout_index == (gridDim.x - 1) ){
+				__threadfence();
 				atomicExch(_dev_ctx.checkout,0);
+				__threadfence();
 				 for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					 _dev_ctx.event_io[i]->flip();
 				 }

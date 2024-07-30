@@ -1,3 +1,4 @@
+from enum import Enum
 import numpy as np
 from os.path import getmtime, exists, dirname, abspath
 from os      import makedirs, getcwd, path
@@ -11,16 +12,20 @@ from time       import sleep
 from .templates import *
 
 import inspect
+import struct
 import sys
 
 
 class GPUPlatform(Enum):
     CUDA = 1
-    HIP  = 2
+    ROCM = 2
 
 
-NVCC_PATH  = "nvcc"
-HIPCC_PATH = "hipcc"
+CUDA_PATH  = None
+ROCM_PATH  = None
+
+
+
 
 HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/.."
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
@@ -33,13 +38,43 @@ def set_platform(platform):
     global GPU_PLATFORM
     GPU_PLATFORM = platform
 
-def set_nvcc_path(path):
-    global NVCC_PATH
-    NVCC_PATH = path
+def set_cuda_path(path):
+    global CUDA_PATH
+    CUDA_PATH = path
 
-def set_hipcc_path(path):
-    global HIPCC_PATH
-    HIPCC_PATH = path
+def set_rocm_path(path):
+    global ROCM_PATH
+    ROCM_PATH = path
+
+def nvcc_path():
+    if CUDA_PATH == None:
+        return "nvcc"
+    else:
+        return CUDA_PATH + "/bin/nvcc"
+
+def hipcc_path():
+    if ROCM_PATH == None:
+        return "hipcc"
+    else:
+        return ROCM_PATH + "/bin/hipcc"
+
+def hipcc_clang_offload_bundler_path():
+    if ROCM_PATH == None:
+        return "clang-offload-bundler"
+    else:
+        return ROCM_PATH + "/llvm/bin/clang-offload-bundler"
+
+def hipcc_llvm_link_path():
+    if ROCM_PATH == None:
+        return "llvm-link"
+    else:
+        return ROCM_PATH + "/llvm/bin/llvm-link"
+
+def hipcc_llvm_as_path():
+    if ROCM_PATH == None:
+        return "llvm-as"
+    else:
+        return ROCM_PATH + "/llvm/bin/llvm-as"
 
 
 def set_debug(debug):
@@ -53,8 +88,8 @@ def set_verbose(verbose):
 
 # Uses nvidia-smi to query the compute level of the GPUs on the system. This
 # compute level is what is used for compling PTX.
-def native_cuda_compute_level():
-    if GPU_PLATFORM == GPUPlatform.HIP:
+def native_gpu_arch(platform):
+    if platform == GPUPlatform.ROCM:
         return ""
     else:
         capability = cuda.get_current_device().compute_capability
@@ -124,9 +159,12 @@ def global_ir( func ):
 
 # Returns the ptx of the input function, as a device CUDA function. If the return type deduced
 # by compilation is not consistent with the annotated return type, an exception is raised.
-def device_ir( func ):
+def device_ir( func, platform ):
     #print(func.__name__)
-    ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
+    if platform == GPUPlatform.ROCM:
+        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG),name=func.__name__,link_in_hipdevicelib=False)
+    else :
+        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
     assert_fn_res_ano(func, res_type)
     return ptx, res_type
 
@@ -137,14 +175,15 @@ def func_defn_time(func):
 
 
 
-def extern_device_ir( func, type_map, suffix ):
+def extern_device_ir( func, type_map, suffix, platform ):
     arg_types   = fn_arg_ano_list(func)
-    ptx_text, res_type = device_ir(func)
-    ptx_text = re.sub( \
-        r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
-        r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
-        ptx_text \
-    )
+    ptx_text, res_type = device_ir(func,platform)
+    if platform == GPUPlatform.CUDA:
+        ptx_text = re.sub( \
+            r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
+            r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
+            ptx_text \
+        )
     #print(ptx_text)
     return ptx_text
 
@@ -369,6 +408,32 @@ def cuda_adr_of(array):
 
 
 
+def find_bundle_triples(bundle_file_name):
+    file = open(bundle_file_name,"rb")
+    data = file.read()
+    magic = struct.unpack_from("24sQ",data,offset=0)
+    if magic[0].decode('utf-8') != r"__CLANG_OFFLOAD_BUNDLE__":
+        raise RuntimeError(f"Invalid clang bundle file '{bundle_file_name}' - missing magic string.")
+
+    count = magic[1]
+
+    if count != 2:
+        raise RuntimeError(f"Invalid clang bundle file '{bundle_file_name}' - does not contain exactly 2 entries.")
+
+    gpu_offset = 32
+    gpu_header = struct.unpack_from("QQQ",data,gpu_offset)
+    print(f"\n\n{gpu_header}\n\n")
+    gpu_triple = struct.unpack_from(f"{gpu_header[2]}s",data,gpu_offset+24)
+
+    cpu_offset = gpu_offset + 24 + gpu_header[2]
+    cpu_header = struct.unpack_from("QQQ",data,cpu_offset)
+    cpu_triple = struct.unpack_from(f"{cpu_header[2]}s",data,cpu_offset+24)
+
+    gpu_triple = gpu_triple[0].decode('utf-8').rstrip('-')
+    cpu_triple = cpu_triple[0].decode('utf-8').rstrip('-')
+
+    return gpu_triple, cpu_triple
+
 
 
 # A base class representing all possible runtime types
@@ -489,11 +554,17 @@ class EventRuntime(Runtime):
 # runtime meta-parameters
 class RuntimeSpec():
 
-    platforms  = set()
+    gpu_platforms  = set()
     obj_set    = set()
+    gpu_bc_set = set()
+    cpu_bc_set = set()
+
+    gpu_triple = None
+    cpu_triple = None
+
     registry   = {}
     kinds = [("Event","event"),("Async","async")]
-    compute_level = native_cuda_compute_level()
+    gpu_arch   = None
     cache_path = "__harmonize_cache__/"
     debug_flag = " -g "
     dirty      = False
@@ -520,7 +591,7 @@ class RuntimeSpec():
             **kwargs
         ):
 
-        if not(isinstance(item, GPUPlatform) or item in [v.value for v in GPUPlatform.__members__.values()]):
+        if not(isinstance(gpu_platform, GPUPlatform) or gpu_platform in [v.value for v in GPUPlatform.__members__.values()]):
             raise RuntimeError(
                 "Provided GPU platform is not valid.\n\n"
                 "Please provide a non-NULL member of the harmonize.GPUPlatform enum.\n\n"
@@ -530,6 +601,9 @@ class RuntimeSpec():
 
         if len(RuntimeSpec.gpu_platforms) == 0:
             RuntimeSpec.gpu_platforms.add(gpu_platform)
+            RuntimeSpec.gpu_arch = native_gpu_arch(gpu_platform)
+            if gpu_platform == GPUPlatform.ROCM:
+                RuntimeSpec.kinds = [("Event","event")]
         elif gpu_platform not in RuntimeSpec.gpu_platforms:
             raise RuntimeError(
                 "A different GPUPlatform has previously been provided to the RuntimeSpec constructor\n\n"
@@ -560,7 +634,7 @@ class RuntimeSpec():
             self.type_map = {}
 
         self.generate_meta()
-        self.generate_code()
+        self.generate_code(gpu_platform)
 
         RuntimeSpec.registry[self.spec_name] = self
 
@@ -935,7 +1009,7 @@ class RuntimeSpec():
         return preamble + dispatch_defs + accessor_defs + fn_query_defs + query_defs
 
 
-    def generate_async_ptx(self,cache_path,suffix):
+    def generate_async_ptx(self,cache_path,suffix,platform):
         # The list of required async functions
         base_fns = [self.init_fn, self.final_fn, self.source_fn]
         # The full list of async functions
@@ -955,60 +1029,75 @@ class RuntimeSpec():
             base_name = base_name + "_" + suffix
             base_name = cache_path + base_name
 
-            ptx_path = f"{base_name}.ptx"
-            obj_path = f"{base_name}.o"
+            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                ir_path = f"{base_name}.ll"
+                bc_path = f"{base_name}.bc"
+
+            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+                ir_path  = f"{base_name}.ptx"
+                obj_path = f"{base_name}.o"
+
             def_path = inspect.getfile(fn)
 
             touched = False
             if not path.isfile(def_path):
                 touched = True
-            elif not path.isfile(ptx_path):
+            elif not path.isfile(ir_path):
                 touched = True
-            elif getmtime(def_path) > getmtime(ptx_path):
+            elif getmtime(def_path) > getmtime(ir_path):
                 touched = True
 
             if touched:
 
-                ptx_text  = extern_device_ir(fn,self.type_map,suffix)
+                ir_text  = extern_device_ir(fn,self.type_map,suffix,platform)
                 for term in rep_list:
-                    ptx_text = re.sub( \
+                    ir_text = re.sub( \
                         f'(?P<before>[^a-zA-Z0-9_])(?P<name>{term})(?P<after>[^a-zA-Z0-9_])', \
                         f"\g<before>\g<name>_{suffix}\g<after>", \
-                        ptx_text \
+                        ir_text \
                     )
-                ptx_file  = open(ptx_path,mode='a+')
-                ptx_file.seek(0)
-                old_text  = ptx_file.read()
+                ir_file = open(ir_path,mode='a+')
+                ir_file.seek(0)
+                old_text  = ir_file.read()
 
                 dirty = False
-                if old_text != ptx_text:
+                if old_text != ir_text:
                     dirty = True
                     RuntimeSpec.dirty = True
 
                 if touched or dirty:
-                    ptx_file.seek(0)
-                    ptx_file.truncate()
-                    ptx_file.write(ptx_text)
-                ptx_file.close()
+                    ir_file.seek(0)
+                    ir_file.truncate()
+                    ir_file.write(ir_text)
+                ir_file.close()
 
                 if dirty:
-                    if GPU_PLATFORM == GPUPlatform.HIP:
-                        dev_comp_cmd = f"{HIPCC_PATH} -fgpu-rdc -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
-                    else:
-                        dev_comp_cmd = f"{NVCC_PATH} -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {ptx_path} -o {obj_path} {RuntimeSpec.debug_flag}"
-                    if VERBOSE:
-                        print(dev_comp_cmd)
-                    subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                    if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                        dev_comp_cmd = [f"{hipcc_llvm_as_path()} {ir_path} -o {bc_path}"]
+                        for cmd in dev_comp_cmd:
+                            if VERBOSE:
+                                print(cmd)
+                            subprocess.run(cmd.split(),shell=False,check=True)
+
+                    if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+                        dev_comp_cmd = [f"{nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
+                        for cmd in dev_comp_cmd:
+                            if VERBOSE:
+                                print(cmd)
+                            subprocess.run(cmd.split(),shell=False,check=True)
 
             # Record the path of the generated (or pre-existing) object
-            RuntimeSpec.obj_set.add(obj_path)
+            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                RuntimeSpec.gpu_bc_set.add(bc_path)
+            else:
+                RuntimeSpec.obj_set.add(obj_path)
 
 
     # Generates the CUDA/C++ code specifying the structure of the program, for later
-    # specialization to a specific program type, and compiles the ptx for each async
+    # specialization to a specific program type, and compiles the ir for each async
     # function supplied to the specfication. Both this cuda code and the ptx are
     # saved to the `__ptxcache__` directory for future re-use.
-    def generate_code(self):
+    def generate_code(self,gpu_platform):
 
         # Folder used to cache cuda and ptx code
 
@@ -1035,12 +1124,13 @@ class RuntimeSpec():
             base_code = self.generate_specification_code(suffix)
 
             # Compile the async function definitions to ptx
-            self.generate_async_ptx(RuntimeSpec.cache_path,suffix)
+            self.generate_async_ptx(RuntimeSpec.cache_path,suffix,gpu_platform)
 
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
             # Save the code to an appropriately named file
             spec_filename = RuntimeSpec.cache_path+suffix
-            spec_file = open(spec_filename+".cu",mode='a+')
+
+            spec_file = open(spec_filename+".cpp",mode='a+')
             spec_file.seek(0)
             old_text = spec_file.read()
             new_text = base_code + spec_code
@@ -1052,22 +1142,65 @@ class RuntimeSpec():
             spec_file.close()
 
 
-            source_list = [ (f"{spec_filename}.cu", f"{spec_filename}.o") ]
-            for (source,obj) in source_list:
-
+            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                source = f"{spec_filename}.cpp"
+                ir     = f"{spec_filename}.bc"
+                cpu_ir = f"{spec_filename}_cpu.bc"
+                gpu_ir = f"{spec_filename}_gpu.bc"
                 touched = False
-                if not path.isfile(obj):
+                if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
                     touched = True
-                elif getmtime(source) > getmtime(obj):
+                elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
                     touched = True
 
                 if touched:
                     RuntimeSpec.dirty = True
-                    dev_comp_cmd = f"{CC_PATH} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.compute_level} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                    dev_comp_cmd = f"{hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+
                     if VERBOSE:
                         print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
-                RuntimeSpec.obj_set.add(obj)
+
+                gpu_triple, cpu_triple = find_bundle_triples(ir)
+                print(f"Triples are {gpu_triple} {cpu_triple}")
+
+                RuntimeSpec.gpu_triple = gpu_triple
+                RuntimeSpec.cpu_triple = cpu_triple
+
+
+                if touched:
+                    dev_comp_cmd = [
+                        f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
+                        f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
+                    ]
+
+                    for cmd in dev_comp_cmd:
+                        if VERBOSE:
+                            print(dev_comp_cmd)
+                        subprocess.run(cmd.split(),shell=False,check=True)
+
+                RuntimeSpec.gpu_bc_set.add(gpu_ir)
+                RuntimeSpec.cpu_bc_set.add(cpu_ir)
+
+
+            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+
+                source_list = [ (f"{spec_filename}.cpp", f"{spec_filename}.o") ]
+                for (source,obj) in source_list:
+
+                    touched = False
+                    if not path.isfile(obj):
+                        touched = True
+                    elif getmtime(source) > getmtime(obj):
+                        touched = True
+
+                    if touched:
+                        RuntimeSpec.dirty = True
+                        dev_comp_cmd = f"{nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                        if VERBOSE:
+                            print(dev_comp_cmd)
+                        subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                    RuntimeSpec.obj_set.add(obj)
 
 
 
@@ -1182,19 +1315,46 @@ class RuntimeSpec():
             touched = True
 
         if touched or RuntimeSpec.dirty:
-            link_list = [ obj for obj in  RuntimeSpec.obj_set ]
+
+            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+
+                link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
 
-            dev_link_cmd = f"{CC_PATH} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
-            comp_cmd = f"{CC_PATH} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.compute_level} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                dev_link_cmd = f"{nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+                comp_cmd = f"{nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
-            if VERBOSE:
-                print(dev_link_cmd)
-            subprocess.run(dev_link_cmd.split(),shell=False,check=True)
+                if VERBOSE:
+                    print(dev_link_cmd)
+                subprocess.run(dev_link_cmd.split(),shell=False,check=True)
 
-            if VERBOSE:
-                print(comp_cmd)
-            subprocess.run(comp_cmd.split(),shell=False,check=True)
+                if VERBOSE:
+                    print(comp_cmd)
+                subprocess.run(comp_cmd.split(),shell=False,check=True)
+
+
+            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+
+                gpu_bc_list = " ".join([ bc for bc in RuntimeSpec.gpu_bc_set ])
+                cpu_bc_list = " ".join([ bc for bc in RuntimeSpec.cpu_bc_set ])
+
+                gpu_linked = f"{RuntimeSpec.cache_path}gpu_linked.bc"
+                cpu_linked = f"{RuntimeSpec.cache_path}cpu_linked.bc"
+                final_bc   = f"{RuntimeSpec.cache_path}harmonize.bc"
+                so_path    = f"{RuntimeSpec.cache_path}harmonize.so"
+
+                comp_cmd = [
+                    f"{hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
+                    f"{hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
+	                f"{hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
+	                f"{hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} -g"
+                ]
+
+                for cmd in comp_cmd:
+                    if VERBOSE:
+                        print(dev_link_cmd)
+                    subprocess.run(cmd.split(),shell=False,check=True)
+
 
 
         abs_so_path = abspath(so_path)

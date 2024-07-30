@@ -9,7 +9,7 @@ void init_program_{suffix}(
     auto instance = (typename {short_name}::Instance*) instance_ptr;
     //printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
     init<{short_name}>(*instance,grid_size);
-    util::host::auto_throw(cudaDeviceSynchronize());
+    util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
 """
 
@@ -24,7 +24,7 @@ void exec_program_{suffix}(
     auto instance = (typename {short_name}::Instance*) instance_ptr;
     //printf("\\n\\nEXEC (instance: %p)\\n\\n",instance_ptr);
     exec<{short_name}>(*instance,grid_size,cycle_count);
-    util::host::auto_throw(cudaDeviceSynchronize());
+    util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
 """
 
@@ -62,7 +62,7 @@ extern "C"
 void *alloc_state_{suffix}() {{
 	void *result = nullptr;
 	//printf("allocting async program instance with size:%ld\\n",sizeof({state_struct}));
-	util::host::auto_throw(cudaMalloc(&result,sizeof({state_struct})));
+	util::host::auto_throw(adapt::GPUrtMalloc(&result,sizeof({state_struct})));
 	//printf("allocated gpu_state:%p\\n",result);
 	return result;
 }}
@@ -71,7 +71,7 @@ void *alloc_state_{suffix}() {{
 load_state_template = """
 extern "C"
 void load_state_{suffix}(void *host_ptr, void *dev_ptr) {{
-    util::host::auto_throw(cudaMemcpy (host_ptr,dev_ptr,sizeof({state_struct}),cudaMemcpyDeviceToHost));
+    util::host::auto_throw(adapt::GPUrtMemcpy (host_ptr,dev_ptr,sizeof({state_struct}),adapt::GPUrtMemcpyDeviceToHost));
     //printf("cpu_state:%p\\n",host_ptr);
     //printf("gpu_state:%p\\n", dev_ptr);
     //size_t *data = (size_t*) host_ptr;
@@ -90,14 +90,14 @@ void store_state_{suffix}(void *dev_ptr, void *host_ptr) {{
     //    printf("%d,",data[i]);
     //}}
     //printf("\\n");
-    util::host::auto_throw(cudaMemcpy (dev_ptr,host_ptr,sizeof({state_struct}),cudaMemcpyHostToDevice));
+    util::host::auto_throw(adapt::GPUrtMemcpy (dev_ptr,host_ptr,sizeof({state_struct}),adapt::GPUrtMemcpyHostToDevice));
 }}
 """
 
 free_state_template = """
 extern "C"
 void free_state_{suffix}(void *state_ptr) {{
-	util::host::auto_throw(cudaFree(state_ptr));
+	util::host::auto_throw(adapt::GPUrtFree(state_ptr));
 }}
 """
 
