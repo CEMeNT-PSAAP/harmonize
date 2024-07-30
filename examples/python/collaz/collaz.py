@@ -69,6 +69,8 @@ def make_work(prog: numba.uintp) -> numba.boolean:
     if old >= val_count:
         return False
 
+    device(prog)['val'][old] = old
+
     iter = cuda.local.array(1,collaz_iter)
     step = 0
     while (old+step < val_count) and (step < step_max):
