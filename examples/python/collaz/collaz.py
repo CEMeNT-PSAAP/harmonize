@@ -19,8 +19,8 @@ mode = "event"
 
 config.DISABLE_JIT = False
 
-val_count = 10
-dev_state_type = numba.from_dtype(np.dtype([ ('val',np.dtype((np.uintp,val_count+1))) ]))
+val_count = 65536
+dev_state_type = numba.from_dtype(np.dtype([ ('dummy',np.uintp), ('val',np.dtype((np.uintp,val_count+1))) ]))
 grp_state_type = numba.from_dtype(np.dtype([ ]))
 thd_state_type = numba.from_dtype(np.dtype([ ]))
 
@@ -64,12 +64,10 @@ def finalize(prog: numba.uintp):
 
 def make_work(prog: numba.uintp) -> numba.boolean:
     step_max = 4
-    old = harm.array_atomic_add_i64(device(prog)['val'],0,step_max)
+    old = harm.array_atomic_add(device(prog)['val'],0,step_max)
     #old = cuda.atomic.add(device(prog)['val'],step_max)
     if old >= val_count:
         return False
-
-    device(prog)['val'][old] = old
 
     iter = cuda.local.array(1,collaz_iter)
     step = 0
@@ -160,7 +158,7 @@ def collaz_check(state):
             print(f"@{val} CPU {steps} different from {gpu_steps}")
         total += steps
 
-    print(f"Number of inconsistent results : {diff}")
+    print(f"Number of inconsistent results : {diff} / {val_count}")
 
 
 

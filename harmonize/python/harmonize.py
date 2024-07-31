@@ -10,6 +10,8 @@ from llvmlite   import binding
 from time       import sleep
 
 from .templates import *
+from .atomics   import atomic_op_info
+from .prim      import prim_info
 
 import inspect
 import struct
@@ -422,7 +424,6 @@ def find_bundle_triples(bundle_file_name):
 
     gpu_offset = 32
     gpu_header = struct.unpack_from("QQQ",data,gpu_offset)
-    print(f"\n\n{gpu_header}\n\n")
     gpu_triple = struct.unpack_from(f"{gpu_header[2]}s",data,gpu_offset+24)
 
     cpu_offset = gpu_offset + 24 + gpu_header[2]
@@ -793,6 +794,38 @@ class RuntimeSpec():
         return self.meta
 
 
+    # Generates the CUDA/C++ code that provides basic functionality,
+    # such as atomic operations. This is necessary due to varying support
+    # for such operations in Numba for different platforms.
+    def generate_builtin_code(
+            self,
+            gpu_platform
+        ):
+
+        text = ""
+
+        for op_sig_roster in atomic_op_info:
+            op_name, roster = op_sig_roster
+            for op_sig in roster:
+                face_type, real_type = op_sig
+                face_type_cpp = prim_info[face_type]["cpp_name"]
+                face_type_py  = prim_info[face_type]["py_name"]
+                real_type_cpp = prim_info[real_type]["cpp_name"]
+                real_type_py  = prim_info[real_type]["py_name"]
+                text += atomic_template.format(
+                    face_type_cpp=face_type_cpp,
+                    face_type_py =face_type_py,
+                    real_type_cpp=real_type_cpp,
+                    real_type_py =real_type_py,
+                    op_py=op_name,
+                    op_cpp=f"atomic{op_name.title()}"
+                )
+
+        return text
+
+
+
+
 
     # Generates the CUDA/C++ code specifying the program and its rutimme's
     # meta-parameters
@@ -908,7 +941,7 @@ class RuntimeSpec():
                  + harm_template_func(self.source_fn,"make_work" ,self.function_map,self.type_map,inline,suffix,True) \
                  + "};\n"
 
-        return type_defs + param_decls + proto_decls + async_defs + spec_def + atomic_add_thing
+        return type_defs + param_decls + proto_decls + async_defs + spec_def
 
 
 
@@ -1127,13 +1160,16 @@ class RuntimeSpec():
             self.generate_async_ptx(RuntimeSpec.cache_path,suffix,gpu_platform)
 
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
+
+            builtin_code = self.generate_builtin_code(gpu_platform)
+
             # Save the code to an appropriately named file
             spec_filename = RuntimeSpec.cache_path+suffix
 
             spec_file = open(spec_filename+".cpp",mode='a+')
             spec_file.seek(0)
             old_text = spec_file.read()
-            new_text = base_code + spec_code
+            new_text = base_code + spec_code + builtin_code
             if old_text != new_text:
                 RuntimeSpec.dirty = True
                 spec_file.seek(0)
@@ -1162,7 +1198,6 @@ class RuntimeSpec():
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
                 gpu_triple, cpu_triple = find_bundle_triples(ir)
-                print(f"Triples are {gpu_triple} {cpu_triple}")
 
                 RuntimeSpec.gpu_triple = gpu_triple
                 RuntimeSpec.cpu_triple = cpu_triple

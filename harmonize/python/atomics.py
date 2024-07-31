@@ -4,6 +4,23 @@ from .prim import *
 
 
 
+atomic_op_info = [
+    ("add", [
+        (int32,  int32),
+        (uint32, uint32),
+        (int64,  uint64),
+        (uint64, uint64),
+        (float32,float32),
+        (float64,float64),
+    ]),
+    ("max", [
+        (int32,  int32),
+        (uint32, uint32),
+        (uint64, uint64),
+    ])
+]
+
+
 @numba.extending.intrinsic
 def cast_ptr(_typingctx, input_ptr, ptr_type):
 
@@ -31,12 +48,8 @@ def get_ptr(_typingctx, array):
         #return val
         llvm_array_type = context.get_value_type(array)
         llvm_vp_type = context.get_value_type(vp)
-        loc_arg = builder.alloca(llvm_array_type)
-        stor    = builder.store(args[0],loc_arg)
-        zero    = llvmlite.ir.Constant(llvmlite.ir.IntType(32),0)
-        four    = llvmlite.ir.Constant(llvmlite.ir.IntType(32),4)
-        ptr_ptr = builder.gep(loc_arg,[zero,four])
-        ptr     = builder.load(ptr_ptr)
+        four    = llvmlite.ir.Constant(llvmlite.ir.IntType(32),0)
+        ptr     = builder.extract_value(args[0],4)
         gen_ptr = builder.bitcast(ptr,llvm_vp_type)
         return gen_ptr
 
@@ -48,26 +61,89 @@ def get_ptr(_typingctx, array):
     return sig, impl
 
 
-def array_atomic_extern(name,kind):
+def array_atomic_extern(op_name,face_type):
     sig     = numba.core.typing.signature
     ext_fn  = numba.types.ExternalFunction
 
-    implementation = ext_fn(f"array_atomic_{name}_{prim_name[kind]}",  sig(kind, vp, usize, kind))
+    signature = sig(face_type,vp,usize,face_type)
+    py_name   = prim_info[face_type]["py_name"]
+    implementation = ext_fn(f"array_atomic_{op_name}_{py_name}",  signature)
 
     @numba.njit
     def inner_cast(array,index,value):
-        return implementation(get_ptr(array),index,value)
+        return implementation(array.ctypes,index,value)
 
     return inner_cast
 
 
+
 array_atomic_add_i32 = array_atomic_extern("add",  int32)
 array_atomic_add_u32 = array_atomic_extern("add", uint32)
-array_atomic_add_u64 = array_atomic_extern("add", uint64)
 array_atomic_add_i64 = array_atomic_extern("add",  int64)
+array_atomic_add_u64 = array_atomic_extern("add", uint64)
 array_atomic_add_f32 = array_atomic_extern("add",float32)
 array_atomic_add_f64 = array_atomic_extern("add",float64)
 
+array_atomic_max_i32 = array_atomic_extern("max",  int32)
+array_atomic_max_u32 = array_atomic_extern("max", uint32)
+array_atomic_max_u64 = array_atomic_extern("max", uint64)
 
+
+def array_atomic_add(array,index,value):
+    return None
+
+@numba.extending.overload(array_atomic_add)
+def array_atomic_add_inner(array,index,value):
+    if not isinstance(array,numba.types.Array):
+        return None
+    if not isinstance(index,numba.types.Integer):
+        return None
+
+    allowed = {
+        int32   : array_atomic_add_i32,
+        uint32  : array_atomic_add_u32,
+        int64   : array_atomic_add_i64,
+        uint64  : array_atomic_add_u64,
+        float32 : array_atomic_add_f32,
+        float64 : array_atomic_add_f64
+    }
+    if not (value in allowed):
+        return None
+
+    inner = allowed[value]
+
+    def array_atomic_add(array,index,value):
+        return inner(array,index,value)
+
+    return array_atomic_add
+
+
+
+
+
+def array_atomic_max(array,index,value):
+    return None
+
+@numba.extending.overload(array_atomic_max)
+def array_atomic_max_inner(array,index,value):
+    if not isinstance(array,numba.types.Array):
+        return None
+    if not isinstance(index,numba.types.Integer):
+        return None
+
+    allowed = {
+        int32   : array_atomic_add_i32,
+        uint32  : array_atomic_add_u32,
+        uint64  : array_atomic_add_u64,
+    }
+    if not (value in allowed):
+        return None
+
+    inner = allowed[value]
+
+    def array_atomic_max(array,index,value):
+        return inner(array,index,value)
+
+    return array_atomic_max
 
 
