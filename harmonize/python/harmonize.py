@@ -12,6 +12,7 @@ from time       import sleep
 from .templates import *
 from .atomics   import atomic_op_info
 from .prim      import prim_info
+from .printing  import generate_print_code
 
 import inspect
 import struct
@@ -33,7 +34,7 @@ HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/.."
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
 
 DEBUG   = False
-VERBOSE = False
+VERBOSE = True #False
 
 
 def set_platform(platform):
@@ -149,7 +150,7 @@ def assert_fn_res_ano( func, res_type ):
             + cmp_str + "'\nMake sure the definition of the function '"    \
             + func.__name__ + "' results in a return type  matching its "  \
             + "annotation when supplied arguments matching its annotation."
-            raise(TypeError(err_str))
+            raise(TypingError(err_str))
 
 
 # Returns the ptx of the input function, as a global CUDA function. If the return type deduced
@@ -179,15 +180,17 @@ def func_defn_time(func):
 
 def extern_device_ir( func, type_map, suffix, platform ):
     arg_types   = fn_arg_ano_list(func)
-    ptx_text, res_type = device_ir(func,platform)
+    ir_text, res_type = device_ir(func,platform)
     if platform == GPUPlatform.CUDA:
-        ptx_text = re.sub( \
+        ir_text = re.sub( \
             r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
             r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
-            ptx_text \
+            ir_text \
         )
-    #print(ptx_text)
-    return ptx_text
+    elif platform == GPUPlatform.ROCM:
+        ir_text = re.sub( r'define', r'define internal', ir_text)
+        ir_text = re.sub( r'internal hidden', r'hidden', ir_text)
+    return ir_text
 
 
 # Used to map numba types to numpy d_types
@@ -216,12 +219,47 @@ def map_type_to_np(kind):
 # Determines the alignment of an input record type. For proper operation,
 # the input type MUST be a record type
 def alignment(kind):
-    align = 1
-    for name,type in kind.members:
-        member_align = kind.alignof(name)
-        if member_align != None and member_align > align:
-            align = member_align
-    return align
+    if   isinstance(kind,dict):
+        return 8
+    elif isinstance(kind,numba.types.Record):
+        align = 1
+        for name,type in kind.members:
+            member_align = kind.alignof(name)
+            if member_align != None and member_align > align:
+                align = member_align
+        return align
+    elif isinstance(kind,numba.types.Type):
+        return kind.bitwidth // 8
+    else:
+        raise numba.errors.TypingError(
+            f"Cannot find alignment of type {kind}."
+        )
+
+
+# Determines the alignment of an input type. For proper operation,
+# the input type MUST be a record type or a dict of dicts/records.
+# This limitation applies recursively
+def size_of(kind):
+    align = 8
+    if isinstance(kind,dict):
+        result = 0
+        for sub_name,sub_kind in kind.items():
+            print(f"Size is {result}")
+            sub_size = size_of(sub_kind)
+            sub_size = ((sub_size+(align-1))//align) * align
+            print(f"Adding {sub_size}")
+            result += sub_size
+        print(f"Final size : {result}")
+        return result
+    elif isinstance(kind,numba.types.Record):
+        return kind.size
+    elif isinstance(kind,numba.types.Type):
+        return kind.bitwidth // 8
+    else:
+        raise numba.errors.TypingError(
+            "Cannot find size of type '{kind}'."
+        )
+
 
 
 # Maps an input type to the CUDA/C++ equivalent type name used by Harmonize
@@ -242,8 +280,17 @@ def map_type_name(type_map,kind,rec_mode=""):
         np.float64 : "double"
     }
 
-
-    if kind in primitives:
+    if isinstance(kind,dict):
+        size  = size_of(kind)
+        align = 8
+        size  = ((size + (align-1)) // align) * align
+        result = f"_{size}b{align}"
+        if rec_mode == "ptr":
+            result += "*"
+        elif rec_mode == "void_ptr":
+            result = "void*"
+        return result
+    elif kind in primitives:
         return primitives[kind]
     elif isinstance(kind,numba.types.abstract.Literal):
         return map_type_name(type_map,type(kind._literal_value))
@@ -258,14 +305,11 @@ def map_type_name(type_map,kind,rec_mode=""):
     elif isinstance(kind,numba.types.Boolean):
         return "bool"
     elif isinstance(kind,numba.types.Record):
-        #if kind in type_map:
-        #    return type_map[kind] + "*"
-        #else:
         size  = kind.size
         align = alignment(kind)
         align = 8
         size  = ((size + (align-1)) // align) * align
-        result = "_"+str(size)+"b"+str(align)
+        result = f"_{size}b{align}"
         if rec_mode == "ptr":
             result += "*"
         elif rec_mode == "void_ptr":
@@ -437,6 +481,7 @@ def find_bundle_triples(bundle_file_name):
 
 
 
+
 # A base class representing all possible runtime types
 class Runtime():
     def __init__(self,spec,context,state,init_fn,exec_fn):
@@ -551,24 +596,45 @@ class EventRuntime(Runtime):
         return self.state.copy_to_device(cpu_state)
 
 
+class ProgramField:
+
+    def __init__(self,label,path,offset,kind,is_pointer):
+
+        self.label      = label
+        self.path       = path
+        self.offset     = offset
+        self.kind       = kind
+        self.size       = size_of(kind)
+        self.is_pointer = is_pointer
+        print(f"\n\nSize of '{label}' ---> {self.size}\n\n")
+
+    def prefix(self):
+        if self.is_pointer:
+            return ""
+        else:
+            return "&"
+
+
 # Represents the specification for a specific program and its
 # runtime meta-parameters
+#class RuntimeSpec(numba.types.Type):
 class RuntimeSpec():
 
     gpu_platforms  = set()
-    obj_set    = set()
-    gpu_bc_set = set()
-    cpu_bc_set = set()
+    obj_set     = set()
+    gpu_bc_set  = set()
+    cpu_bc_set  = set()
 
-    gpu_triple = None
-    cpu_triple = None
+    gpu_triple  = None
+    cpu_triple  = None
 
-    registry   = {}
+    registry = {}
+
     kinds = [("Event","event"),("Async","async")]
-    gpu_arch   = None
-    cache_path = "__harmonize_cache__/"
-    debug_flag = " -g "
-    dirty      = False
+    gpu_arch    = None
+    cache_path  = "__harmonize_cache__/"
+    debug_flag  = " -g "
+    dirty       = False
 
     def __init__(
             self,
@@ -591,6 +657,8 @@ class RuntimeSpec():
             gpu_platform,
             **kwargs
         ):
+
+        #super(RuntimeSpec,self).__init__(name='Runtime')
 
         if not(isinstance(gpu_platform, GPUPlatform) or gpu_platform in [v.value for v in GPUPlatform.__members__.values()]):
             raise RuntimeError(
@@ -623,6 +691,10 @@ class RuntimeSpec():
         self.async_fns = async_fns
 
         self.meta = kwargs
+
+        self.program_fields = {}
+        self.type_specs = {}
+        self.accessors   = {}
 
         if 'function_map' in kwargs:
             self.function_map = kwargs['function_map']
@@ -793,38 +865,11 @@ class RuntimeSpec():
 
         return self.meta
 
-
-    # Generates the CUDA/C++ code that provides basic functionality,
-    # such as atomic operations. This is necessary due to varying support
-    # for such operations in Numba for different platforms.
-    def generate_builtin_code(
-            self,
-            gpu_platform
-        ):
-
-        text = ""
-
-        for op_sig_roster in atomic_op_info:
-            op_name, roster = op_sig_roster
-            for op_sig in roster:
-                face_type, real_type = op_sig
-                face_type_cpp = prim_info[face_type]["cpp_name"]
-                face_type_py  = prim_info[face_type]["py_name"]
-                real_type_cpp = prim_info[real_type]["cpp_name"]
-                real_type_py  = prim_info[real_type]["py_name"]
-                text += atomic_template.format(
-                    face_type_cpp=face_type_cpp,
-                    face_type_py =face_type_py,
-                    real_type_cpp=real_type_cpp,
-                    real_type_py =real_type_py,
-                    op_py=op_name,
-                    op_cpp=f"atomic{op_name.title()}"
-                )
-
-        return text
-
-
-
+    def register_type_specs(self,kind,allow_multifield=False):
+        # Take alignment/size info from Records
+        size  = size_of(kind)
+        align = alignment(kind)
+        self.type_specs[(size,align)] = ()
 
 
     # Generates the CUDA/C++ code specifying the program and its rutimme's
@@ -841,25 +886,15 @@ class RuntimeSpec():
         # Accumulator for type definitions
         type_defs = ""
 
-        # A map to store the set of parameter size/alignment specifications
-        param_specs = {}
-
         # Add in parameter specs from the basic async functions
         for func in self.async_fns:
             for kind in fn_arg_ano_list(func):
-                if isinstance(kind,numba.types.Record):
-                    size      = kind.size
-                    align     = alignment(kind)
-                    param_specs[(size,align)] = ()
+                self.register_type_specs(kind)
 
-        # Add in parameter specs from the required async functions
+        # Add in specs for the state types
         state_kinds = [self.dev_state, self.grp_state, self.thd_state]
         for kind in state_kinds:
-                if isinstance(kind,numba.types.Record):
-                    size      = kind.size
-                    align     = alignment(kind)
-                    param_specs[(size,align)] = ()
-
+            self.register_type_specs(kind,allow_multifield=True)
 
         # An accumulator for parameter type declarations
         param_decls = ""
@@ -874,7 +909,7 @@ class RuntimeSpec():
 
         # Create types matching the required size and alignment. Until reliable alignment
         # deduction is implemented, an alignment of 8 will always be used.
-        for size, align in param_specs.keys():
+        for size, align in self.type_specs.keys():
             align = 8
             count =  (size + (align-1)) // align
             size  = ((size + (align-1)) // align) * align
@@ -943,6 +978,32 @@ class RuntimeSpec():
 
         return type_defs + param_decls + proto_decls + async_defs + spec_def
 
+    def enumerate_program_fields(self,base_label,path,kind,offset=0,is_pointer=True):
+
+
+        if isinstance(kind,numba.types.Record):
+            self.program_fields[base_label] = ProgramField(
+                base_label,
+                path,
+                offset,
+                kind,
+                is_pointer
+            )
+        elif isinstance(kind,dict):
+            result = []
+            for name, sub_kind in kind.items():
+                label  = f"{path}_{name}"
+                field = ProgramField(
+                    label,
+                    path,
+                    offset,
+                    sub_kind,
+                    is_pointer
+                )
+                self.program_fields[field.label] = field
+                offset  = offset + ((field.size+7)//8)*8
+            return result
+
 
 
     # Returns the CUDA/C++ code specializing the specification for a program type
@@ -952,14 +1013,6 @@ class RuntimeSpec():
 
 
         state_struct = map_type_name(self.type_map,self.dev_state,rec_mode="")
-
-        # The set of fields that should have accessors, each annotated with
-        # the code (if any) that should prefix references to those fields.
-        # This is mainly useful for working with references.
-        program_fields = [
-            (  "device", ""), (   "group", ""), (  "thread", ""),
-            #("_dev_ctx","&"), ("_grp_ctx","&"), ("_thd_ctx","&")
-        ]
 
 
         # Accumulator for includes and initial declarations/typedefs
@@ -987,10 +1040,25 @@ class RuntimeSpec():
         dispatch_defs += free_prog_template  .format(short_name=short_name,suffix=suffix)
         dispatch_defs += alloc_state_template.format(state_struct=state_struct,suffix=suffix)
         dispatch_defs += free_state_template .format(suffix=suffix)
-        dispatch_defs += load_state_template .format(state_struct=state_struct,suffix=suffix)
-        dispatch_defs += store_state_template.format(state_struct=state_struct,suffix=suffix)
         dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
         dispatch_defs += clear_flags_template.format(short_name=short_name,suffix=suffix)
+
+
+        for label, field in self.program_fields.items():
+            field_struct = map_type_name(self.type_map,field.kind,rec_mode="")
+            dispatch_defs += load_state_template .format(
+                label=label,
+                size=field.size,
+                offset=field.offset,
+                suffix=suffix
+            )
+            dispatch_defs += store_state_template.format(
+                label=label,
+                size=field.size,
+                offset=field.offset,
+                suffix=suffix
+            )
+
 
 
         # Generate the dispatch functions for each async function
@@ -1011,9 +1079,16 @@ class RuntimeSpec():
                     suffix=suffix,
                 )
 
-        # Creates a field accesing function for each field
-        for (field,prefix) in program_fields:
-            accessor_defs += accessor_template.format(short_name=short_name,field=field,prefix=prefix,suffix=suffix)
+        # Creates a field accessing function for each field
+        for label, field in self.program_fields.items():
+            accessor_defs += accessor_template.format(
+                short_name=short_name,
+                label=field.label,
+                field=field.path,
+                prefix=field.prefix(),
+                suffix=suffix,
+                offset=field.offset
+            )
 
         # Query definitions currently disabled
         fn_query_defs = ""
@@ -1049,11 +1124,29 @@ class RuntimeSpec():
         comp_list = [fn for fn in base_fns] + self.async_fns
 
 
+        # The set of fields that should have accessors, each annotated with
+        # the code (if any) that should prefix references to those fields.
+        # This is mainly useful for working with references.
+
+        base_fields = [
+            ("device",self.dev_state),
+            ("group", self.grp_state),
+            ("thread",self.thd_state),
+        ]
+
+
+        for field in base_fields:
+            field_path, field_kind = field
+            self.enumerate_program_fields(field_path,field_path,field_kind)
+
+
 
         rep_list  = [ f"_{fn.__name__}" for fn in comp_list]
         rep_list += [ f"dispatch_{fn.__name__}_async" for fn in comp_list ]
         rep_list += [ f"dispatch_{fn.__name__}_sync" for fn in comp_list ]
-        rep_list += [ f"access_{state}" for state in ["device","group","thread"] ]
+        rep_list += [ f"access_{label}" for label in self.program_fields ]
+
+        print(f"REP LIST: {rep_list}")
 
         # Compile each user-provided function defintion to ptx
         # and save it to an appropriately named file
@@ -1157,11 +1250,13 @@ class RuntimeSpec():
             base_code = self.generate_specification_code(suffix)
 
             # Compile the async function definitions to ptx
+
+            # !!!Rep list here
             self.generate_async_ptx(RuntimeSpec.cache_path,suffix,gpu_platform)
 
+            # !!!Field enumeration here
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
 
-            builtin_code = self.generate_builtin_code(gpu_platform)
 
             # Save the code to an appropriately named file
             spec_filename = RuntimeSpec.cache_path+suffix
@@ -1169,7 +1264,7 @@ class RuntimeSpec():
             spec_file = open(spec_filename+".cpp",mode='a+')
             spec_file.seek(0)
             old_text = spec_file.read()
-            new_text = base_code + spec_code + builtin_code
+            new_text = base_code + spec_code
             if old_text != new_text:
                 RuntimeSpec.dirty = True
                 spec_file.seek(0)
@@ -1211,7 +1306,7 @@ class RuntimeSpec():
 
                     for cmd in dev_comp_cmd:
                         if VERBOSE:
-                            print(dev_comp_cmd)
+                            print(cmd)
                         subprocess.run(cmd.split(),shell=False,check=True)
 
                 RuntimeSpec.gpu_bc_set.add(gpu_ir)
@@ -1265,36 +1360,56 @@ class RuntimeSpec():
             sig = fn_sig(func)
             name = func.__name__
             for kind in ["async","sync"]:
-                dispatch_fn = cuda.declare_device("dispatch_"+name+"_"+kind, sig)
+                dispatch_fn = cuda.declare_device(f"dispatch_{name}_{kind}", sig)
                 inject_global(kind+"_"+name,dispatch_fn,1)
 
-        field_list = [
-            ("device",dev_state),
-            ("group",grp_state),
-            ("thread",thd_state),
-        ]
         for name, kind in field_list:
             sig = kind(numba.uintp)
-            access_fn = cuda.declare_device("access_"+name,sig)
+            access_fn = cuda.declare_device(f"access_{name}_{kind}",sig)
             inject_global(name,access_fn,1)
+
+    @staticmethod
+    def declare_program_accessors(field_set,base_path=""):
+        result = {}
+
+        for name, kind in field_set.items():
+
+            if base_path == "":
+                path = name
+            else:
+                path = f"{base_path}_{name}"
+
+            if isinstance(kind,numba.types.Record):
+                sig = kind(numba.uintp)
+                result[name] = (cuda.declare_device(f"access_{path}",sig))
+            elif isinstance(kind,dict):
+                result[name] = RuntimeSpec.declare_program_accessors(kind,path)
+            else:
+                raise numba.errors.TypingError( ""
+                    + "Invalid field specification. "
+                    + "Fields may either be a numba Record or a "
+                    + "dictionary of fields."
+                )
+
+        return result
+
+
 
     # Returns the `device`, `group`, and `thread` accessor function
     # handles of the specification as a triplet
+    @staticmethod
     def access_fns(state_spec):
 
         dev_state, grp_state, thd_state = state_spec
 
-        field_list = [
-            ("device",dev_state),
-            ("group",grp_state),
-            ("thread",thd_state),
-        ]
+        field_set = {
+            "device" : dev_state,
+            "group"  : grp_state,
+            "thread" : thd_state,
+        }
 
-        result = []
-        for name, kind in field_list:
-            sig = kind(numba.uintp)
-            result.append(cuda.declare_device("access_"+name,sig))
-        return tuple(result)
+        return RuntimeSpec.declare_program_accessors(field_set,"")
+
 
     # Returns the async/sync function handles for the supplied functions, using
     # `kind` to switch between async and sync
@@ -1304,7 +1419,7 @@ class RuntimeSpec():
         for func in async_fns:
             sig = fn_sig(func)
             name = func.__name__
-            result.append(cuda.declare_device("dispatch_"+name+"_"+kind, sig))
+            result.append(cuda.declare_device(f"dispatch_{name}_{kind}", sig))
         return tuple(result)
 
     #def query(kind,*fields):
@@ -1327,7 +1442,130 @@ class RuntimeSpec():
 
 
     @staticmethod
+    def generate_hipdevicelib():
+
+        def harmonize_version() -> numba.int64:
+            return 0
+
+        ir_text, res_type = cuda.compile_ptx_for_current_device (
+            harmonize_version,
+            numba.int32(),
+            device=True,
+            debug=DEBUG,
+            opt=(not DEBUG),
+            name=f"harmonize_version",
+            link_in_hipdevicelib=True
+        )
+
+        ir_path = f"{RuntimeSpec.cache_path}/hipdevicelib.ll"
+        bc_path = f"{RuntimeSpec.cache_path}/hipdevicelib.bc"
+        ir_file = open(ir_path,mode='a+')
+        ir_file.seek(0)
+        old_text  = ir_file.read()
+
+        dirty = False
+        if old_text != ir_text:
+            dirty = True
+            RuntimeSpec.dirty = True
+
+        if dirty:
+            ir_file.seek(0)
+            ir_file.truncate()
+            ir_file.write(ir_text)
+        ir_file.close()
+
+        cmd = f"{hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
+        subprocess.run(cmd.split(),shell=False,check=True)
+        RuntimeSpec.gpu_bc_set.add(bc_path)
+
+
+
+
+    # Generates the CUDA/C++ code that provides basic functionality,
+    # such as atomic operations. This is necessary due to varying support
+    # for such operations in Numba for different platforms.
+    @staticmethod
+    def generate_builtin_code(gpu_platform):
+
+        text = ""
+
+        for op_sig_roster in atomic_op_info:
+            op_name, roster = op_sig_roster
+            for op_sig in roster:
+                face_type, real_type = op_sig
+                face_type_cpp = prim_info[face_type]["cpp_name"]
+                face_type_py  = prim_info[face_type]["py_name"]
+                real_type_cpp = prim_info[real_type]["cpp_name"]
+                real_type_py  = prim_info[real_type]["py_name"]
+                text += atomic_template.format(
+                    face_type_cpp=face_type_cpp,
+                    face_type_py =face_type_py,
+                    real_type_cpp=real_type_cpp,
+                    real_type_py =real_type_py,
+                    op_py=op_name,
+                    op_cpp=f"atomic{op_name.title()}"
+                )
+
+        text += generate_print_code()
+
+        file_path = f"{RuntimeSpec.cache_path}builtin"
+        source = f"{file_path}.cpp"
+        ir     = f"{file_path}.bc"
+        cpu_ir = f"{file_path}_cpu.bc"
+        gpu_ir = f"{file_path}_gpu.bc"
+        touched = False
+        if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
+            touched = True
+        elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
+            touched = True
+
+        if touched:
+
+            source_file = open(source,mode='a+')
+            source_file.seek(0)
+            old_text  = source_file.read()
+
+            dirty = False
+            if old_text != text:
+                dirty = True
+                RuntimeSpec.dirty = True
+
+            if touched or dirty:
+                source_file.seek(0)
+                source_file.truncate()
+                source_file.write(text)
+            source_file.close()
+
+            RuntimeSpec.dirty = True
+            dev_comp_cmd = f"{hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+
+            if VERBOSE:
+                print(dev_comp_cmd)
+            subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+        if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
+            raise RuntimeError("Attempted to build builtin code with no target triples defined.")
+
+        if touched:
+            dev_comp_cmd = [
+                f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
+                f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
+            ]
+
+            for cmd in dev_comp_cmd:
+                if VERBOSE:
+                    print(cmd)
+                subprocess.run(cmd.split(),shell=False,check=True)
+
+        RuntimeSpec.gpu_bc_set.add(gpu_ir)
+        RuntimeSpec.cpu_bc_set.add(cpu_ir)
+
+
+
+    @staticmethod
     def bind_and_load():
+
+        print("About to bind and load",flush=True)
 
         if len(RuntimeSpec.gpu_platforms) == 0:
             raise RuntimeError(
@@ -1344,17 +1582,19 @@ class RuntimeSpec():
         so_path  = f"{RuntimeSpec.cache_path}harmonize.so"
         touched = False
 
-        if not path.isfile(dev_path):
+        if (GPUPlatform.CUDA in RuntimeSpec.gpu_platforms) and (not path.isfile(dev_path)):
             touched = True
         elif not path.isfile(so_path):
             touched = True
 
         if touched or RuntimeSpec.dirty:
 
+
             if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
 
-                link_list = [ obj for obj in  RuntimeSpec.obj_set ]
+                self.generate_builtin_code(GPUPlatform.CUDA)
 
+                link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
                 dev_link_cmd = f"{nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
                 comp_cmd = f"{nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
@@ -1369,6 +1609,10 @@ class RuntimeSpec():
 
 
             if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+
+                RuntimeSpec.generate_builtin_code(GPUPlatform.ROCM)
+
+                RuntimeSpec.generate_hipdevicelib()
 
                 gpu_bc_list = " ".join([ bc for bc in RuntimeSpec.gpu_bc_set ])
                 cpu_bc_list = " ".join([ bc for bc in RuntimeSpec.cpu_bc_set ])
@@ -1387,7 +1631,7 @@ class RuntimeSpec():
 
                 for cmd in comp_cmd:
                     if VERBOSE:
-                        print(dev_link_cmd)
+                        print(cmd)
                     subprocess.run(cmd.split(),shell=False,check=True)
 
 
@@ -1415,8 +1659,14 @@ class RuntimeSpec():
 
                 init_program  = ext_fn(f"init_program_{suffix}",  sig(void, vp, usize))
                 exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
-                store_state   = ext_fn(f"store_state_{suffix}",   sig(void, vp, state))
-                load_state    = ext_fn(f"load_state_{suffix}",    sig(void, state, vp))
+
+                for label, field in spec.program_fields.items():
+                    store_name    = f"store_state_{label}"
+                    load_name     = f"load_state_{label}"
+                    store_state   = ext_fn(f"{store_name}_{suffix}", sig(void, vp, field.kind))
+                    load_state    = ext_fn(f"{load_name}_{suffix}",  sig(void, field.kind, vp))
+                    spec.fn[kind][store_name]   = store_state
+                    spec.fn[kind][load_name]    = load_state
 
                 if kind == "Event":
                     # IO_SIZE, LOAD_MARGIN
@@ -1437,8 +1687,6 @@ class RuntimeSpec():
                 spec.fn[kind]['init_program']  = init_program
                 spec.fn[kind]['exec_program']  = exec_program
 
-                spec.fn[kind]['store_state']   = store_state
-                spec.fn[kind]['load_state']    = load_state
 
                 spec.fn[kind]['alloc_program'] = alloc_program
                 spec.fn[kind]['free_program']  = free_program
@@ -1453,4 +1701,63 @@ class RuntimeSpec():
 
                 spec.fn[kind]['complete']      = complete_wrapper
                 spec.fn[kind]['clear_flags']   = clear_flags
+
+        print("Bound and loaded",flush=True)
+
+
+
+
+
+class AsyncRuntimeSpec(RuntimeSpec):
+    def __init__(self,spec_name,state_spec,base_fns,async_fns,gpu_platform,
+            **kwargs
+        ):
+        super(AsyncRuntime,self).__init__(name='AsyncRuntime')
+    pass
+
+class EventRuntimeSpec(RuntimeSpec):
+    def __init__(self):
+        super(EventRuntime,self).__init__(name='EventRuntime')
+    pass
+
+
+#class RuntimeType(numba.types.Type):
+#
+#    def __init__(self):
+#        super(Instance,self).__init__(name='Runtime')
+#
+#
+#runtime_type = RuntimeType()
+#
+#@typeof_impl.register(RuntimeType)
+#def typeof_index(val, c):
+#    return runtime_type
+#
+#as_numba_type.register(Runtime,runtime_type)
+#
+#@numba.extending.type_callable(Runtime)
+#def type_instance(context):
+#    def typer(kind):
+#        if isinstance(kind.context_ptr,numba.types.uintp):
+#            return runtime_type
+#        else:
+#            return None
+#    return typer
+#
+#@numba.extending.register_model(RuntimeType)
+#class RuntimeModel(models.RuntimeModel):
+#    def __init__(self, dmm, fe_type):
+#
+#        state   = fe_type.spec.dev_state
+#        context = numba.from_dtype(spec.meta['DEV_CTX_TYPE'][kind])
+#        members = [
+#            ('context_ptr', context),
+#            ('state_ptr',   state),
+#        ]
+#        models.StructModel.__init__(self, dmm, fe_type, members)
+#
+#numba.extending.make_attribute_wrapper(InstanceType,'context_ptr','context_ptr')
+#numba.extending.make_attribute_wrapper(InstanceType,'state_ptr',  'state_ptr')
+#
+#
 

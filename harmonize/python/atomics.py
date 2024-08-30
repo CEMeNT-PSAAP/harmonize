@@ -95,9 +95,25 @@ def array_atomic_add(array,index,value):
 @numba.extending.overload(array_atomic_add)
 def array_atomic_add_inner(array,index,value):
     if not isinstance(array,numba.types.Array):
-        return None
-    if not isinstance(index,numba.types.Integer):
-        return None
+        raise RuntimeError("First argument should be an array.")
+
+    is_tuple = False
+
+    if isinstance(index,numba.types.Tuple):
+        if len(index) == 0:
+            raise RuntimeError("Zero-length tuple given as index. At least one index must be provided.")
+        for kind in index:
+            if not isinstance(kind,numba.types.Integer):
+                raise RuntimeError(f"Non-integer value of type '{kind}' in index tuple.")
+        is_tuple = True
+    elif isinstance(index,numba.types.UniTuple):
+        if len(index) == 0:
+            raise RuntimeError("Zero-length tuple given as index. At least one index must be provided.")
+        if not isinstance(index.dtype,numba.types.Integer):
+            raise RuntimeError(f"Non-integer value of type '{kind.dtype}' in index tuple.")
+        is_tuple = True
+    elif not isinstance(index,numba.types.Integer):
+        raise RuntimeError("Index is not an integer or a positive-length tuple of integers.")
 
     allowed = {
         int32   : array_atomic_add_i32,
@@ -112,10 +128,20 @@ def array_atomic_add_inner(array,index,value):
 
     inner = allowed[value]
 
-    def array_atomic_add(array,index,value):
-        return inner(array,index,value)
+    if is_tuple:
 
-    return array_atomic_add
+        def array_atomic_add(array,index,value):
+
+            return inner(array[index[:-1]],index[-1],value)
+
+        return array_atomic_add
+
+    else:
+
+        def array_atomic_add(array,index,value):
+            return inner(array,index,value)
+
+        return array_atomic_add
 
 
 

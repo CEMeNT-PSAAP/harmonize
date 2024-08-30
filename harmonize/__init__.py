@@ -4,3 +4,4 @@ from harmonize.python.harmonize import RuntimeSpec, GPUPlatform, set_cuda_path, 
 
 from harmonize.python.atomics import array_atomic_add
 
+from harmonize.python.printing import print_formatted

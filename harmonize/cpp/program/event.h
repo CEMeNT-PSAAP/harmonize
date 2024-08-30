@@ -120,6 +120,7 @@ class EventProgram
 		typedef		ProgramType       ParentProgramType;
 
 		unsigned int  *checkout;
+		unsigned int  *flip_count;
 		unsigned int   load_margin;
 		util::iter::IOBuffer<PromiseUnionType,AdrType> *event_io[PromiseUnionType::Info::COUNT];
 	};
@@ -134,6 +135,7 @@ class EventProgram
 
 
 		util::host::DevBuf<unsigned int> checkout;
+		util::host::DevBuf<unsigned int> flip_count;
 		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Info::COUNT];
 		DeviceState device_state;
 
@@ -144,6 +146,7 @@ class EventProgram
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
 			}
 			checkout<< 0u;
+			flip_count<< 0u;
 		}
 
 		__host__ DeviceContext to_context(){
@@ -151,6 +154,7 @@ class EventProgram
 			DeviceContext result;
 
 			result.checkout = checkout;
+			result.flip_count = flip_count;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				result.event_io[i] = event_io[i];
 			}
@@ -169,7 +173,9 @@ class EventProgram
 				if( item_count != 0 ){
 					complete = false;
 				}
-				/*
+
+				// printf("\nitem count: %zu\n",item_count);
+				/*/
 				PromiseUnionType *host_array = new PromiseUnionType[item_count];
 				util::host::auto_throw(adapt::GPUrtMemcpy(
 					host_array,
@@ -292,6 +298,8 @@ class EventProgram
 	__device__  void async_call_cast(int depth_delta, Promise<TYPE> param_value){
 		AdrType promise_index = 0;
 		AdrType io_index = static_cast<AdrType>(Lookup<TYPE>::type::DISC);
+
+
 		/*
 		printf("Event io at index %d is at %p with buffers at %p and %p\n",
 			io_index,
@@ -305,9 +313,18 @@ class EventProgram
 
 		if( _dev_ctx.event_io[io_index]->push_index(promise_index) ){
 			//printf("{%d : -> %d}\n",io_index,promise_index);
+			/*/
+			printf("\n(");
+			char *data = (char*) &param_value;
+			for(size_t i=0; i<sizeof(param_value); i++){
+				printf("%02hhx",data[i]);
+			}
+			printf(")\n");
+			//*/
 			_dev_ctx.event_io[io_index]->output_pointer()[promise_index].template cast<TYPE>() = param_value;
+			//printf("\n\nDoing an async call!\n\n");
 		} else {
-			//printf("\n\nRan out of space\n\n");
+			printf("\n\nRan out of space!\n\n");
 		}
 	}
 
@@ -384,8 +401,8 @@ class EventProgram
 					if( threadIdx.x == 0 ) {
 						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
 							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
-							if(load >= _dev_ctx.load_margin){
-								rc_printf("(Hit load margin!)\n");
+							if(load >= (_dev_ctx.event_io[i]->output_iter.limit / 2) ){
+								//printf("(Hit load margin!)\n");
 								should_make_work = false;
 							}
 						}
@@ -402,7 +419,6 @@ class EventProgram
 				}
 				break;
 			} else {
-
 				util::iter::ArrayIter<PromiseUnionType,util::iter::Iter,unsigned int> thread_work;
 				thread_work = group_work.leap(chunk_size);
 				PromiseUnionType promise;
@@ -419,13 +435,14 @@ class EventProgram
 
 		}
 
-
 		__syncthreads();
 
 		PROGRAM_SPEC::finalize(*this);
 
 		__threadfence();
 		__syncthreads();
+
+
 
 		if( threadIdx.x == 0 ){
 			__threadfence();
@@ -434,13 +451,12 @@ class EventProgram
 				__threadfence();
 				atomicExch(_dev_ctx.checkout,0);
 				__threadfence();
-				 for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
-					 _dev_ctx.event_io[i]->flip();
-				 }
-
+				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
+					_dev_ctx.event_io[i]->flip();
+				}
+				atomicAdd(_dev_ctx.flip_count,1u);
 			}
 		}
-
 
 
 	}
