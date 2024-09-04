@@ -1,483 +1,40 @@
-from enum import Enum
-import numpy as np
-from os.path import getmtime, exists, dirname, abspath
-from os      import makedirs, getcwd, path
-from numba   import njit, hip as cuda
-import numba
 import re
+import sys
+import numba
+import inspect
 import subprocess
-from llvmlite   import binding
+
+import numpy as np
+
+import harmonize.python.config as config
+
+from os         import makedirs, getcwd, path
 from time       import sleep
+from numba      import njit, hip as cuda
+from os.path    import getmtime, exists, dirname, abspath
+from llvmlite   import binding
 
 from .templates import *
 from .atomics   import atomic_op_info
 from .prim      import prim_info
 from .printing  import generate_print_code
+from .logging   import verbose_print, debug_print
+from .codegen   import (
+    pascal_case,
+    size_of,
+    alignment,
+    fn_sig,
+    fn_arg_ano_list,
+    func_arg_text,
+    func_param_text,
+    harm_async_func,
+    harm_template_func,
+    map_type_to_np,
+    map_type_name,
+    find_bundle_triples,
+    extern_device_ir,
+)
 
-import inspect
-import struct
-import sys
-
-
-class GPUPlatform(Enum):
-    CUDA = 1
-    ROCM = 2
-
-
-CUDA_PATH  = None
-ROCM_PATH  = None
-
-
-
-
-HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/.."
-HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
-
-DEBUG   = False
-VERBOSE = True #False
-
-
-def set_platform(platform):
-    global GPU_PLATFORM
-    GPU_PLATFORM = platform
-
-def set_cuda_path(path):
-    global CUDA_PATH
-    CUDA_PATH = path
-
-def set_rocm_path(path):
-    global ROCM_PATH
-    ROCM_PATH = path
-
-def nvcc_path():
-    if CUDA_PATH == None:
-        return "nvcc"
-    else:
-        return CUDA_PATH + "/bin/nvcc"
-
-def hipcc_path():
-    if ROCM_PATH == None:
-        return "hipcc"
-    else:
-        return ROCM_PATH + "/bin/hipcc"
-
-def hipcc_clang_offload_bundler_path():
-    if ROCM_PATH == None:
-        return "clang-offload-bundler"
-    else:
-        return ROCM_PATH + "/llvm/bin/clang-offload-bundler"
-
-def hipcc_llvm_link_path():
-    if ROCM_PATH == None:
-        return "llvm-link"
-    else:
-        return ROCM_PATH + "/llvm/bin/llvm-link"
-
-def hipcc_llvm_as_path():
-    if ROCM_PATH == None:
-        return "llvm-as"
-    else:
-        return ROCM_PATH + "/llvm/bin/llvm-as"
-
-
-def set_debug(debug):
-    global DEBUG
-    DEBUG = debug
-
-def set_verbose(verbose):
-    global VERBOSE
-    VERBOSE = verbose
-
-
-# Uses nvidia-smi to query the compute level of the GPUs on the system. This
-# compute level is what is used for compling PTX.
-def native_gpu_arch(platform):
-    if platform == GPUPlatform.ROCM:
-        return ""
-    else:
-        capability = cuda.get_current_device().compute_capability
-        output = f"{capability[0]}{capability[1]}"
-        return output
-
-
-# Injects `value` as the value of the global variable named `name` in the module
-# that defined the function `index` calls down the stack, from the perspective
-# of the function that calls `inject_global`.
-def inject_global(name,value,index):
-    frm = inspect.stack()[index+1]
-    mod = inspect.getmodule(frm[0])
-    setattr(sys.modules[mod.__name__], name, value)
-    print(f"Defined '{name}' as "+str(value)+" for module "+mod.__name__)
-
-
-# Returns the type annotations of the arguments for the input function
-def fn_arg_ano_list( func ):
-    result = []
-    for arg,ano in func.__annotations__.items():
-        if( arg != 'return' ):
-            result.append(ano)
-    return result
-
-# Returns the numba type of the function signature of the input function
-def fn_sig( func ):
-    arg_list = []
-    ret    = numba.types.void
-    for arg,ano in func.__annotations__.items():
-        if( arg != 'return' ):
-            arg_list.append(ano)
-        else:
-            ret = ano
-    return ret(*arg_list)
-
-
-# Returns the type annotations of the arguments for the input function
-# as a tuple
-def fn_arg_ano( func ):
-    return tuple( x for x in fn_arg_ano_list(func) )
-
-
-# Raises an error if the annotated return type for the input function
-# does not patch the input result type
-def assert_fn_res_ano( func, res_type ):
-    if 'return' in func.__annotations__:
-        res_ano = func.__annotations__['return']
-        if res_ano != res_type :
-            arg_str  = str(fn_arg_ano(func))
-            ano_str  = arg_str + " -> " + str(res_ano)
-            cmp_str  = arg_str + " -> " + str(res_type)
-            err_str  = "Annotated function type '" + ano_str               \
-            + "' does not match the type deduced by the compiler '"        \
-            + cmp_str + "'\nMake sure the definition of the function '"    \
-            + func.__name__ + "' results in a return type  matching its "  \
-            + "annotation when supplied arguments matching its annotation."
-            raise(TypingError(err_str))
-
-
-# Returns the ptx of the input function, as a global CUDA function. If the return type deduced
-# by compilation is not consistent with the annotated return type, an exception is raised.
-def global_ir( func ):
-    ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),debug=DEBUG,opt=(not DEBUG))
-    assert_fn_res_ano(func, res_type)
-    return ptx
-
-# Returns the ptx of the input function, as a device CUDA function. If the return type deduced
-# by compilation is not consistent with the annotated return type, an exception is raised.
-def device_ir( func, platform ):
-    #print(func.__name__)
-    if platform == GPUPlatform.ROCM:
-        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG),name=f"_{func.__name__}",link_in_hipdevicelib=False)
-    else :
-        ptx, res_type = cuda.compile_ptx_for_current_device(func,fn_arg_ano(func),device=True,debug=DEBUG,opt=(not DEBUG))
-    assert_fn_res_ano(func, res_type)
-    return ptx, res_type
-
-# Returns the modify date of the file containing the supplied function. This is useful for
-# detecting if a function was possibly changed
-def func_defn_time(func):
-    return getmtime(func.__globals__['__file__'])
-
-
-
-def extern_device_ir( func, type_map, suffix, platform ):
-    arg_types   = fn_arg_ano_list(func)
-    ir_text, res_type = device_ir(func,platform)
-    if platform == GPUPlatform.CUDA:
-        ir_text = re.sub( \
-            r'(?P<before>\.visible\s+\.func\s*\(\s*\.param\s+\.\w+\s+\w+\s*\)\s*)(?P<name>\w+)(?P<after>\((?P<params>(\s*\.param\s+\.\w+\s+\w+\s*)(,\s*.param\s+\.\w+\s+\w+\s*)*)\))', \
-            r'\g<before>'+f"_{func.__name__}_{suffix}"+r'\g<after>', \
-            ir_text \
-        )
-    elif platform == GPUPlatform.ROCM:
-        ir_text = re.sub( r'define', r'define internal', ir_text)
-        ir_text = re.sub( r'internal hidden', r'hidden', ir_text)
-    return ir_text
-
-
-# Used to map numba types to numpy d_types
-def map_type_to_np(kind):
-    return numba.np.numpy_support.as_dtype(kind)
-    primitives = {
-        numba.none    : np.void,
-        bool          : np.bool8,
-        numba.boolean : np.bool8,
-        numba.uint8   : np.uint8,
-        numba.uint16  : np.uint16,
-        numba.uint32  : np.uint32,
-        numba.uint64  : np.uint64,
-        numba.int8    : np.int8,
-        numba.int16   : np.int16,
-        numba.int32   : np.int32,
-        numba.int64   : np.int64,
-        numba.float32 : np.float32,
-        numba.float64 : np.float64
-    }
-    if kind in primitives:
-        return primitives[kind]
-    return kind
-
-
-# Determines the alignment of an input record type. For proper operation,
-# the input type MUST be a record type
-def alignment(kind):
-    if   isinstance(kind,dict):
-        return 8
-    elif isinstance(kind,numba.types.Record):
-        align = 1
-        for name,type in kind.members:
-            member_align = kind.alignof(name)
-            if member_align != None and member_align > align:
-                align = member_align
-        return align
-    elif isinstance(kind,numba.types.Type):
-        return kind.bitwidth // 8
-    else:
-        raise numba.errors.TypingError(
-            f"Cannot find alignment of type {kind}."
-        )
-
-
-# Determines the alignment of an input type. For proper operation,
-# the input type MUST be a record type or a dict of dicts/records.
-# This limitation applies recursively
-def size_of(kind):
-    align = 8
-    if isinstance(kind,dict):
-        result = 0
-        for sub_name,sub_kind in kind.items():
-            print(f"Size is {result}")
-            sub_size = size_of(sub_kind)
-            sub_size = ((sub_size+(align-1))//align) * align
-            print(f"Adding {sub_size}")
-            result += sub_size
-        print(f"Final size : {result}")
-        return result
-    elif isinstance(kind,numba.types.Record):
-        return kind.size
-    elif isinstance(kind,numba.types.Type):
-        return kind.bitwidth // 8
-    else:
-        raise numba.errors.TypingError(
-            "Cannot find size of type '{kind}'."
-        )
-
-
-
-# Maps an input type to the CUDA/C++ equivalent type name used by Harmonize
-def map_type_name(type_map,kind,rec_mode=""):
-    primitives = {
-        numba.none : "void",
-        bool       : "bool",
-        np.bool8   : "bool",
-        np.uint8   : "uint8_t",
-        np.uint16  : "uint16_t",
-        np.uint32  : "uint32_t",
-        np.uint64  : "uint64_t",
-        np.int8    : "int8_t",
-        np.int16   : "int16_t",
-        np.int32   : "int32_t",
-        np.int64   : "int64_t",
-        np.float32 : "float",
-        np.float64 : "double"
-    }
-
-    if isinstance(kind,dict):
-        size  = size_of(kind)
-        align = 8
-        size  = ((size + (align-1)) // align) * align
-        result = f"_{size}b{align}"
-        if rec_mode == "ptr":
-            result += "*"
-        elif rec_mode == "void_ptr":
-            result = "void*"
-        return result
-    elif kind in primitives:
-        return primitives[kind]
-    elif isinstance(kind,numba.types.abstract.Literal):
-        return map_type_name(type_map,type(kind._literal_value))
-    elif isinstance(kind,numba.types.Integer):
-        result = "int"
-        if not kind.signed :
-            result = "u" + result
-        result += str(kind.bitwidth)
-        return result + "_t"
-    elif isinstance(kind,numba.types.Float):
-        return "float" + str(kind.bitwidth)
-    elif isinstance(kind,numba.types.Boolean):
-        return "bool"
-    elif isinstance(kind,numba.types.Record):
-        size  = kind.size
-        align = alignment(kind)
-        align = 8
-        size  = ((size + (align-1)) // align) * align
-        result = f"_{size}b{align}"
-        if rec_mode == "ptr":
-            result += "*"
-        elif rec_mode == "void_ptr":
-            result = "void*"
-        return result
-    elif isinstance(kind,numba.types.npytypes.NestedArray):
-        return "void*"
-    else:
-        raise RuntimeError("Unrecognized type '"+str(kind)+"' with type '"+str(type(kind))+"'")
-
-
-# Returns the number of arguments used by the input function
-def arg_count(func):
-    return len(fn_arg_ano_list(func))
-
-
-# Returns the CUDA/C++ text used as the parameter list for the input function, with various
-# options to map record type names, account for preceding parameters, remove initial
-# parameters from the signature, or force the first to be a void*.
-def func_param_text(func,type_map,rec_mode="",prior=False,clip=0,first_void=False):
-    param_list  = fn_arg_ano_list(func)
-
-    param_list = param_list[clip:]
-
-    if first_void:
-        param_list = param_list[1:]
-        param_list  = ["void*"] + [ map_type_name(type_map,kind,rec_mode=rec_mode) for kind in param_list ]
-    else:
-        param_list  = [ map_type_name(type_map,kind,rec_mode=rec_mode) for kind in param_list ]
-
-    param_text  = ", ".join([ kind+" fn_param_"+str(idx+clip+1) for (idx,kind) in enumerate(param_list)])
-    if len(param_list) > 0 and prior:
-        param_text = ", " + param_text
-    return param_text
-
-
-# Returns the CUDA/C++ text used as the argument list for a call to the input function,
-# with various options to cast/deref/getadr values, account for preceding parameters, and
-# remove initial parameters from the signature.
-def func_arg_text(func,type_map,rec_mode="",prior=False,clip=0):
-    param_list  = fn_arg_ano_list(func)
-    param_list = param_list[clip:]
-
-    arg_text  = ""
-    if len(param_list) > 0 and prior:
-        arg_text = ", "
-    for (idx,kind) in enumerate(param_list):
-        if idx != 0:
-            arg_text += ", "
-        if isinstance(kind,numba.types.Record):
-            if   rec_mode == "deref":
-                arg_text += "*"
-            elif rec_mode == "adrof":
-                arg_text += "&"
-            elif rec_mode == "cast_deref":
-                arg_text += "*("+map_type_name(type_map,kind,rec_mode="ptr")+")"
-        arg_text += "fn_param_"+str(idx+clip+1)
-    return arg_text
-
-
-
-# Returns the CUDA/C++ text representing the input function as a Harmonize async template
-# function. The wrapper type that surrounds such templates is handled in other functions.
-def harm_template_func(func,template_name,function_map,type_map,inline,suffix,base=False):
-
-
-    return_type = "void"
-    if 'return' in func.__annotations__:
-        return_type = map_type_name(type_map, func.__annotations__['return'])
-
-
-    param_text  = func_param_text(func,type_map,prior=True,clip=1,first_void=False)
-    arg_text    = func_arg_text  (func,type_map,rec_mode="adrof",prior=True,clip=1)
-
-    if base:
-        param_text = ""
-        arg_text   = ""
-
-
-    code = "\ttemplate<typename PROGRAM>\n"   \
-	     + "\t__device__ static "  \
-         + return_type+" "+template_name+"(PROGRAM prog" + param_text + ") {\n"
-
-    if return_type != "void":
-        code += "\t\t"+return_type+"  result;\n"
-        code += "\t\t"+return_type+" *fn_param_0 = &result;\n"
-    else:
-        code += "\t\tint  dummy_void_result = 0;\n"
-        code += "\t\tint *fn_param_0 = &dummy_void_result;\n"
-
-
-    #code += "\tprintf(\"{"+func.__name__+"}\");\n"
-    #code += "\tprintf(\"(prog%p)\",&prog);\n"
-    #code += "\tprintf(\"{ctx%p}\",&prog._dev_ctx);\n"
-    #code += "\tprintf(\"(sta%p)\",prog.device);\n"
-    #code += "\t//printf(\"{pre%p}\",preamble(prog.device));\n"
-
-    if inline:
-        code += inlined_device_ir(func,function_map,type_map)
-    else:
-        code += f"\t\t_{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
-        pass
-
-    if return_type != "void":
-        code += "\t\treturn result;\n"
-    code += "\t}\n"
-
-    return code
-
-
-# Returns the input string in pascal case
-def pascal_case(name):
-    return name.replace("_", " ").title().replace(" ", "")
-
-
-# Returns the CUDA/C++ text for a Harmonize async function that would map onto the
-# input function.
-def harm_async_func(func, function_map, type_map,inline,suffix):
-    return_type = "void"
-    if 'return' in func.__annotations__:
-        return_type = map_type_name(type_map, func.__annotations__['return'])
-    func_name = str(func.__name__)
-
-    struct_name = pascal_case(func_name)
-    param_list  = fn_arg_ano_list(func)[1:]
-    param_list  = [ map_type_name(type_map,kind) for kind in param_list ]
-    param_text  = ", ".join(param_list)
-
-    code = "struct " + struct_name + " {\n"                                              \
-	     + "\tusing Type = " + return_type + "(*)(" + param_text + ");\n"                \
-         + harm_template_func(func,"eval",function_map,type_map,inline,suffix)                  \
-         + "};\n"
-
-    return code
-
-
-
-# Returns the address of the input device array
-def cuda_adr_of(array):
-    return array.__cuda_array_interface__['data'][0]
-
-
-
-
-def find_bundle_triples(bundle_file_name):
-    file = open(bundle_file_name,"rb")
-    data = file.read()
-    magic = struct.unpack_from("24sQ",data,offset=0)
-    if magic[0].decode('utf-8') != r"__CLANG_OFFLOAD_BUNDLE__":
-        raise RuntimeError(f"Invalid clang bundle file '{bundle_file_name}' - missing magic string.")
-
-    count = magic[1]
-
-    if count != 2:
-        raise RuntimeError(f"Invalid clang bundle file '{bundle_file_name}' - does not contain exactly 2 entries.")
-
-    gpu_offset = 32
-    gpu_header = struct.unpack_from("QQQ",data,gpu_offset)
-    gpu_triple = struct.unpack_from(f"{gpu_header[2]}s",data,gpu_offset+24)
-
-    cpu_offset = gpu_offset + 24 + gpu_header[2]
-    cpu_header = struct.unpack_from("QQQ",data,cpu_offset)
-    cpu_triple = struct.unpack_from(f"{cpu_header[2]}s",data,cpu_offset+24)
-
-    gpu_triple = gpu_triple[0].decode('utf-8').rstrip('-')
-    cpu_triple = cpu_triple[0].decode('utf-8').rstrip('-')
-
-    return gpu_triple, cpu_triple
 
 
 
@@ -606,7 +163,7 @@ class ProgramField:
         self.kind       = kind
         self.size       = size_of(kind)
         self.is_pointer = is_pointer
-        print(f"\n\nSize of '{label}' ---> {self.size}\n\n")
+        debug_print(f"\n\nSize of '{label}' ---> {self.size}\n\n")
 
     def prefix(self):
         if self.is_pointer:
@@ -650,32 +207,39 @@ class RuntimeSpec():
             # A list of python functions that are to be
             # included as async functions in the program
             async_fns,
-            # A value of the GPUPlatform enum, indicating the
+            # A value of the config.GPUPlatform enum, indicating the
             # platform that the runtime will be executed on.
             # Currently, only one platform may be used for
             # a given program using Harmonize.
-            gpu_platform,
+            gpu_platform=None,
             **kwargs
         ):
 
         #super(RuntimeSpec,self).__init__(name='Runtime')
 
-        if not(isinstance(gpu_platform, GPUPlatform) or gpu_platform in [v.value for v in GPUPlatform.__members__.values()]):
+        if gpu_platform == None:
+            if   config.CUDA_AVAILABLE:
+                gpu_platform = config.GPUPlatform.CUDA
+            elif config.ROCM_AVAILABLE:
+                gpu_platform = config.GPUPlatform.ROCM
+
+
+        if not(isinstance(gpu_platform, config.GPUPlatform) or gpu_platform in [v.value for v in config.GPUPlatform.__members__.values()]):
             raise RuntimeError(
                 "Provided GPU platform is not valid.\n\n"
-                "Please provide a non-NULL member of the harmonize.GPUPlatform enum.\n\n"
+                "Please provide a member of the harmonize.config.GPUPlatform enum.\n\n"
                 "Valid enum members include: CUDA, HIP"
             )
 
 
         if len(RuntimeSpec.gpu_platforms) == 0:
             RuntimeSpec.gpu_platforms.add(gpu_platform)
-            RuntimeSpec.gpu_arch = native_gpu_arch(gpu_platform)
-            if gpu_platform == GPUPlatform.ROCM:
+            RuntimeSpec.gpu_arch = config.native_gpu_arch(gpu_platform)
+            if gpu_platform == config.GPUPlatform.ROCM:
                 RuntimeSpec.kinds = [("Event","event")]
         elif gpu_platform not in RuntimeSpec.gpu_platforms:
             raise RuntimeError(
-                "A different GPUPlatform has previously been provided to the RuntimeSpec constructor\n\n"
+                "A different config.GPUPlatform has previously been provided to the RuntimeSpec constructor\n\n"
                 "Currently, only one GPU platform may be used at a time across all instances."
             )
 
@@ -1146,7 +710,7 @@ class RuntimeSpec():
         rep_list += [ f"dispatch_{fn.__name__}_sync" for fn in comp_list ]
         rep_list += [ f"access_{label}" for label in self.program_fields ]
 
-        print(f"REP LIST: {rep_list}")
+        debug_print(f"REP LIST: {rep_list}")
 
         # Compile each user-provided function defintion to ptx
         # and save it to an appropriately named file
@@ -1155,11 +719,11 @@ class RuntimeSpec():
             base_name = base_name + "_" + suffix
             base_name = cache_path + base_name
 
-            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
                 ir_path = f"{base_name}.ll"
                 bc_path = f"{base_name}.bc"
 
-            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
                 ir_path  = f"{base_name}.ptx"
                 obj_path = f"{base_name}.o"
 
@@ -1198,22 +762,20 @@ class RuntimeSpec():
                 ir_file.close()
 
                 if dirty:
-                    if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
-                        dev_comp_cmd = [f"{hipcc_llvm_as_path()} {ir_path} -o {bc_path}"]
+                    if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                        dev_comp_cmd = [f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"]
                         for cmd in dev_comp_cmd:
-                            if VERBOSE:
-                                print(cmd)
+                            verbose_print(cmd)
                             subprocess.run(cmd.split(),shell=False,check=True)
 
-                    if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
-                        dev_comp_cmd = [f"{nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
+                    if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+                        dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
                         for cmd in dev_comp_cmd:
-                            if VERBOSE:
-                                print(cmd)
+                            verbose_print(cmd)
                             subprocess.run(cmd.split(),shell=False,check=True)
 
             # Record the path of the generated (or pre-existing) object
-            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
                 RuntimeSpec.gpu_bc_set.add(bc_path)
             else:
                 RuntimeSpec.obj_set.add(obj_path)
@@ -1273,7 +835,7 @@ class RuntimeSpec():
             spec_file.close()
 
 
-            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
                 source = f"{spec_filename}.cpp"
                 ir     = f"{spec_filename}.bc"
                 cpu_ir = f"{spec_filename}_cpu.bc"
@@ -1286,10 +848,9 @@ class RuntimeSpec():
 
                 if touched:
                     RuntimeSpec.dirty = True
-                    dev_comp_cmd = f"{hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+                    dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
-                    if VERBOSE:
-                        print(dev_comp_cmd)
+                    verbose_print(dev_comp_cmd)
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
                 gpu_triple, cpu_triple = find_bundle_triples(ir)
@@ -1300,20 +861,19 @@ class RuntimeSpec():
 
                 if touched:
                     dev_comp_cmd = [
-                        f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
-                        f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
+                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
+                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
                     ]
 
                     for cmd in dev_comp_cmd:
-                        if VERBOSE:
-                            print(cmd)
+                        verbose_print(cmd)
                         subprocess.run(cmd.split(),shell=False,check=True)
 
                 RuntimeSpec.gpu_bc_set.add(gpu_ir)
                 RuntimeSpec.cpu_bc_set.add(cpu_ir)
 
 
-            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
 
                 source_list = [ (f"{spec_filename}.cpp", f"{spec_filename}.o") ]
                 for (source,obj) in source_list:
@@ -1326,9 +886,8 @@ class RuntimeSpec():
 
                     if touched:
                         RuntimeSpec.dirty = True
-                        dev_comp_cmd = f"{nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
-                        if VERBOSE:
-                            print(dev_comp_cmd)
+                        dev_comp_cmd = f"{nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                        verbose_print(dev_comp_cmd)
                         subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                     RuntimeSpec.obj_set.add(obj)
 
@@ -1451,8 +1010,8 @@ class RuntimeSpec():
             harmonize_version,
             numba.int32(),
             device=True,
-            debug=DEBUG,
-            opt=(not DEBUG),
+            debug=config.DEBUG,
+            opt=(not config.DEBUG),
             name=f"harmonize_version",
             link_in_hipdevicelib=True
         )
@@ -1474,7 +1033,7 @@ class RuntimeSpec():
             ir_file.write(ir_text)
         ir_file.close()
 
-        cmd = f"{hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
+        cmd = f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
         subprocess.run(cmd.split(),shell=False,check=True)
         RuntimeSpec.gpu_bc_set.add(bc_path)
 
@@ -1537,10 +1096,9 @@ class RuntimeSpec():
             source_file.close()
 
             RuntimeSpec.dirty = True
-            dev_comp_cmd = f"{hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+            dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
-            if VERBOSE:
-                print(dev_comp_cmd)
+            verbose_print(dev_comp_cmd)
             subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
         if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
@@ -1548,13 +1106,12 @@ class RuntimeSpec():
 
         if touched:
             dev_comp_cmd = [
-                f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
-                f"{hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
+                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
+                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
             ]
 
             for cmd in dev_comp_cmd:
-                if VERBOSE:
-                    print(cmd)
+                verbose_print(cmd)
                 subprocess.run(cmd.split(),shell=False,check=True)
 
         RuntimeSpec.gpu_bc_set.add(gpu_ir)
@@ -1565,7 +1122,7 @@ class RuntimeSpec():
     @staticmethod
     def bind_and_load():
 
-        print("About to bind and load",flush=True)
+        debug_print("About to bind and load")
 
         if len(RuntimeSpec.gpu_platforms) == 0:
             raise RuntimeError(
@@ -1582,7 +1139,7 @@ class RuntimeSpec():
         so_path  = f"{RuntimeSpec.cache_path}harmonize.so"
         touched = False
 
-        if (GPUPlatform.CUDA in RuntimeSpec.gpu_platforms) and (not path.isfile(dev_path)):
+        if (config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms) and (not path.isfile(dev_path)):
             touched = True
         elif not path.isfile(so_path):
             touched = True
@@ -1590,27 +1147,25 @@ class RuntimeSpec():
         if touched or RuntimeSpec.dirty:
 
 
-            if GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
 
-                self.generate_builtin_code(GPUPlatform.CUDA)
+                self.generate_builtin_code(config.GPUPlatform.CUDA)
 
                 link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
                 dev_link_cmd = f"{nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
                 comp_cmd = f"{nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
-                if VERBOSE:
-                    print(dev_link_cmd)
+                verbose_print(dev_link_cmd)
                 subprocess.run(dev_link_cmd.split(),shell=False,check=True)
 
-                if VERBOSE:
-                    print(comp_cmd)
+                verbose_print(comp_cmd)
                 subprocess.run(comp_cmd.split(),shell=False,check=True)
 
 
-            if GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
 
-                RuntimeSpec.generate_builtin_code(GPUPlatform.ROCM)
+                RuntimeSpec.generate_builtin_code(config.GPUPlatform.ROCM)
 
                 RuntimeSpec.generate_hipdevicelib()
 
@@ -1623,15 +1178,14 @@ class RuntimeSpec():
                 so_path    = f"{RuntimeSpec.cache_path}harmonize.so"
 
                 comp_cmd = [
-                    f"{hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
-                    f"{hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
-	                f"{hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
-	                f"{hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} -g"
+                    f"{config.hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
+                    f"{config.hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
+	                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
+	                f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} -g"
                 ]
 
                 for cmd in comp_cmd:
-                    if VERBOSE:
-                        print(cmd)
+                    verbose_print(cmd)
                     subprocess.run(cmd.split(),shell=False,check=True)
 
 
@@ -1702,7 +1256,7 @@ class RuntimeSpec():
                 spec.fn[kind]['complete']      = complete_wrapper
                 spec.fn[kind]['clear_flags']   = clear_flags
 
-        print("Bound and loaded",flush=True)
+        debug_print("Bound and loaded")
 
 
 

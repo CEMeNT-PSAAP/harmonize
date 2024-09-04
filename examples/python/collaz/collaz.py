@@ -14,11 +14,11 @@ from numba import njit, config
 # harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
 
 # recommended for tioga.llnl.gov
-harm.set_rocm_path('/opt/rocm-6.0.0')
+harm.config.set_rocm_path('/opt/rocm-6.0.0')
 
 mode = "event"
 
-config.DISABLE_JIT = False
+numba.config.DISABLE_JIT = False
 
 val_count = 65536
 dev_state_type = numba.from_dtype(np.dtype([ ('dummy',np.uintp), ('val',np.dtype((np.uintp,val_count+1))) ]))
@@ -98,7 +98,7 @@ thread = access_map["thread"]
 odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
 
 
-collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns,harm.GPUPlatform.ROCM)
+collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 
 harm.RuntimeSpec.bind_and_load()
 

@@ -21,11 +21,11 @@ def type_local_array(context):
 
             # Only integer literals and tuples of integer literals are valid
             # shapes
-            if isinstance(shape, types.Integer):
-                if not isinstance(shape, types.IntegerLiteral):
+            if isinstance(shape, nb.types.Integer):
+                if not isinstance(shape, nb.types.IntegerLiteral):
                     raise nb.core.errors.UnsupportedError(f"Integer shape type {shape} is not literal.")
-            elif isinstance(shape, (types.Tuple, types.UniTuple)):
-                if any([not isinstance(s, types.IntegerLiteral)
+            elif isinstance(shape, (nb.types.Tuple, nb.types.UniTuple)):
+                if any([not isinstance(s, nb.types.IntegerLiteral)
                         for s in shape]):
                     raise nb.core.errors.UnsupportedError(
                         f"At least one element of shape tuple type{shape} is not an integer literal."
@@ -38,7 +38,7 @@ def type_local_array(context):
             nb_shape = parse_shape(shape)
 
             if nb_dtype is not None and nb_shape is not None:
-                retty = types.Array(dtype=nb_dtype, ndim=nb_shape, layout='C')
+                retty = nb.types.Array(dtype=nb_dtype, ndim=nb_shape, layout='C')
                 # Inlining the signature construction from numpy_empty_nd
                 sig = retty(shape, dtype)
                 return sig
@@ -54,11 +54,11 @@ def type_local_array(context):
 
             # Only integer literals and tuples of integer literals are valid
             # shapes
-            if isinstance(shape, types.Integer):
-                if not isinstance(shape, types.IntegerLiteral):
+            if isinstance(shape, nb.types.Integer):
+                if not isinstance(shape, nb.types.IntegerLiteral):
                     return None
-            elif isinstance(shape, (types.Tuple, types.UniTuple)):
-                if any([not isinstance(s, types.IntegerLiteral)
+            elif isinstance(shape, (nb.types.Tuple, nb.types.UniTuple)):
+                if any([not isinstance(s, nb.types.IntegerLiteral)
                         for s in shape]):
                     return None
             else:
@@ -67,7 +67,7 @@ def type_local_array(context):
             ndim = parse_shape(shape)
             nb_dtype = parse_dtype(dtype)
             if nb_dtype is not None and ndim is not None:
-                return types.Array(dtype=nb_dtype, ndim=ndim, layout='C')
+                return nb.types.Array(dtype=nb_dtype, ndim=ndim, layout='C')
 
         return typer
 
@@ -113,7 +113,7 @@ def builtin_local_array(context, builder, sig, args):
         nb_dtype = parse_dtype(dtype)
         nb_shape = parse_shape(shape)
 
-        retty = types.Array(dtype=nb_dtype, ndim=nb_shape, layout='C')
+        retty = nb.types.Array(dtype=nb_dtype, ndim=nb_shape, layout='C')
 
         # In ol_np_empty, the reference type of the array is fed into the
         # signatrue as a third argument. This third argument is not used by
