@@ -15,7 +15,8 @@ def print_formatted(value):
 
 
 def print_formatted_inner(value):
-    print("(",value,")")
+    pass
+    #print("(",value,")")
 
 
 

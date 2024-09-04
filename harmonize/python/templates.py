@@ -7,7 +7,7 @@ void init_program_{suffix}(
     size_t  grid_size
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
+    //printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
     init<{short_name}>(*instance,grid_size);
     util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
@@ -22,7 +22,7 @@ void exec_program_{suffix}(
 	size_t  cycle_count
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    printf("\\n\\nEXEC (instance: %p)\\n\\n",instance_ptr);
+    //printf("\\n\\nEXEC (instance: %p)\\n\\n",instance_ptr);
     exec<{short_name}>(*instance,grid_size,cycle_count);
     util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
@@ -32,10 +32,10 @@ void exec_program_{suffix}(
 alloc_event_prog_template = """
 extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
-    printf("allocating event program instance\\n");
+    //printf("allocating event program instance\\n");
     auto  state  = (typename {short_name}::DeviceState) device_arg;
     void *result = new {short_name}::Instance(io_size,state);
-    printf("allocated event program instance:%p\\n",result);
+    //printf("allocated event program instance:%p\\n",result);
     return result;
 }}
 """
@@ -43,7 +43,7 @@ void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
 alloc_harm_prog_template = """
 extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t arena_size) {{
-	printf("allocting async program instance\\n");
+	//printf("allocting async program instance\\n");
 	auto  state  = (typename {short_name}::DeviceState) device_arg;
 	void *result = new {short_name}::Instance(arena_size,state);
 	printf("allocted async program instance:%p\\n",result);
@@ -63,9 +63,9 @@ alloc_state_template = """
 extern "C"
 void *alloc_state_{suffix}() {{
 	void *result = nullptr;
-	printf("allocting async program instance with size:%ld\\n",sizeof({state_struct}));
+	//printf("allocting async program instance with size:%ld\\n",sizeof({state_struct}));
 	util::host::auto_throw(adapt::GPUrtMalloc(&result,sizeof({state_struct})));
-	printf("allocated gpu_state:%p\\n",result);
+	//printf("allocated gpu_state:%p\\n",result);
 	return result;
 }}
 """

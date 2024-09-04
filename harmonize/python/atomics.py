@@ -1,5 +1,9 @@
 import numba
 import llvmlite
+
+from harmonize.python import errors, config
+
+
 from .prim import *
 
 
@@ -22,7 +26,7 @@ atomic_op_info = [
 
 
 @numba.extending.intrinsic
-def cast_ptr(_typingctx, input_ptr, ptr_type):
+def cast_ptr(typing_context, input_ptr, ptr_type):
 
     def impl(context, builder, _signature, args):
         llvm_type = context.get_value_type(target_type)
@@ -40,12 +44,9 @@ def cast_ptr(_typingctx, input_ptr, ptr_type):
 
 
 @numba.extending.intrinsic
-def get_ptr(_typingctx, array):
+def get_ptr(typing_context, array):
 
     def impl(context, builder, _signature, args):
-        #llvm_type = context.get_value_type(vp.instance_type)
-        #val = builder.bitcast(args[0], llvm_type)
-        #return val
         llvm_array_type = context.get_value_type(array)
         llvm_vp_type = context.get_value_type(vp)
         four    = llvmlite.ir.Constant(llvmlite.ir.IntType(32),0)
@@ -77,43 +78,39 @@ def array_atomic_extern(op_name,face_type):
 
 
 
-array_atomic_add_i32 = array_atomic_extern("add",  int32)
-array_atomic_add_u32 = array_atomic_extern("add", uint32)
-array_atomic_add_i64 = array_atomic_extern("add",  int64)
-array_atomic_add_u64 = array_atomic_extern("add", uint64)
-array_atomic_add_f32 = array_atomic_extern("add",float32)
-array_atomic_add_f64 = array_atomic_extern("add",float64)
-
-array_atomic_max_i32 = array_atomic_extern("max",  int32)
-array_atomic_max_u32 = array_atomic_extern("max", uint32)
-array_atomic_max_u64 = array_atomic_extern("max", uint64)
-
-
 def array_atomic_add(array,index,value):
     return None
 
 @numba.extending.overload(array_atomic_add)
 def array_atomic_add_inner(array,index,value):
+
+    if config.CUDA_AVAILABLE:
+        def impl(array,index,value):
+            numba.cuda.atomic.add(array,index,value)
+        return impl
+    elif not config.ROCM_AVAILABLE:
+        raise errors.no_platforms()
+
     if not isinstance(array,numba.types.Array):
-        raise RuntimeError("First argument should be an array.")
+        raise numba.errors.TypingError("First argument should be an array.")
 
     is_tuple = False
 
     if isinstance(index,numba.types.Tuple):
         if len(index) == 0:
-            raise RuntimeError("Zero-length tuple given as index. At least one index must be provided.")
+            raise numba.errors.TypingError("Zero-length tuple given as index. At least one index must be provided.")
         for kind in index:
             if not isinstance(kind,numba.types.Integer):
-                raise RuntimeError(f"Non-integer value of type '{kind}' in index tuple.")
+                raise numba.errors.TypingError(f"Non-integer value of type '{kind}' in index tuple.")
         is_tuple = True
     elif isinstance(index,numba.types.UniTuple):
         if len(index) == 0:
-            raise RuntimeError("Zero-length tuple given as index. At least one index must be provided.")
+            raise numba.errors.TypingError("Zero-length tuple given as index. At least one index must be provided.")
         if not isinstance(index.dtype,numba.types.Integer):
-            raise RuntimeError(f"Non-integer value of type '{kind.dtype}' in index tuple.")
+            raise numba.errors.TypingError(f"Non-integer value of type '{kind.dtype}' in index tuple.")
         is_tuple = True
     elif not isinstance(index,numba.types.Integer):
-        raise RuntimeError("Index is not an integer or a positive-length tuple of integers.")
+        raise numba.errors.TypingError("Index is not an integer or a positive-length tuple of integers.")
 
     allowed = {
         int32   : array_atomic_add_i32,
@@ -145,17 +142,37 @@ def array_atomic_add_inner(array,index,value):
 
 
 
-
-
 def array_atomic_max(array,index,value):
     return None
 
 @numba.extending.overload(array_atomic_max)
 def array_atomic_max_inner(array,index,value):
+
+    if config.CUDA_AVAILABLE:
+        def impl(array,index,value):
+            numba.cuda.atomic.max(array,index,value)
+        return impl
+    elif not config.ROCM_AVAILABLE:
+        raise errors.no_platforms()
+
     if not isinstance(array,numba.types.Array):
-        return None
-    if not isinstance(index,numba.types.Integer):
-        return None
+        raise numba.errors.TypingError("First argument should be an array.")
+
+    if isinstance(index,numba.types.Tuple):
+        if len(index) == 0:
+            raise numba.errors.TypingError("Zero-length tuple given as index. At least one index must be provided.")
+        for kind in index:
+            if not isinstance(kind,numba.types.Integer):
+                raise numba.errors.TypingError(f"Non-integer value of type '{kind}' in index tuple.")
+        is_tuple = True
+    elif isinstance(index,numba.types.UniTuple):
+        if len(index) == 0:
+            raise numba.errors.TypingError("Zero-length tuple given as index. At least one index must be provided.")
+        if not isinstance(index.dtype,numba.types.Integer):
+            raise numba.errors.TypingError(f"Non-integer value of type '{kind.dtype}' in index tuple.")
+        is_tuple = True
+    elif not isinstance(index,numba.types.Integer):
+        raise numba.errors.TypingError("Index is not an integer or a positive-length tuple of integers.")
 
     allowed = {
         int32   : array_atomic_add_i32,
@@ -172,4 +189,18 @@ def array_atomic_max_inner(array,index,value):
 
     return array_atomic_max
 
+
+
+
+
+array_atomic_add_i32 = array_atomic_extern("add",  int32)
+array_atomic_add_u32 = array_atomic_extern("add", uint32)
+array_atomic_add_i64 = array_atomic_extern("add",  int64)
+array_atomic_add_u64 = array_atomic_extern("add", uint64)
+array_atomic_add_f32 = array_atomic_extern("add",float32)
+array_atomic_add_f64 = array_atomic_extern("add",float64)
+
+array_atomic_max_i32 = array_atomic_extern("max",  int32)
+array_atomic_max_u32 = array_atomic_extern("max", uint32)
+array_atomic_max_u64 = array_atomic_extern("max", uint64)
 

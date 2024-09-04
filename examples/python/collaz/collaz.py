@@ -1,18 +1,19 @@
-import numpy as np
-from numba import njit, hip as cuda
-import numba
-from numba import config
-import time
-
 import sys
-
+import time
+import numba
+import numpy as np
 import harmonize as harm
 
+from numba import njit, config
+
+
 # On systems where there are multiple cuda/rocm versions, a path to
-# a particular one may be provided (this path below is used on lassen)
+# a particular one may be provided
+
+# recommended for lassen.llnl.gov:
 # harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
 
-
+# recommended for tioga.llnl.gov
 harm.set_rocm_path('/opt/rocm-6.0.0')
 
 mode = "event"
@@ -65,11 +66,10 @@ def finalize(prog: numba.uintp):
 def make_work(prog: numba.uintp) -> numba.boolean:
     step_max = 4
     old = harm.array_atomic_add(device(prog)['val'],0,step_max)
-    #old = cuda.atomic.add(device(prog)['val'],step_max)
     if old >= val_count:
         return False
 
-    iter = cuda.local.array(1,collaz_iter)
+    iter = harm.local_array(1,collaz_iter)
     step = 0
     while (old+step < val_count) and (step < step_max):
         val = old + step
@@ -91,8 +91,12 @@ base_fns   = (initialize,finalize,make_work)
 state_spec = (dev_state_type,grp_state_type,thd_state_type)
 async_fns  = [odd,even]
 
-device, group, thread = harm.RuntimeSpec.access_fns(state_spec)
+access_map = harm.RuntimeSpec.access_fns(state_spec)
+device = access_map["device"]
+group  = access_map["group"]
+thread = access_map["thread"]
 odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
+
 
 collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns,harm.GPUPlatform.ROCM)
 
@@ -103,12 +107,13 @@ harm.RuntimeSpec.bind_and_load()
 
 fns = collaz_spec.event_functions()
 
+
 event_alloc_state   = fns["alloc_state"]
 event_free_state    = fns["free_state"]
 event_alloc_program = fns["alloc_program"]
 event_free_program  = fns["free_program"]
-event_load_state    = fns["load_state"]
-event_store_state   = fns["store_state"]
+event_load_state    = fns["load_state_device"]
+event_store_state   = fns["store_state_device"]
 event_init_program  = fns["init_program"]
 event_exec_program  = fns["exec_program"]
 event_complete      = fns["complete"]
