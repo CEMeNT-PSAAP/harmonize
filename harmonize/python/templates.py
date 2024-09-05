@@ -46,7 +46,7 @@ void *alloc_program_{suffix}(void* device_arg, size_t arena_size) {{
 	//printf("allocting async program instance\\n");
 	auto  state  = (typename {short_name}::DeviceState) device_arg;
 	void *result = new {short_name}::Instance(arena_size,state);
-	printf("allocted async program instance:%p\\n",result);
+	//printf("allocted async program instance:%p\\n",result);
 	return result;
 }}
 """
@@ -96,7 +96,7 @@ void store_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
     //printf("cpu_state:%p\\n",host_ptr);
     //printf("gpu_state:%p\\n", dev_ptr);
     void *offset_dev_ptr = (void*)(((char*)dev_ptr)+{offset});
-    size_t *data = (size_t*) host_ptr;
+    //size_t *data = (size_t*) host_ptr;
     //for(int i=0; i<10; i++) {{
     //    //printf("%zu,",data[i]);
     //}}

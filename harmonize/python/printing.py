@@ -1,5 +1,8 @@
 import numba
 import llvmlite
+
+import harmonize.python.config as config
+
 from .templates import print_template
 from .prim import *
 
@@ -15,8 +18,7 @@ def print_formatted(value):
 
 
 def print_formatted_inner(value):
-    pass
-    #print("(",value,")")
+    print("(",value,")")
 
 
 
@@ -26,8 +28,7 @@ def cpu_print_formatted_overload(value):
     print(value,flush=True)
 
     def impl(value):
-        pass
-        #print("(",value,")")
+        print("(",value,")")
 
     return impl
 
@@ -66,7 +67,12 @@ def gpu_print_formatted_overload(value):
         signature = sig(void,kind)
         print(signature)
         py_name   = prim_info[kind]["py_name"]
-        implementation = numba.hip.declare_device(f"harmonize_print_{py_name}",  signature)
+        if config.CUDA_AVAILABLE:
+            implementation = numba.cuda.declare_device(f"harmonize_print_{py_name}",  signature)
+        elif config.ROCM_AVAILABLE:
+            implementation = numba.hip.declare_device(f"harmonize_print_{py_name}",  signature)
+        else:
+            errors.no_platforms()
         #implementation = ext_fn(f"harmonize_print_{py_name}",  signature)
         print_extern_registry[kind] = implementation
     else:
@@ -76,8 +82,7 @@ def gpu_print_formatted_overload(value):
     print(inner_impl,flush=True)
 
     def impl(value):
-        pass
-        #inner_impl(value)
+        inner_impl(value)
 
     print(impl,flush=True)
 

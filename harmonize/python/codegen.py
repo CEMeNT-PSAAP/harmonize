@@ -4,7 +4,7 @@ import numpy as np
 import struct
 
 from harmonize.python import config
-from harmonize.python.logging import verbose_print, debug_print
+from harmonize.python.logging import verbose_print, debug_print, progress_print
 
 # Injects `value` as the value of the global variable named `name` in the module
 # that defined the function `index` calls down the stack, from the perspective

@@ -18,7 +18,7 @@ from .templates import *
 from .atomics   import atomic_op_info
 from .prim      import prim_info
 from .printing  import generate_print_code
-from .logging   import verbose_print, debug_print
+from .logging   import verbose_print, debug_print, progress_print
 from .codegen   import (
     pascal_case,
     size_of,
@@ -739,6 +739,7 @@ class RuntimeSpec():
 
             if touched:
 
+                progress_print(f"Compiling function '{fn.__name__}' for '{suffix}'")
                 ir_text  = extern_device_ir(fn,self.type_map,suffix,platform)
                 for term in rep_list:
                     ir_text = re.sub( \
@@ -766,12 +767,14 @@ class RuntimeSpec():
                         dev_comp_cmd = [f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"]
                         for cmd in dev_comp_cmd:
                             verbose_print(cmd)
+                            progress_print(f"Compiling '{bc_path}'")
                             subprocess.run(cmd.split(),shell=False,check=True)
 
                     if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
                         dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
                         for cmd in dev_comp_cmd:
                             verbose_print(cmd)
+                            progress_print(f"Compiling '{obj_path}'")
                             subprocess.run(cmd.split(),shell=False,check=True)
 
             # Record the path of the generated (or pre-existing) object
@@ -851,6 +854,7 @@ class RuntimeSpec():
                     dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
                     verbose_print(dev_comp_cmd)
+                    progress_print(f"Compiling '{ir}'")
                     subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
                 gpu_triple, cpu_triple = find_bundle_triples(ir)
@@ -864,6 +868,7 @@ class RuntimeSpec():
                         f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
                         f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
                     ]
+                    progress_print(f"Unbundling '{ir}'")
 
                     for cmd in dev_comp_cmd:
                         verbose_print(cmd)
@@ -886,6 +891,7 @@ class RuntimeSpec():
 
                     if touched:
                         RuntimeSpec.dirty = True
+                        progress_print(f"Compiling '{obj}'")
                         dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                         verbose_print(dev_comp_cmd)
                         subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
@@ -1033,6 +1039,7 @@ class RuntimeSpec():
             ir_file.write(ir_text)
         ir_file.close()
 
+        progress_print(f"Compiling '{bc_path}'")
         cmd = f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
         subprocess.run(cmd.split(),shell=False,check=True)
         RuntimeSpec.gpu_bc_set.add(bc_path)
@@ -1098,6 +1105,7 @@ class RuntimeSpec():
                 RuntimeSpec.dirty = True
                 dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                 verbose_print(dev_comp_cmd)
+                progress_print(f"Compiling '{obj}'")
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
             RuntimeSpec.obj_set.add(obj)
 
@@ -1138,6 +1146,7 @@ class RuntimeSpec():
                 dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
                 verbose_print(dev_comp_cmd)
+                progress_print(f"Compiling '{ir}'")
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
 
             if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
@@ -1149,6 +1158,7 @@ class RuntimeSpec():
                     f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
                 ]
 
+                progress_print(f"Unbundling '{ir}'")
                 for cmd in dev_comp_cmd:
                     verbose_print(cmd)
                     subprocess.run(cmd.split(),shell=False,check=True)
@@ -1196,10 +1206,13 @@ class RuntimeSpec():
                 comp_cmd = f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
                 verbose_print(dev_link_cmd)
+                progress_print(f"Linking device code")
                 subprocess.run(dev_link_cmd.split(),shell=False,check=True)
 
                 verbose_print(comp_cmd)
+                progress_print(f"Creating shared object file")
                 subprocess.run(comp_cmd.split(),shell=False,check=True)
+                progress_print(f"")
 
 
             if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
@@ -1223,8 +1236,16 @@ class RuntimeSpec():
 	                f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} -g"
                 ]
 
-                for cmd in comp_cmd:
+                comp_desc = [
+                    "Linking device code",
+                    "Linking host code",
+                    "Bundling linked code",
+                    "Creating shared object file",
+                ]
+
+                for idx, cmd in enumerate(comp_cmd):
                     verbose_print(cmd)
+                    progress_print(comp_desc[idx])
                     subprocess.run(cmd.split(),shell=False,check=True)
 
 

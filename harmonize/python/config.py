@@ -5,8 +5,8 @@ from os.path    import dirname, abspath
 from harmonize.python import errors, logging
 
 DEBUG   = False
-VERBOSE = True
-INTERNAL_DEBUG = True
+VERBOSE = False
+INTERNAL_DEBUG = False
 COLOR_LOG = True
 
 NONE_AVAILABLE = True
