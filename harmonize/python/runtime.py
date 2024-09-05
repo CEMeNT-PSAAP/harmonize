@@ -10,7 +10,7 @@ import harmonize.python.config as config
 
 from os         import makedirs, getcwd, path
 from time       import sleep
-from numba      import njit, hip as cuda
+from numba      import njit
 from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
@@ -886,7 +886,7 @@ class RuntimeSpec():
 
                     if touched:
                         RuntimeSpec.dirty = True
-                        dev_comp_cmd = f"{nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                        dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                         verbose_print(dev_comp_cmd)
                         subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                     RuntimeSpec.obj_set.add(obj)
@@ -940,7 +940,7 @@ class RuntimeSpec():
 
             if isinstance(kind,numba.types.Record):
                 sig = kind(numba.uintp)
-                result[name] = (cuda.declare_device(f"access_{path}",sig))
+                result[name] = (config.cuda.declare_device(f"access_{path}",sig))
             elif isinstance(kind,dict):
                 result[name] = RuntimeSpec.declare_program_accessors(kind,path)
             else:
@@ -978,7 +978,7 @@ class RuntimeSpec():
         for func in async_fns:
             sig = fn_sig(func)
             name = func.__name__
-            result.append(cuda.declare_device(f"dispatch_{name}_{kind}", sig))
+            result.append(config.cuda.declare_device(f"dispatch_{name}_{kind}", sig))
         return tuple(result)
 
     #def query(kind,*fields):
@@ -1069,53 +1069,92 @@ class RuntimeSpec():
 
         file_path = f"{RuntimeSpec.cache_path}builtin"
         source = f"{file_path}.cpp"
-        ir     = f"{file_path}.bc"
-        cpu_ir = f"{file_path}_cpu.bc"
-        gpu_ir = f"{file_path}_gpu.bc"
-        touched = False
-        if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
-            touched = True
-        elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
-            touched = True
 
-        if touched:
+        if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+            obj     = f"{file_path}.o"
+            touched = False
+            if not path.isfile(obj):
+                touched = True
+            elif getmtime(source) > getmtime(obj):
+                touched = True
 
-            source_file = open(source,mode='a+')
-            source_file.seek(0)
-            old_text  = source_file.read()
+            if touched:
 
-            dirty = False
-            if old_text != text:
-                dirty = True
-                RuntimeSpec.dirty = True
-
-            if touched or dirty:
+                source_file = open(source,mode='a+')
                 source_file.seek(0)
-                source_file.truncate()
-                source_file.write(text)
-            source_file.close()
+                old_text  = source_file.read()
 
-            RuntimeSpec.dirty = True
-            dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+                dirty = False
+                if old_text != text:
+                    dirty = True
+                    RuntimeSpec.dirty = True
 
-            verbose_print(dev_comp_cmd)
-            subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                if touched or dirty:
+                    source_file.seek(0)
+                    source_file.truncate()
+                    source_file.write(text)
+                source_file.close()
 
-        if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
-            raise RuntimeError("Attempted to build builtin code with no target triples defined.")
+                RuntimeSpec.dirty = True
+                dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                verbose_print(dev_comp_cmd)
+                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+            RuntimeSpec.obj_set.add(obj)
 
-        if touched:
-            dev_comp_cmd = [
-                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
-                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
-            ]
 
-            for cmd in dev_comp_cmd:
-                verbose_print(cmd)
-                subprocess.run(cmd.split(),shell=False,check=True)
 
-        RuntimeSpec.gpu_bc_set.add(gpu_ir)
-        RuntimeSpec.cpu_bc_set.add(cpu_ir)
+
+
+        if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+
+            ir     = f"{file_path}.bc"
+            cpu_ir = f"{file_path}_cpu.bc"
+            gpu_ir = f"{file_path}_gpu.bc"
+            touched = False
+            if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
+                touched = True
+            elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
+                touched = True
+
+
+            if touched:
+
+                source_file = open(source,mode='a+')
+                source_file.seek(0)
+                old_text  = source_file.read()
+
+                dirty = False
+                if old_text != text:
+                    dirty = True
+                    RuntimeSpec.dirty = True
+
+                if touched or dirty:
+                    source_file.seek(0)
+                    source_file.truncate()
+                    source_file.write(text)
+                source_file.close()
+
+                RuntimeSpec.dirty = True
+                dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+
+                verbose_print(dev_comp_cmd)
+                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+            if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
+                raise RuntimeError("Attempted to build builtin code with no target triples defined.")
+
+            if touched:
+                dev_comp_cmd = [
+                    f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
+                    f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
+                ]
+
+                for cmd in dev_comp_cmd:
+                    verbose_print(cmd)
+                    subprocess.run(cmd.split(),shell=False,check=True)
+
+            RuntimeSpec.gpu_bc_set.add(gpu_ir)
+            RuntimeSpec.cpu_bc_set.add(cpu_ir)
 
 
 
@@ -1149,12 +1188,12 @@ class RuntimeSpec():
 
             if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
 
-                self.generate_builtin_code(config.GPUPlatform.CUDA)
+                RuntimeSpec.generate_builtin_code(config.GPUPlatform.CUDA)
 
                 link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-                dev_link_cmd = f"{nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
-                comp_cmd = f"{nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                dev_link_cmd = f"{config.nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
+                comp_cmd = f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
 
                 verbose_print(dev_link_cmd)
                 subprocess.run(dev_link_cmd.split(),shell=False,check=True)

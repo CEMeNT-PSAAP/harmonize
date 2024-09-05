@@ -157,6 +157,13 @@ struct AtomicIter
 		, limit(iter.limit)
 	{}
 
+	__host__ __device__ AtomicIter<IndexType>& operator= ( Iter<IndexType> iter )
+	{
+		value = iter.value;
+		limit = iter.limit;
+		return *this;
+	}
+
 	__device__ void reset(IndexType start_val, IndexType limit_val) {
 		__threadfence();
 		IndexType old_limit = atomicAdd(&limit,0);
@@ -230,18 +237,26 @@ struct ArrayIter {
 	IterType iter;
 
 	template<template < typename > class OTHER_ITER_TYPE>
-	__host__ __device__ ArrayIter<T,OTHER_ITER_TYPE,IndexType> (ArrayIter<T,OTHER_ITER_TYPE,IndexType> other_iter)
+	__host__ __device__ ArrayIter<T,ITER_TYPE,INDEX_TYPE> (ArrayIter<T,OTHER_ITER_TYPE,INDEX_TYPE>&& other_iter)
 		: array(other_iter.array)
 		, iter(other_iter.iter)
 	{}
 
+	template<template < typename > class OTHER_ITER_TYPE>
+	__host__ __device__ ArrayIter<T,ITER_TYPE,INDEX_TYPE>& operator= (ArrayIter<T,OTHER_ITER_TYPE,INDEX_TYPE>&& other_iter)
+	{
+		array = other_iter.array;
+		iter  = other_iter.iter;
+		return *this;
+	}
 
-	__host__ __device__ ArrayIter<T,IterType,IndexType> (T* adr, IterType other_iter)
+
+	__host__ __device__ ArrayIter<T,ITER_TYPE,INDEX_TYPE> (T* adr, IterType other_iter)
 		: array(adr)
 		, iter (other_iter)
 	{}
 
-	__host__ __device__ ArrayIter<T,IterType,IndexType> () = default;
+	__host__ __device__ ArrayIter<T,ITER_TYPE,INDEX_TYPE> () = default;
 
 
 	__device__ void reset(T* new_array, IterType new_iter) {

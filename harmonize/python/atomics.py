@@ -86,7 +86,7 @@ def array_atomic_add_inner(array,index,value):
 
     if config.CUDA_AVAILABLE:
         def impl(array,index,value):
-            numba.cuda.atomic.add(array,index,value)
+            return numba.cuda.atomic.add(array,index,value)
         return impl
     elif not config.ROCM_AVAILABLE:
         raise errors.no_platforms()
@@ -150,7 +150,7 @@ def array_atomic_max_inner(array,index,value):
 
     if config.CUDA_AVAILABLE:
         def impl(array,index,value):
-            numba.cuda.atomic.max(array,index,value)
+            return numba.cuda.atomic.max(array,index,value)
         return impl
     elif not config.ROCM_AVAILABLE:
         raise errors.no_platforms()

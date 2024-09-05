@@ -127,7 +127,7 @@ def builtin_local_array(context, builder, sig, args):
     elif config.CUDA_AVAILABLE and isinstance(context,nb.cuda.target.CUDATargetContext):
         length = sig.args[0].literal_value
         dtype = parse_dtype(sig.args[1])
-        return nb.cuda.lowering._generic_array(
+        return nb.cuda.cudaimpl._generic_array(
             context,
             builder,
             shape=(length,),

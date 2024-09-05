@@ -172,7 +172,7 @@ def map_type_name(type_map,kind,rec_mode=""):
     primitives = {
         numba.none : "void",
         bool       : "bool",
-        np.bool8   : "bool",
+        np.bool_   : "bool",
         np.uint8   : "uint8_t",
         np.uint16  : "uint16_t",
         np.uint32  : "uint32_t",
