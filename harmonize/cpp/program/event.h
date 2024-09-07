@@ -78,6 +78,7 @@ class EventProgram
 	// A set of halting condition flags
 	*/
 	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
+	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 	static const unsigned int COMPLETION_FLAG	= 0x80000000;
 
 
@@ -110,6 +111,12 @@ class EventProgram
 	};
 
 
+	struct Status {
+		unsigned int checkout;
+		unsigned int flip_count;
+		unsigned int flags;
+	};
+
 	/*
 	// This struct represents the entire set of data structures that must be stored in main
 	// memory to track the state of the program defined by the developer as well as the state
@@ -119,8 +126,7 @@ class EventProgram
 
 		typedef		ProgramType       ParentProgramType;
 
-		unsigned int  *checkout;
-		unsigned int  *flip_count;
+		Status        *status;
 		unsigned int   load_margin;
 		util::iter::IOBuffer<PromiseUnionType,AdrType> *event_io[PromiseUnionType::Info::COUNT];
 	};
@@ -134,8 +140,7 @@ class EventProgram
 	struct Instance {
 
 
-		util::host::DevBuf<unsigned int> checkout;
-		util::host::DevBuf<unsigned int> flip_count;
+		util::host::DevBuf<Status> status;
 		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Info::COUNT];
 		DeviceState device_state;
 
@@ -145,16 +150,14 @@ class EventProgram
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
 			}
-			checkout<< 0u;
-			flip_count<< 0u;
+			status << Status{0u,0u,0u};
 		}
 
 		__host__ DeviceContext to_context(){
 
 			DeviceContext result;
 
-			result.checkout = checkout;
-			result.flip_count = flip_count;
+			result.status = status;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				result.event_io[i] = event_io[i];
 			}
@@ -199,7 +202,13 @@ class EventProgram
 		}
 
 		__host__ void clear_flags(){
-
+			unsigned int zero = 0;
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				status,
+				&zero,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyHostToDevice
+			));
 		}
 
 	};
@@ -264,9 +273,9 @@ class EventProgram
 	/*
 	// Sets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
-	 __device__  void set_flags(unsigned int flag_bits){
+	__device__  void set_flags(unsigned int flag_bits){
 
-		atomicOr(&_dev_ctx.stack->status_flags,flag_bits);
+		atomicOr(&_dev_ctx.status->flags,flag_bits);
 
 	}
 
@@ -274,14 +283,18 @@ class EventProgram
 	/*
 	// Unsets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
-	 __device__  void unset_flags(unsigned int flag_bits){
+	__device__  void unset_flags(unsigned int flag_bits){
 
-		atomicAnd(&_dev_ctx.stack->status_flags,~flag_bits);
+		atomicAnd(&_dev_ctx.status->_flags,~flag_bits);
 
 	}
 
+	__device__ bool any_flags_set() {
+		return (atomicAdd(&_dev_ctx.status->flags,0) != 0);
+	}
 
-	 static void check_error(){
+
+	static void check_error(){
 
 		adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
 
@@ -363,10 +376,12 @@ class EventProgram
 
 		__shared__ util::iter::ArrayIter<PromiseUnionType,util::iter::AtomicIter,unsigned int> group_work;
 		__shared__ bool done;
+		__shared__ bool early_halt;
 		__shared__ OpDisc func_id;
 
 		__syncthreads();
 		if( threadIdx.x == 0 ){
+			early_halt = false;
 			group_work.reset(NULL,util::iter::Iter<unsigned int>(0,0));
 		}
 		__syncthreads();
@@ -374,27 +389,34 @@ class EventProgram
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
-		while(true){
+		while(!early_halt){
 			__syncthreads();
 			if( threadIdx.x == 0 ) {
 				done = true;
-				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
-					if( !_dev_ctx.event_io[i]->input_empty() ){
-						done = false;
-						func_id = static_cast<OpDisc>(i);
-						group_work = _dev_ctx.event_io[i]->pull_span(chunk_size*GROUP_SIZE);
-						if (!group_work.done()){
-							break;
+
+				if( any_flags_set() ){
+					early_halt = true;
+				} else {
+					for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
+						if( !_dev_ctx.event_io[i]->input_empty() ){
+							done = false;
+							func_id = static_cast<OpDisc>(i);
+							group_work = _dev_ctx.event_io[i]->pull_span(chunk_size*GROUP_SIZE);
+							if (!group_work.done()){
+								break;
+							}
 						}
 					}
 				}
+
 			}
+
 			__syncthreads();
 			if( done ){
 				__shared__ bool should_make_work;
 				__syncthreads();
 				if( threadIdx.x == 0 ) {
-					should_make_work = true;
+					should_make_work = !early_halt;
 				}
 				__syncthreads();
 				while(should_make_work){
@@ -446,15 +468,15 @@ class EventProgram
 
 		if( threadIdx.x == 0 ){
 			__threadfence();
-			unsigned int checkout_index = atomicAdd(_dev_ctx.checkout,1);
+			unsigned int checkout_index = atomicAdd(&_dev_ctx.status->checkout,1);
 			if( checkout_index == (gridDim.x - 1) ){
 				__threadfence();
-				atomicExch(_dev_ctx.checkout,0);
+				atomicExch(&_dev_ctx.status->checkout,0);
 				__threadfence();
 				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					_dev_ctx.event_io[i]->flip();
 				}
-				atomicAdd(_dev_ctx.flip_count,1u);
+				atomicAdd(&_dev_ctx.status->flip_count,1u);
 			}
 		}
 
@@ -485,6 +507,10 @@ class EventProgram
 	__device__ float load_fraction()
 	{
 		return _dev_ctx.event_io[Lookup<TYPE>::type::DISC]->output_fill_fraction_sync();
+	}
+
+	__device__ void halt_early() {
+		set_flags(EARLY_HALT_FLAG);
 	}
 
 };

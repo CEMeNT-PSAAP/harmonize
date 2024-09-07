@@ -192,6 +192,15 @@ extern "C" __device__
 }}
 """
 
+
+early_halt_template="""
+extern "C" __device__
+int halt_early_{suffix}(void* result, void *prog) {{
+	(({short_name}*)prog)->halt_early();
+    return 0;
+}}
+"""
+
 print_template="""
 extern "C" __device__
 int harmonize_print_{type_sig}(void* result, {args}) {{

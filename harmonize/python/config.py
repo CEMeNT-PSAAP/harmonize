@@ -1,12 +1,16 @@
 import numba
+import subprocess
 
+
+from os         import path
 from enum       import Enum
 from os.path    import dirname, abspath
 from harmonize.python import errors, logging
 
 DEBUG   = False
-VERBOSE = False
+VERBOSE = True
 INTERNAL_DEBUG = False
+ERROR_PRINT = True
 COLOR_LOG = True
 
 NONE_AVAILABLE = True
@@ -70,12 +74,55 @@ def set_platform(platform):
 def set_cuda_path(path):
     global CUDA_PATH
     CUDA_PATH = path
-    logging.verbose_print(f"CUDA_PATH set to {CUDA_PATH}")
+    if path == None:
+        logging.verbose_print(f"CUDA_PATH cleared to default")
+    else:
+        logging.verbose_print(f"CUDA_PATH set to {CUDA_PATH}")
 
 def set_rocm_path(path):
     global ROCM_PATH
     ROCM_PATH = path
-    logging.verbose_print(f"ROCM_PATH set to {ROCM_PATH}")
+    if path == None:
+        logging.verbose_print(f"ROCM_PATH cleared to default")
+    else:
+        logging.verbose_print(f"ROCM_PATH set to {ROCM_PATH}")
+
+
+def check_rocm_path(quiet=False):
+
+    dep_paths = [
+        hipcc_path(),
+        hipcc_clang_offload_bundler_path(),
+        hipcc_llvm_link_path(),
+        hipcc_llvm_as_path(),
+    ]
+
+    fail = False
+    for dep in dep_paths:
+        if not path.isfile(dep):
+            if not quiet:
+                logging.error_print(f"Path '{dep}' does not correspond to a file.")
+            fail = True
+    if fail and (not quiet):
+        raise RuntimeError("Some required ROCM dependencies missing.")
+
+    return not fail
+
+
+def try_autoset_rocm_path():
+    hipcc_path_cmd = "which hipcc"
+    result = subprocess.run(hipcc_path_cmd.split(),shell=False,check=True,stdout=subprocess.PIPE)
+    path = result.stdout.decode('utf-8')[:-1]
+
+    tail = "/bin/hipcc"
+    if not path.endswith(tail):
+        return
+    logging.verbose_print(f"Found hipcc located at '{path}'")
+
+    path = path[:-len(tail)]
+    set_rocm_path(path)
+    if not check_rocm_path(quiet=True):
+        set_rocm_path(None)
 
 def nvcc_path():
     if CUDA_PATH == None:
@@ -118,3 +165,5 @@ def native_gpu_arch(platform):
         output = f"{capability[0]}{capability[1]}"
         return output
 
+
+try_autoset_rocm_path()

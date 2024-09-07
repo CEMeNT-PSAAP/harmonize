@@ -26,19 +26,26 @@ def debug_print(*args):
         else:
             print("[  DEBUG  ]",*args,flush=True)
 
+def error_print(*args):
+    if config.ERROR_PRINT:
+        if config.COLOR_LOG:
+            print(RED,"[  ERROR  ]",NORMAL,*args,flush=True)
+        else:
+            print("[  ERROR  ]",*args,flush=True)
+
 
 biggest_progress_print = 0
 
 def progress_print(message):
     if config.VERBOSE or config.INTERNAL_DEBUG:
-        return
+        verbose_print(message)
+    else:
+        global biggest_progress_print
+        length = len(message)
+        if length < biggest_progress_print:
+            message.ljust(biggest_progress_print)
+        elif length > biggest_progress_print:
+            biggest_progress_print = length
 
-    global biggest_progress_print
-    length = len(message)
-    if length < biggest_progress_print:
-        message.ljust(biggest_progress_print)
-    elif length > biggest_progress_print:
-        biggest_progress_print = length
-
-    print(f"{message:<{biggest_progress_print}}\r",end="",flush=True)
+        print(f"{message:<{biggest_progress_print}}\r",end="",flush=True)
 

@@ -2905,7 +2905,9 @@ class AsyncProgram
 		return NAN;
 	}
 
-
+	__device__ void halt_early() {
+		set_flags(EARLY_HALT_FLAG);
+	}
 
 
 };

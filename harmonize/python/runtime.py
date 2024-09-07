@@ -678,7 +678,12 @@ class RuntimeSpec():
                     prefix=prefix
                 )
 
-        return preamble + dispatch_defs + accessor_defs + fn_query_defs + query_defs
+        flag_defs = early_halt_template.format(
+            short_name=short_name,
+            suffix=suffix
+        )
+
+        return preamble + dispatch_defs + accessor_defs + fn_query_defs + query_defs + flag_defs
 
 
     def generate_async_ptx(self,cache_path,suffix,platform):
@@ -709,6 +714,7 @@ class RuntimeSpec():
         rep_list += [ f"dispatch_{fn.__name__}_async" for fn in comp_list ]
         rep_list += [ f"dispatch_{fn.__name__}_sync" for fn in comp_list ]
         rep_list += [ f"access_{label}" for label in self.program_fields ]
+        rep_list += [ "halt_early" ]
 
         debug_print(f"REP LIST: {rep_list}")
 
@@ -946,7 +952,12 @@ class RuntimeSpec():
 
             if isinstance(kind,numba.types.Record):
                 sig = kind(numba.uintp)
-                result[name] = (config.cuda.declare_device(f"access_{path}",sig))
+                if   config.CUDA_AVAILABLE:
+                    result[name] = (config.cuda.declare_device(f"access_{path}",sig))
+                elif config.ROCM_AVAILABLE:
+                    result[name] = (config.hip.declare_device(f"access_{path}",sig))
+                else:
+                    errors.no_platform()
             elif isinstance(kind,dict):
                 result[name] = RuntimeSpec.declare_program_accessors(kind,path)
             else:
@@ -984,7 +995,12 @@ class RuntimeSpec():
         for func in async_fns:
             sig = fn_sig(func)
             name = func.__name__
-            result.append(config.cuda.declare_device(f"dispatch_{name}_{kind}", sig))
+            if   config.CUDA_AVAILABLE:
+                result.append(config.cuda.declare_device(f"dispatch_{name}_{kind}", sig))
+            elif config.ROCM_AVAILABLE:
+                result.append(config.hip.declare_device(f"dispatch_{name}_{kind}", sig))
+            else:
+                errors.no_platform()
         return tuple(result)
 
     #def query(kind,*fields):
@@ -1012,7 +1028,7 @@ class RuntimeSpec():
         def harmonize_version() -> numba.int64:
             return 0
 
-        ir_text, res_type = cuda.compile_ptx_for_current_device (
+        ir_text, res_type = config.hip.compile_ptx_for_current_device (
             harmonize_version,
             numba.int32(),
             device=True,
