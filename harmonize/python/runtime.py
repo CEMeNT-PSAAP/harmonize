@@ -6,6 +6,7 @@ import subprocess
 
 import numpy as np
 
+
 import harmonize.python.config as config
 
 from os         import makedirs, getcwd, path
@@ -15,6 +16,7 @@ from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
 from .templates import *
+from .config    import compilation_gate
 from .atomics   import atomic_op_info
 from .prim      import prim_info
 from .printing  import generate_print_code
@@ -33,6 +35,7 @@ from .codegen   import (
     map_type_name,
     find_bundle_triples,
     extern_device_ir,
+    declare_device,
 )
 
 
@@ -743,7 +746,7 @@ class RuntimeSpec():
             elif getmtime(def_path) > getmtime(ir_path):
                 touched = True
 
-            if touched:
+            if compilation_gate(touched):
 
                 progress_print(f"Compiling function '{fn.__name__}' for '{suffix}'")
                 ir_text  = extern_device_ir(fn,self.type_map,suffix,platform)
@@ -762,13 +765,13 @@ class RuntimeSpec():
                     dirty = True
                     RuntimeSpec.dirty = True
 
-                if touched or dirty:
+                if compilation_gate(touched or dirty):
                     ir_file.seek(0)
                     ir_file.truncate()
                     ir_file.write(ir_text)
                 ir_file.close()
 
-                if dirty:
+                if compilation_gate(dirty):
                     if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
                         dev_comp_cmd = [f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"]
                         for cmd in dev_comp_cmd:
@@ -798,7 +801,8 @@ class RuntimeSpec():
 
         # Folder used to cache cuda and ptx code
 
-        makedirs(RuntimeSpec.cache_path,exist_ok=True)
+        if compilation_gate(True):
+            makedirs(RuntimeSpec.cache_path,exist_ok=True)
 
         self.fn = {}
 
@@ -817,13 +821,17 @@ class RuntimeSpec():
             # Generate the cuda code implementing the specialization
             suffix = self.spec_name+"_"+shortname
 
+            # !!!Rep list here
+            self.generate_async_ptx(RuntimeSpec.cache_path,suffix,gpu_platform)
+
+            if not compilation_gate(True):
+                continue
+
             # Generate and save generic program specification
             base_code = self.generate_specification_code(suffix)
 
             # Compile the async function definitions to ptx
 
-            # !!!Rep list here
-            self.generate_async_ptx(RuntimeSpec.cache_path,suffix,gpu_platform)
 
             # !!!Field enumeration here
             spec_code = self.generate_specialization_code(kind,shortname,suffix)
@@ -855,7 +863,7 @@ class RuntimeSpec():
                 elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
                     touched = True
 
-                if touched:
+                if compilation_gate(touched):
                     RuntimeSpec.dirty = True
                     dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
@@ -869,7 +877,7 @@ class RuntimeSpec():
                 RuntimeSpec.cpu_triple = cpu_triple
 
 
-                if touched:
+                if compilation_gate(touched):
                     dev_comp_cmd = [
                         f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
                         f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
@@ -895,7 +903,7 @@ class RuntimeSpec():
                     elif getmtime(source) > getmtime(obj):
                         touched = True
 
-                    if touched:
+                    if compilation_gate(touched):
                         RuntimeSpec.dirty = True
                         progress_print(f"Compiling '{obj}'")
                         dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
@@ -931,12 +939,12 @@ class RuntimeSpec():
             sig = fn_sig(func)
             name = func.__name__
             for kind in ["async","sync"]:
-                dispatch_fn = cuda.declare_device(f"dispatch_{name}_{kind}", sig)
+                dispatch_fn = declare_device(f"dispatch_{name}_{kind}", sig)
                 inject_global(kind+"_"+name,dispatch_fn,1)
 
         for name, kind in field_list:
             sig = kind(numba.uintp)
-            access_fn = cuda.declare_device(f"access_{name}_{kind}",sig)
+            access_fn = declare_device(f"access_{name}_{kind}",sig)
             inject_global(name,access_fn,1)
 
     @staticmethod
@@ -952,12 +960,7 @@ class RuntimeSpec():
 
             if isinstance(kind,numba.types.Record):
                 sig = kind(numba.uintp)
-                if   config.CUDA_AVAILABLE:
-                    result[name] = (config.cuda.declare_device(f"access_{path}",sig))
-                elif config.ROCM_AVAILABLE:
-                    result[name] = (config.hip.declare_device(f"access_{path}",sig))
-                else:
-                    errors.no_platform()
+                result[name] = (declare_device(f"access_{path}",sig))
             elif isinstance(kind,dict):
                 result[name] = RuntimeSpec.declare_program_accessors(kind,path)
             else:
@@ -986,6 +989,12 @@ class RuntimeSpec():
 
         return RuntimeSpec.declare_program_accessors(field_set,"")
 
+    @staticmethod
+    def program_interface():
+        result = {}
+        result["halt_early"] = declare_device(f"halt_early", numba.void(numba.uintp))
+        return result
+
 
     # Returns the async/sync function handles for the supplied functions, using
     # `kind` to switch between async and sync
@@ -995,12 +1004,7 @@ class RuntimeSpec():
         for func in async_fns:
             sig = fn_sig(func)
             name = func.__name__
-            if   config.CUDA_AVAILABLE:
-                result.append(config.cuda.declare_device(f"dispatch_{name}_{kind}", sig))
-            elif config.ROCM_AVAILABLE:
-                result.append(config.hip.declare_device(f"dispatch_{name}_{kind}", sig))
-            else:
-                errors.no_platform()
+            result.append(declare_device(f"dispatch_{name}_{kind}", sig))
         return tuple(result)
 
     #def query(kind,*fields):
@@ -1024,6 +1028,9 @@ class RuntimeSpec():
 
     @staticmethod
     def generate_hipdevicelib():
+
+        if not compilation_gate(True):
+            return
 
         def harmonize_version() -> numba.int64:
             return 0
@@ -1049,16 +1056,17 @@ class RuntimeSpec():
             dirty = True
             RuntimeSpec.dirty = True
 
-        if dirty:
+        if compilation_gate(dirty):
             ir_file.seek(0)
             ir_file.truncate()
             ir_file.write(ir_text)
         ir_file.close()
 
-        progress_print(f"Compiling '{bc_path}'")
-        cmd = f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
-        subprocess.run(cmd.split(),shell=False,check=True)
-        RuntimeSpec.gpu_bc_set.add(bc_path)
+        if compilation_gate(True):
+            progress_print(f"Compiling '{bc_path}'")
+            cmd = f"{config.hipcc_llvm_as_path()} {ir_path} -o {bc_path}"
+            subprocess.run(cmd.split(),shell=False,check=True)
+            RuntimeSpec.gpu_bc_set.add(bc_path)
 
 
 
@@ -1101,7 +1109,7 @@ class RuntimeSpec():
             elif getmtime(source) > getmtime(obj):
                 touched = True
 
-            if touched:
+            if compilation_gate(touched):
 
                 source_file = open(source,mode='a+')
                 source_file.seek(0)
@@ -1112,7 +1120,7 @@ class RuntimeSpec():
                     dirty = True
                     RuntimeSpec.dirty = True
 
-                if touched or dirty:
+                if compilation_gate(touched or dirty):
                     source_file.seek(0)
                     source_file.truncate()
                     source_file.write(text)
@@ -1141,7 +1149,7 @@ class RuntimeSpec():
                 touched = True
 
 
-            if touched:
+            if compilation_gate(touched):
 
                 source_file = open(source,mode='a+')
                 source_file.seek(0)
@@ -1152,7 +1160,7 @@ class RuntimeSpec():
                     dirty = True
                     RuntimeSpec.dirty = True
 
-                if touched or dirty:
+                if compilation_gate(touched or dirty):
                     source_file.seek(0)
                     source_file.truncate()
                     source_file.write(text)
@@ -1168,7 +1176,7 @@ class RuntimeSpec():
             if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
                 raise RuntimeError("Attempted to build builtin code with no target triples defined.")
 
-            if touched:
+            if compilation_gate(touched):
                 dev_comp_cmd = [
                     f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
                     f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
@@ -1185,7 +1193,7 @@ class RuntimeSpec():
 
 
     @staticmethod
-    def bind_and_load():
+    def bind_specs():
 
         debug_print("About to bind and load")
 
@@ -1209,7 +1217,7 @@ class RuntimeSpec():
         elif not path.isfile(so_path):
             touched = True
 
-        if touched or RuntimeSpec.dirty:
+        if compilation_gate(touched or RuntimeSpec.dirty):
 
 
             if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
@@ -1266,6 +1274,10 @@ class RuntimeSpec():
 
 
 
+    @staticmethod
+    def load_specs():
+
+        so_path  = f"{RuntimeSpec.cache_path}harmonize.so"
         abs_so_path = abspath(so_path)
         #print(path)
         binding.load_library_permanently(abs_so_path)
@@ -1335,7 +1347,10 @@ class RuntimeSpec():
         debug_print("Bound and loaded")
 
 
-
+    @staticmethod
+    def bind_and_load_specs():
+        RuntimeSpec.bind_specs()
+        RuntimeSpec.load_specs()
 
 
 class AsyncRuntimeSpec(RuntimeSpec):

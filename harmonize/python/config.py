@@ -7,6 +7,11 @@ from enum       import Enum
 from os.path    import dirname, abspath
 from harmonize.python import errors, logging
 
+class ShouldCompile(Enum):
+    ALWAYS = 1
+    NEVER  = 2
+
+
 DEBUG   = False
 VERBOSE = True
 INTERNAL_DEBUG = False
@@ -16,6 +21,8 @@ COLOR_LOG = True
 NONE_AVAILABLE = True
 ROCM_AVAILABLE = None
 CUDA_AVAILABLE = None
+SHOULD_COMPILE = None
+
 
 try:
     import numba.hip as hip
@@ -86,6 +93,19 @@ def set_rocm_path(path):
         logging.verbose_print(f"ROCM_PATH cleared to default")
     else:
         logging.verbose_print(f"ROCM_PATH set to {ROCM_PATH}")
+
+
+def should_compile(mode):
+    global SHOULD_COMPILE
+    SHOULD_COMPILE = mode
+
+def compilation_gate(auto):
+    if   SHOULD_COMPILE == ShouldCompile.ALWAYS:
+        return True
+    elif SHOULD_COMPILE == ShouldCompile.NEVER:
+        return False
+    else:
+        return auto
 
 
 def check_rocm_path(quiet=False):
