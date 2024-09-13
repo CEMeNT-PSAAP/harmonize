@@ -609,6 +609,7 @@ class RuntimeSpec():
         dispatch_defs += free_state_template .format(suffix=suffix)
         dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
         dispatch_defs += clear_flags_template.format(short_name=short_name,suffix=suffix)
+        dispatch_defs += set_device_template.format(suffix=suffix)
 
 
         for label, field in self.program_fields.items():
@@ -1324,6 +1325,7 @@ class RuntimeSpec():
 
                 complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
                 clear_flags   = ext_fn(f"clear_flags_{suffix}", sig(void,vp))
+                set_device    = ext_fn(f"set_device_{suffix}", sig(void,i32))
 
                 # Finally, compile the entry functions, saving it for later use
                 spec.fn[kind]['init_program']  = init_program
@@ -1343,6 +1345,7 @@ class RuntimeSpec():
 
                 spec.fn[kind]['complete']      = complete_wrapper
                 spec.fn[kind]['clear_flags']   = clear_flags
+                spec.fn[kind]['set_device']    = set_device
 
         debug_print("Bound and loaded")
 

@@ -134,6 +134,13 @@ void clear_flags_{suffix}(void *instance_ptr) {{
 }}
 """
 
+set_device_template = """
+extern "C"
+void set_device_{suffix}(int device) {{
+    util::host::auto_throw(adapt::GPUrtSetDevice(device));
+}}
+"""
+
 # String template for async function dispatches
 dispatch_template = """
 extern "C" __device__
