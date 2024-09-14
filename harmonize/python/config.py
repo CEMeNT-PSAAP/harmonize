@@ -185,5 +185,5 @@ def native_gpu_arch(platform):
         output = f"{capability[0]}{capability[1]}"
         return output
 
-
-try_autoset_rocm_path()
+if ROCM_AVAILABLE:
+    try_autoset_rocm_path()

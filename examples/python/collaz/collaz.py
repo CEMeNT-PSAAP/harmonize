@@ -100,7 +100,8 @@ odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
 
 collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 
-harm.RuntimeSpec.bind_and_load()
+harm.RuntimeSpec.bind_specs()
+harm.RuntimeSpec.load_specs()
 
 
 
