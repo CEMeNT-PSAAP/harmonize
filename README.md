@@ -1,7 +1,7 @@
 # Harmonize
 
 Harmonize is an execution framework for GPU with the aims of increasing performance and decreasing development burden for applications requiring complex processing patterns.
-Harmonize is currently available both as a headers-only CUDA C++ library and as a Python package. In both forms, functionality is exposed as an asynchronous processing framework.
+Harmonize is currently available both as a headers-only CUDA/HIP C++ library and as a Python package. In both forms, functionality is exposed as an asynchronous processing framework.
 
 ## Fundamentals
 
@@ -29,20 +29,21 @@ This looser contract is useful, because it allows an interface to represent a wi
 By representing all program types as different asynchronous runtimes, they can be used interchangeably as long as they fulfill the few promises made by the runtime's interface.
 
 
-## Harmonize on AMD?
-
-An AMD-compatible version of Harmonize is in development, but is currently not available as a full or experimental release.
-
-
 ## Dependencies
 
 ### CUDA C++ Dependencies
 
-The CUDA C++ framework currently requires:
+The C++ framework currently requires the following for CUDA:
 
-- a CUDA compiler
+- a CUDA compiler (e.g. `nvcc`)
 - the CUDA runtime (host and device)
 
+### HIP C++ Dependencies
+
+The C++ framework currently requires the following for ROCM:
+
+- a HIP compiler (e.g. `hipcc`)
+- the ROCM runtime (host and device)
 
 
 ### Python Dependencies
@@ -50,13 +51,23 @@ The CUDA C++ framework currently requires:
 Python bindings require:
 
 - Non-package Dependencies
-  - `nvcc`
-  - the CUDA runtime (host and device)
+  - CUDA execution requires the CUDA toolkit, including:
+    - `nvcc`
+    - CUDA runtime (host and device)
+  - ROCM execution requires the ROCM 6.0.0 toolkit, including its version of:
+    - `hipcc`
+    - `clang-offload-bundler`
+    - `llvm-link`
+    - `llvm-as`
+    - HIP runtime (host and device)
 
 - Python Package Dependencies
-  - `numpy`
-  - `numba`
-  - `llvmlite`
+  - [`numpy`](https://github.com/numpy/numpy)
+  - [`llvmlite`](https://github.com/numba/llvmlite)
+  - For CUDA:
+    - [`numba`](https://github.com/numba/numba)
+  - For ROCM:
+    - [the AMD fork of `numba`](https://github.com/ROCm/numba-hip)
 
 
 
