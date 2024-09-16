@@ -43,10 +43,12 @@ __device__ void _inner_dev_exec(typename ProgType::DeviceContext& _dev_ctx, type
 
 	ProgType prog(_dev_ctx,_grp_ctx,_thd_ctx,device,group,thread);
 
-	//printf("(ctx%p)",&prog._dev_ctx);
-	//printf("(sta%p)",&prog.device);
-	//printf("(pre%p)",((void**)&prog.device)[-1]);
-	//printf("(gtx%p)",(&prog._grp_ctx));
+	if (threadIdx.x == 0) {
+		//printf("(ctx%p)",&prog._dev_ctx);
+		//printf("(sta%p -> %p)",&prog.device,prog.device);
+		//printf("(pre%p)",((void**)&prog.device)[-1]);
+		//printf("(gtx%p)",(&prog._grp_ctx));
+	}
 	prog.exec(cycle_count);
 }
 

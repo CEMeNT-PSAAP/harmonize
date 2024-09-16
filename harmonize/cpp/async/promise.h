@@ -262,8 +262,9 @@ template <typename HEAD, typename... TAIL>
 struct ArgTuple <HEAD, TAIL...>
 {
 	using Tail = ArgTuple<TAIL...>;
+	using Head = HEAD;
 
-	HEAD head;
+	Head head;
 	Tail tail;
 
 	__host__ __device__ ArgTuple<HEAD,TAIL...> (HEAD h, TAIL... t)

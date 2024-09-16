@@ -14,6 +14,9 @@
 #include <stdexcept>
 
 
+
+
+
 #define HARMONIZE
 
 //#define DEBUG_PRINT
@@ -21,6 +24,8 @@
 //#define QUEUE_PRINT
 
 #define INF_LOOP_SAFE
+
+
 
 
 #define NOOP(x) ;
@@ -46,6 +51,10 @@
 #endif
 
 
+
+#include "adapt.h"
+
+
 //#define HRM_TIME 16
 
 #ifdef HRM_TIME
@@ -56,7 +65,9 @@
 	#define end_time(idx) ;
 #endif
 
-#include "../util/mod.h"
+
+
+
 
 //#define ASYNC_LOADS
 
@@ -118,5 +129,4 @@ using type_switch = typename detector::type_switch<is_detected<LOOKUP,TYPE>::val
 #include "../util/mod.h"
 
 #endif
-
 

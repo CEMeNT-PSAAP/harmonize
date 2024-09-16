@@ -166,7 +166,7 @@ struct VoidOp {
 };
 
 
-int main(int argc, char *argv[]){
+int main(int argc, char const *argv[]){
 
 
 	using host::check_error;
@@ -184,7 +184,7 @@ int main(int argc, char *argv[]){
 
 	// The device index to use (zero is default)
 	unsigned int dev_idx  = args["dev_idx"] | 0;
-	cudaSetDevice(dev_idx);
+	adapt::GPUrtSetDevice(dev_idx);
 
 	// Whether or not to show a graph on the command line
 	bool	    show = args["show"];
@@ -255,7 +255,7 @@ int main(int argc, char *argv[]){
 	int elem_count = dev_state.div_count*2;
 	halted.resize(elem_count);
 	dev_state.halted = halted;
-	cudaMemset( halted, 0, sizeof(float) * elem_count );
+	adapt::GPUrtMemset( halted, 0, sizeof(float) * elem_count );
 
 	// Set the ID iterator to the range from zero to the number of source neutrons
 	source_id_iter<< iter::AtomicIter<unsigned int>(0,args["num"]);
@@ -263,7 +263,7 @@ int main(int argc, char *argv[]){
 
 
 	// Synchronize for safety and report any errors
-	cudaDeviceSynchronize();
+	adapt::GPUrtDeviceSynchronize();
 	check_error();
 
 
@@ -276,7 +276,7 @@ int main(int argc, char *argv[]){
 		SyncProg::Instance instance(arena_size,dev_state);
 
 		// Sync for safety and report any errors
-		cudaDeviceSynchronize();
+		adapt::GPUrtDeviceSynchronize();
 		check_error();
 
 		// While the instance has not yet completed, execute, sync, and report any errors
@@ -284,7 +284,7 @@ int main(int argc, char *argv[]){
 			// Give the number of work groups and the size of the chunks pulled from
 			// the io buffer
 			exec<SyncProg>(instance,wg_count,1);
-			cudaDeviceSynchronize();
+			adapt::GPUrtDeviceSynchronize();
 			check_error();
 		} while ( ! instance.complete() );
 
@@ -293,11 +293,11 @@ int main(int argc, char *argv[]){
 		AsyncProg::Instance instance(arena_size/32u,dev_state);
 
 		// Sync for safety and report any errors
-		cudaDeviceSynchronize();
+		adapt::GPUrtDeviceSynchronize();
 		check_error();
 
 		init<AsyncProg>(instance,wg_count);
-		cudaDeviceSynchronize();
+		adapt::GPUrtDeviceSynchronize();
 		check_error();
 		int num = 0;
 
@@ -306,7 +306,7 @@ int main(int argc, char *argv[]){
 			// Give the number of work groups used and the number of iterations
 			// to perform before halting early, to prevent GPU timeouts
 			exec<AsyncProg>(instance,wg_count,0x1000000);
-			cudaDeviceSynchronize();
+			adapt::GPUrtDeviceSynchronize();
 			check_error();
 			num++;
 		} while(! instance.complete() );

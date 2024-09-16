@@ -120,7 +120,7 @@ class AsyncProgram
 
 	//! Used to look up information about the primary `PromiseUnion` type used
 	template<typename TYPE>
-	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
+	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 	//! Define internal constants based off of the program specification, or
 	//! fall back onto defaults.
@@ -216,7 +216,7 @@ class AsyncProgram
 
 		#ifdef ASYNC_LOADS
 		RemapQueue			load_queue;
-		cuda::barrier<cuda::thread_scope_system> load_barrier;
+		adapt::GPUrt::barrier<adapt::GPUrt::thread_scope_system> load_barrier;
 		#endif
 
 		unsigned char			link_stash_count; // Number of device-space links stored
@@ -328,7 +328,7 @@ class AsyncProgram
 			#endif
 		{
 			#ifdef HRM_TIME
-			cudaMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
+			adapt::GPUrtMemset( time_totals, 0, sizeof(unsigned long long int) * HRM_TIME );
 			#endif
 		}
 
@@ -369,7 +369,7 @@ class AsyncProgram
 
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
 			unsigned int  flags = 0;
-			cudaMemcpy(&flags,flags_ptr,sizeof(unsigned int),cudaMemcpyDeviceToHost);
+			util::host::auto_throw(adapt::GPUrtMemcpy(&flags,flags_ptr,sizeof(unsigned int),adapt::GPUrtMemcpyDeviceToHost));
 			check_error();
 			return ((flags & COMPLETION_FLAG) != 0);
 		}
@@ -377,7 +377,7 @@ class AsyncProgram
 		__host__ void clear_flags(){
 			unsigned int  flags = 0;
 			unsigned int* flags_ptr = &(((StackType*)stack)->status_flags);
-			cudaMemcpy(flags_ptr,&flags,sizeof(unsigned int),cudaMemcpyHostToDevice);
+			util::host::auto_throw(adapt::GPUrtMemcpy(flags_ptr,&flags,sizeof(unsigned int),adapt::GPUrtMemcpyHostToDevice));
 			check_error();
 		}
 
@@ -2207,7 +2207,7 @@ class AsyncProgram
 				fill_stash(STASH_HIGH_WATER,false);
 			} else {
 			#endif
-				while ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
+				if ( _grp_ctx.can_make_work && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
 					_grp_ctx.can_make_work = __any_sync(0xFFFFFFFF,PROGRAM_SPEC::make_work(*this));
 					if( util::current_leader() && (! _grp_ctx.busy ) && ( _grp_ctx.main_queue.count != 0 ) ){
 						unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),1);
@@ -2369,7 +2369,7 @@ class AsyncProgram
 				atomicExch(&(_dev_ctx.stack->checkout),0);
 				unsigned int old_flags = atomicAnd(&(_dev_ctx.stack->status_flags),~EARLY_HALT_FLAG);
 				unsigned int depth_live = atomicAdd(&(_dev_ctx.stack->depth_live),0);
-				bool halted_early       = ( old_flags && EARLY_HALT_FLAG );
+				bool halted_early       = ( old_flags & EARLY_HALT_FLAG );
 				bool work_left          = ( (depth_live & 0xFFFF0000) != 0 );
 
 				if( (!halted_early) && (!work_left) ){
@@ -2552,10 +2552,10 @@ class AsyncProgram
 
 	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+		adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		if(status != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -2567,11 +2567,10 @@ class AsyncProgram
 
 	/*
 	// Places a single function call into the runtime.
-	*/
-	 static void remote_call(Instance &instance, unsigned char func_id, PromiseUnionType promise){
+	static void remote_call(Instance &instance, unsigned char func_id, PromiseUnionType promise){
 
 		LinkType* call_buffer;
-		cudaMalloc( (void**) &call_buffer, sizeof(LinkType) );
+		util::host::auto_throw(adapt::GPUrtMalloc( (void**) &call_buffer, sizeof(LinkType) ));
 
 		LinkType host_link;
 		host_link.count		= 1;
@@ -2581,16 +2580,17 @@ class AsyncProgram
 		host_link.meta_data.data= 0;
 		host_link.data.data[0]	= promise;
 
-		cudaMemcpy(call_buffer,&host_link,sizeof(LinkType),cudaMemcpyHostToDevice);
+		util::host::auto_throw(adapt::GPUrtMemcpy(call_buffer,&host_link,sizeof(LinkType),adapt::GPUrtMemcpyHostToDevice));
 
 
 		push_runtime<<<1,WORK_GROUP_SIZE>>>(instance.to_context(),call_buffer,1);
 
 		check_error();
 
-		cudaFree(call_buffer);
+		util::host::auto_throw(adapt::GPUrtFree(call_buffer));
 
 	}
+	*/
 
 
 
@@ -2793,9 +2793,9 @@ class AsyncProgram
 
 		LinkAdrType link_total = 0;
 
-		cudaMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,cudaMemcpyDeviceToHost);
-		cudaMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,cudaMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_arena,runtime.arena,sizeof(LinkType) *runtime.arena_size,adapt::GPUrtMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_pool ,runtime.pool ,sizeof(QueueType)*POOL_SIZE ,adapt::GPUrtMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_stack,runtime.stack,sizeof(StackType)           ,adapt::GPUrtMemcpyDeviceToHost);
 
 
 		for(AdrType i = 0; i < runtime.arena_size; i++){
@@ -2905,7 +2905,9 @@ class AsyncProgram
 		return NAN;
 	}
 
-
+	__device__ void halt_early() {
+		set_flags(EARLY_HALT_FLAG);
+	}
 
 
 };

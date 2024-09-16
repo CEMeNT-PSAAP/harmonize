@@ -66,10 +66,10 @@ class EventProgram
 	typedef PromiseUnion<OpSet> PromiseUnionType;
 
 	template<typename TYPE>
-	struct Lookup { typedef typename PromiseUnionType::Lookup<TYPE>::type type; };
+	struct Lookup { typedef typename PromiseUnionType::template Lookup<TYPE>::type type; };
 
 
-	CONST_SWITCH(size_t,GROUP_SIZE,32)
+	CONST_SWITCH(size_t,GROUP_SIZE,adapt::WARP_SIZE)
 
 
 	static const size_t       WORK_GROUP_SIZE  = GROUP_SIZE;
@@ -78,6 +78,7 @@ class EventProgram
 	// A set of halting condition flags
 	*/
 	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
+	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 	static const unsigned int COMPLETION_FLAG	= 0x80000000;
 
 
@@ -110,6 +111,12 @@ class EventProgram
 	};
 
 
+	struct Status {
+		unsigned int checkout;
+		unsigned int flip_count;
+		unsigned int flags;
+	};
+
 	/*
 	// This struct represents the entire set of data structures that must be stored in main
 	// memory to track the state of the program defined by the developer as well as the state
@@ -119,7 +126,7 @@ class EventProgram
 
 		typedef		ProgramType       ParentProgramType;
 
-		unsigned int  *checkout;
+		Status        *status;
 		unsigned int   load_margin;
 		util::iter::IOBuffer<PromiseUnionType,AdrType> *event_io[PromiseUnionType::Info::COUNT];
 	};
@@ -133,7 +140,7 @@ class EventProgram
 	struct Instance {
 
 
-		util::host::DevBuf<unsigned int> checkout;
+		util::host::DevBuf<Status> status;
 		util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>> event_io[PromiseUnionType::Info::COUNT];
 		DeviceState device_state;
 
@@ -143,14 +150,14 @@ class EventProgram
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
 			}
-			checkout<< 0u;
+			status << Status{0u,0u,0u};
 		}
 
 		__host__ DeviceContext to_context(){
 
 			DeviceContext result;
 
-			result.checkout = checkout;
+			result.status = status;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				result.event_io[i] = event_io[i];
 			}
@@ -161,19 +168,47 @@ class EventProgram
 
 		__host__ bool complete(){
 
+			bool complete = true;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i].pull_data();
 				check_error();
-				if( ! event_io[i].host_copy().input_iter.limit == 0 ){
-					return false;
+				size_t item_count = event_io[i].host_copy().input_iter.limit;
+				if( item_count != 0 ){
+					complete = false;
 				}
+
+				// printf("\nitem count: %zu\n",item_count);
+				/*/
+				PromiseUnionType *host_array = new PromiseUnionType[item_count];
+				util::host::auto_throw(adapt::GPUrtMemcpy(
+					host_array,
+					event_io[i].host_copy().input_pointer(),
+					sizeof(PromiseUnionType)*item_count,
+					adapt::GPUrtMemcpyDeviceToHost
+				));
+				for(size_t i=0; i<item_count; i++) {
+					char * data = (char*) (host_array + i);
+					for(size_t j=0; j<sizeof(PromiseUnionType); j++) {
+						printf("%02hhx",data[j]);
+					}
+					printf(",\n");
+				}
+				printf("------\n");
+				delete[] host_array;
+				//*/
 			}
-			return true;
+			return complete;
 
 		}
 
 		__host__ void clear_flags(){
-
+			unsigned int zero = 0;
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				status,
+				&zero,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyHostToDevice
+			));
 		}
 
 	};
@@ -238,9 +273,9 @@ class EventProgram
 	/*
 	// Sets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
-	 __device__  void set_flags(unsigned int flag_bits){
+	__device__  void set_flags(unsigned int flag_bits){
 
-		atomicOr(&_dev_ctx.stack->status_flags,flag_bits);
+		atomicOr(&_dev_ctx.status->flags,flag_bits);
 
 	}
 
@@ -248,19 +283,23 @@ class EventProgram
 	/*
 	// Unsets the bits in the status_flags field of the stack according to the given flag bits.
 	*/
-	 __device__  void unset_flags(unsigned int flag_bits){
+	__device__  void unset_flags(unsigned int flag_bits){
 
-		atomicAnd(&_dev_ctx.stack->status_flags,~flag_bits);
+		atomicAnd(&_dev_ctx.status->_flags,~flag_bits);
 
 	}
 
+	__device__ bool any_flags_set() {
+		return (atomicAdd(&_dev_ctx.status->flags,0) != 0);
+	}
 
-	 static void check_error(){
 
-		cudaError_t status = cudaGetLastError();
+	static void check_error(){
 
-		if(status != cudaSuccess){
-			const char* err_str = cudaGetErrorString(status);
+		adapt::GPUrtError_t status = adapt::GPUrtGetLastError();
+
+		if(status != adapt::GPUrtSuccess){
+			const char* err_str = adapt::GPUrtGetErrorString(status);
 			printf("ERROR: \"%s\"\n",err_str);
 		}
 
@@ -272,6 +311,8 @@ class EventProgram
 	__device__  void async_call_cast(int depth_delta, Promise<TYPE> param_value){
 		AdrType promise_index = 0;
 		AdrType io_index = static_cast<AdrType>(Lookup<TYPE>::type::DISC);
+
+
 		/*
 		printf("Event io at index %d is at %p with buffers at %p and %p\n",
 			io_index,
@@ -279,9 +320,24 @@ class EventProgram
 			_dev_ctx.event_io[io_index]->data_a,
 			_dev_ctx.event_io[io_index]->data_b
 		);
-		*/
-		if( _dev_ctx.event_io[io_index]->push_idx(promise_index) ){
-			_dev_ctx.event_io[io_index]->output_ptr()[promise_index].template cast<TYPE>() = param_value;
+		//*/
+
+		// Investigate push_idx
+
+		if( _dev_ctx.event_io[io_index]->push_index(promise_index) ){
+			//printf("{%d : -> %d}\n",io_index,promise_index);
+			/*/
+			printf("\n(");
+			char *data = (char*) &param_value;
+			for(size_t i=0; i<sizeof(param_value); i++){
+				printf("%02hhx",data[i]);
+			}
+			printf(")\n");
+			//*/
+			_dev_ctx.event_io[io_index]->output_pointer()[promise_index].template cast<TYPE>() = param_value;
+			//printf("\n\nDoing an async call!\n\n");
+		} else {
+			printf("\n\nRan out of space!\n\n");
 		}
 	}
 
@@ -318,59 +374,74 @@ class EventProgram
 
 		PROGRAM_SPEC::initialize(*this);
 
-		__shared__ util::iter::GroupArrayIter<PromiseUnionType,unsigned int> group_work;
+		__shared__ util::iter::ArrayIter<PromiseUnionType,util::iter::AtomicIter,unsigned int> group_work;
 		__shared__ bool done;
+		__shared__ bool early_halt;
 		__shared__ OpDisc func_id;
 
-		util::iter::GroupIter<unsigned int> the_iter;
-		the_iter.reset(0,0);
 		__syncthreads();
-		if( util::current_leader() ){
-			group_work = util::iter::GroupArrayIter<PromiseUnionType,unsigned int> (NULL,the_iter);
+		if( threadIdx.x == 0 ){
+			early_halt = false;
+			group_work.reset(NULL,util::iter::Iter<unsigned int>(0,0));
 		}
 		__syncthreads();
-
 
 		/* The execution loop. */
 		unsigned int loop_lim = 0xFFFFF;
 		unsigned int loop_count = 0;
-		while(true){
+		while(!early_halt){
 			__syncthreads();
-			if( util::current_leader() ) {
+			if( threadIdx.x == 0 ) {
 				done = true;
-				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
-					if( !_dev_ctx.event_io[i]->input_empty() ){
-						done = false;
-						func_id = static_cast<OpDisc>(i);
-						group_work = _dev_ctx.event_io[i]->pull_group_span(chunk_size*GROUP_SIZE);
-						break;
+
+				if( any_flags_set() ){
+					early_halt = true;
+				} else {
+					for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
+						if( !_dev_ctx.event_io[i]->input_empty() ){
+							done = false;
+							func_id = static_cast<OpDisc>(i);
+							group_work = _dev_ctx.event_io[i]->pull_span(chunk_size*GROUP_SIZE);
+							if (!group_work.done()){
+								break;
+							}
+						}
 					}
 				}
+
 			}
+
 			__syncthreads();
 			if( done ){
 				__shared__ bool should_make_work;
-				if( util::current_leader() ) {
-					should_make_work = true;
+				__syncthreads();
+				if( threadIdx.x == 0 ) {
+					should_make_work = !early_halt;
 				}
 				__syncthreads();
 				while(should_make_work){
-					if( util::current_leader() ) {
+					if( threadIdx.x == 0 ) {
 						for(int i=0; i<PromiseUnionType::Info::COUNT; i++){
 							int load = atomicAdd(&(_dev_ctx.event_io[i]->output_iter.value),0u);
-							if(load >= _dev_ctx.load_margin){
+							if(load >= (_dev_ctx.event_io[i]->output_iter.limit / 2) ){
+								//printf("(Hit load margin!)\n");
 								should_make_work = false;
 							}
 						}
 					}
 					if(should_make_work){
+						if( threadIdx.x == 0 ) {
+							rc_printf("(Making work!)\n");
+						}
 						should_make_work = PROGRAM_SPEC::make_work(*this);
+						if( (threadIdx.x == 0) && !should_make_work) {
+							rc_printf("(No more work!)\n");
+						}
 					}
 				}
 				break;
 			} else {
-
-				util::iter::ArrayIter<PromiseUnionType,unsigned int> thread_work;
+				util::iter::ArrayIter<PromiseUnionType,util::iter::Iter,unsigned int> thread_work;
 				thread_work = group_work.leap(chunk_size);
 				PromiseUnionType promise;
 				while( thread_work.step_val(promise) ){
@@ -386,7 +457,6 @@ class EventProgram
 
 		}
 
-
 		__syncthreads();
 
 		PROGRAM_SPEC::finalize(*this);
@@ -394,17 +464,21 @@ class EventProgram
 		__threadfence();
 		__syncthreads();
 
-		if( threadIdx.x == 0 ){
-			unsigned int checkout_index = atomicAdd(_dev_ctx.checkout,1);
-			if( checkout_index == (gridDim.x - 1) ){
-				atomicExch(_dev_ctx.checkout,0);
-				 for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
-					 _dev_ctx.event_io[i]->flip();
-				 }
 
+
+		if( threadIdx.x == 0 ){
+			__threadfence();
+			unsigned int checkout_index = atomicAdd(&_dev_ctx.status->checkout,1);
+			if( checkout_index == (gridDim.x - 1) ){
+				__threadfence();
+				atomicExch(&_dev_ctx.status->checkout,0);
+				__threadfence();
+				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
+					_dev_ctx.event_io[i]->flip();
+				}
+				atomicAdd(&_dev_ctx.status->flip_count,1u);
 			}
 		}
-
 
 
 	}
@@ -433,6 +507,10 @@ class EventProgram
 	__device__ float load_fraction()
 	{
 		return _dev_ctx.event_io[Lookup<TYPE>::type::DISC]->output_fill_fraction_sync();
+	}
+
+	__device__ void halt_early() {
+		set_flags(EARLY_HALT_FLAG);
 	}
 
 };

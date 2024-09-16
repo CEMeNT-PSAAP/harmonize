@@ -1,24 +1,27 @@
-import numpy as np
-from numba import cuda, njit
-import numba
-from numba import config
-import time
-
 import sys
-
+import time
+import numba
+import numpy as np
 import harmonize as harm
 
-# On systems where there are multiple nvcc versions, a path to
-# a particular one may be provided (this path below is used on lassen)
-#harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
+from numba import njit, config
 
 
-mode = "async"
+# On systems where there are multiple cuda/rocm versions, a path to
+# a particular one may be provided
 
-config.DISABLE_JIT = False
+# recommended for lassen.llnl.gov:
+# harm.set_nvcc_path("/usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc")
+
+# recommended for tioga.llnl.gov
+harm.config.set_rocm_path('/opt/rocm-6.0.0')
+
+mode = "event"
+
+numba.config.DISABLE_JIT = False
 
 val_count = 65536
-dev_state_type = numba.from_dtype(np.dtype([ ('val',np.dtype((np.uintp,val_count+1))) ]))
+dev_state_type = numba.from_dtype(np.dtype([ ('dummy',np.uintp), ('val',np.dtype((np.uintp,val_count+1))) ]))
 grp_state_type = numba.from_dtype(np.dtype([ ]))
 thd_state_type = numba.from_dtype(np.dtype([ ]))
 
@@ -62,11 +65,11 @@ def finalize(prog: numba.uintp):
 
 def make_work(prog: numba.uintp) -> numba.boolean:
     step_max = 4
-    old = numba.cuda.atomic.add(device(prog)['val'],0,step_max)
+    old = harm.array_atomic_add(device(prog)['val'],0,step_max)
     if old >= val_count:
         return False
 
-    iter = numba.cuda.local.array(1,collaz_iter)
+    iter = harm.local_array(1,collaz_iter)
     step = 0
     while (old+step < val_count) and (step < step_max):
         val = old + step
@@ -88,55 +91,30 @@ base_fns   = (initialize,finalize,make_work)
 state_spec = (dev_state_type,grp_state_type,thd_state_type)
 async_fns  = [odd,even]
 
-device, group, thread = harm.RuntimeSpec.access_fns(state_spec)
+access_map = harm.RuntimeSpec.access_fns(state_spec)
+device = access_map["device"]
+group  = access_map["group"]
+thread = access_map["thread"]
 odd_async, even_async = harm.RuntimeSpec.async_dispatch(odd,even)
+
 
 collaz_spec = harm.RuntimeSpec("collaz",state_spec,base_fns,async_fns)
 
-harm.RuntimeSpec.bind_and_load()
+harm.RuntimeSpec.bind_specs()
+harm.RuntimeSpec.load_specs()
 
-fns = collaz_spec.async_functions()
-
-async_alloc_state   = fns["alloc_state"]
-async_free_state    = fns["free_state"]
-async_alloc_program = fns["alloc_program"]
-async_free_program  = fns["free_program"]
-async_load_state    = fns["load_state"]
-async_store_state   = fns["store_state"]
-async_init_program  = fns["init_program"]
-async_exec_program  = fns["exec_program"]
-async_complete      = fns["complete"]
-
-@njit
-def async_exec_fn(state):
-    arena_size = 0x10000
-
-    gpu_state  = async_alloc_state()
-    program    = async_alloc_program(gpu_state,arena_size)
-
-    grid_size  = 4096
-    async_store_state(gpu_state,state)
-    async_init_program(program,grid_size)
-
-    iter_count = 65536
-    async_exec_program(program,grid_size,iter_count)
-    while (not async_complete(program)):
-        async_exec_program(program,grid_size,iter_count)
-    async_load_state(state,gpu_state)
-
-    async_free_program(program)
-    async_free_state(gpu_state)
 
 
 
 fns = collaz_spec.event_functions()
 
+
 event_alloc_state   = fns["alloc_state"]
 event_free_state    = fns["free_state"]
 event_alloc_program = fns["alloc_program"]
 event_free_program  = fns["free_program"]
-event_load_state    = fns["load_state"]
-event_store_state   = fns["store_state"]
+event_load_state    = fns["load_state_device"]
+event_store_state   = fns["store_state_device"]
 event_init_program  = fns["init_program"]
 event_exec_program  = fns["exec_program"]
 event_complete      = fns["complete"]
@@ -183,20 +161,12 @@ def collaz_check(state):
         gpu_steps = state[0]['val'][1+val]
         if steps != gpu_steps:
             diff += 1
-            #print(f"@{val} CPU {steps} different from {gpu_steps}")
+            print(f"@{val} CPU {steps} different from {gpu_steps}")
         total += steps
 
-    print(f"Number of inconsistent results : {diff}")
+    print(f"Number of inconsistent results : {diff} / {val_count}")
 
 
-
-@njit
-def async_run():
-
-    state = np.zeros((1,),dev_state_type)
-    async_exec_fn(state[0])
-    print("Finished async GPU Pass")
-    collaz_check(state)
 
 @njit
 def event_run():
@@ -206,11 +176,8 @@ def event_run():
     collaz_check(state)
 
 
-t0 = time.time()
-async_run()
 t1 = time.time()
 event_run()
 t2 = time.time()
 
-print("Async runtime: ",t1-t0)
 print("Event runtime: ",t2-t1)

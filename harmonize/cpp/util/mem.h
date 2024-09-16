@@ -248,7 +248,7 @@ struct MemPool {
 		}
 		if( (arena_size.adr != 0) || (pool_size.adr != 0 ) ){
 			mempool_init<<<256,32>>>(*this);
-			cudaDeviceSynchronize();
+			util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 		}
 		//next_print();
 	}
@@ -256,17 +256,17 @@ struct MemPool {
 	__host__ void host_free()
 	{
 		if( arena_size.adr != 0 ){
-			host::auto_throw( cudaFree( arena ) );
+			host::auto_throw( adapt::GPUrtFree( arena ) );
 		}
 		if( pool_size.adr  != 0 ){
-			host::auto_throw( cudaFree( pool  ) );
+			host::auto_throw( adapt::GPUrtFree( pool  ) );
 		}
 	}
 
 
 	__host__ void next_print(){
 		Link* host_copy = (Link*)malloc(sizeof(Link)*arena_size.adr);
-		cudaMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,cudaMemcpyDeviceToHost);
+		adapt::GPUrtMemcpy(host_copy,arena,sizeof(Link)*arena_size.adr,adapt::GPUrtMemcpyDeviceToHost);
 		for(int i=0; i<arena_size.adr; i++){
 			printf("%d,",host_copy[i].next.adr);
 		}

@@ -314,12 +314,12 @@ static void cli_graph(float* data, int size, int width, int height, float low, f
 struct ArgSet
 {
 
-	int    argc;
-	char** argv;
+	int           argc;
+	char const ** argv;
 
-	int get_flag_idx(char* flag){
+	int get_flag_idx(char const *flag){
 		for(int i=0; i<argc; i++){
-			char* str = argv[i];
+			char const* str = argv[i];
 			if(    (str    != NULL )
 				&& (str[0] == '-'  )
 				&& (strcmp(str+1,flag) == 0)
@@ -331,7 +331,7 @@ struct ArgSet
 	}
 
 
-	char* get_flag_str(char* flag){
+	char const *get_flag_str(char const *flag){
 		int idx = get_flag_idx(flag);
 		if( idx == -1 ) {
 			return NULL;
@@ -362,69 +362,69 @@ struct ArgSet
 
 	struct ArgQuery {
 
-		char* flag_str;
-		char* value_str;
+		char const *flag_str;
+		char const *value_str;
 
 
 		template<typename T>
-		bool scan_arg(char *str, T &dest) const {
+		bool scan_arg(char const *str, T &dest) const {
 			return false;
 		}
 
 
-		bool scan_arg(char *str, unsigned char &dest) const {
+		bool scan_arg(char const *str, unsigned char &dest) const {
 			return ( 0 < sscanf(str,"%hhu",&dest) );
 		}
 
-		bool scan_arg(char *str, unsigned short int &dest) const {
+		bool scan_arg(char const *str, unsigned short int &dest) const {
 			return ( 0 < sscanf(str,"%hu",&dest) );
 		}
 
-		bool scan_arg(char *str, unsigned int &dest) const {
+		bool scan_arg(char const *str, unsigned int &dest) const {
 			return ( 0 < sscanf(str,"%u",&dest) );
 		}
 
-		bool scan_arg(char *str, unsigned long int &dest) const {
+		bool scan_arg(char const *str, unsigned long int &dest) const {
 			return ( 0 < sscanf(str,"%lu",&dest) );
 		}
 
-		bool scan_arg(char *str, unsigned long long int &dest) const {
+		bool scan_arg(char const *str, unsigned long long int &dest) const {
 			return ( 0 < sscanf(str,"%llu",&dest) );
 		}
 
 
-		bool scan_arg(char *str,   signed char &dest) const {
+		bool scan_arg(char const *str,   signed char &dest) const {
 			return ( 0 < sscanf(str,"%hhd",&dest) );
 		}
 
-		bool scan_arg(char *str,   signed short int &dest) const {
+		bool scan_arg(char const *str,   signed short int &dest) const {
 			return ( 0 < sscanf(str,"%hd",&dest) );
 		}
 
-		bool scan_arg(char *str,   signed int &dest) const {
+		bool scan_arg(char const *str,   signed int &dest) const {
 			return ( 0 < sscanf(str,"%d",&dest) );
 		}
 
-		bool scan_arg(char *str,   signed long int &dest) const {
+		bool scan_arg(char const *str,   signed long int &dest) const {
 			return ( 0 < sscanf(str,"%ld",&dest) );
 		}
 
-		bool scan_arg(char *str,   signed long long int &dest) const {
+		bool scan_arg(char const *str,   signed long long int &dest) const {
 			return ( 0 < sscanf(str,"%lld",&dest) );
 		}
 
 
 
-		bool scan_arg(char *str, float &dest) const {
+		bool scan_arg(char const *str, float &dest) const {
 			return ( 0 < sscanf(str,"%f",&dest) );
 		}
 
-		bool scan_arg(char *str, double &dest) const {
+		bool scan_arg(char const *str, double &dest) const {
 			return ( 0 < sscanf(str,"%lf",&dest) );
 		}
 
 
-		bool scan_arg(char *str, bool &dest) const{
+		bool scan_arg(char const *str, bool &dest) const{
 			if        ( strcmp(str,"false") == 0 ){
 				dest = false;
 			} else if ( strcmp(str,"true" ) == 0 ){
@@ -437,7 +437,7 @@ struct ArgSet
 
 
 
-		ArgQuery(char* f, char* v) : flag_str(f), value_str(v) {}
+		ArgQuery(char const* f, char const* v) : flag_str(f), value_str(v) {}
 
 		template<typename T>
 		void scan_or_fail(T& dest) const{
@@ -485,23 +485,15 @@ struct ArgSet
 			return value;
 		}
 
-		ArgQuery operator[] (const char* flag_str) {
-			return (*this)[(char*)flag_str];
-		}
-
 	};
 
 
 	ArgQuery operator[] (char const* flag_str) {
-		return (*this)[(char*)flag_str];
-	}
-
-	ArgQuery operator[] (char* flag_str) {
-		char* val_str = get_flag_str(flag_str);
+		char const *val_str = get_flag_str(flag_str);
 		return ArgQuery(flag_str,val_str);
 	}
 
-	ArgSet(int c, char** v) : argc(c), argv(v) {}
+	ArgSet(int c, char const** v) : argc(c), argv(v) {}
 
 };
 

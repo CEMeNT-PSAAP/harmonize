@@ -2,21 +2,17 @@
 using namespace util;
 
 
-
-// Define a 'collaz' struct to hold the arguments for the even and odd async functions
-struct Collaz{ unsigned int step; unsigned int original; unsigned long long int val; };
-
 struct Even;
 struct Odd;
 
 
 struct Even {
 
-	using Type = void(*)(unsigned int step, unsigned int original, unsigned long long int val);
+	using Type = void(*)(unsigned long long int val, unsigned int step, unsigned int original);
 
 
 	template<typename PROGRAM>
-	__device__ static void eval(PROGRAM prog, unsigned int step, unsigned int original, unsigned long long int val) {
+	__device__ static void eval(PROGRAM prog, unsigned long long int val, unsigned int step, unsigned int original) {
 
 		if( val <= 1 ){
 			prog.device.output[original] = step;
@@ -27,9 +23,9 @@ struct Even {
 		val  /= 2;
 
 		if( (val%2) == 0 ){
-			prog.template async<Even>(step,original,val);
+			prog.template async<Even>(val,step,original);
 		} else {
-			prog.template async< Odd>(step,original,val);
+			prog.template async< Odd>(val,step,original);
 		}
 
 	}
@@ -40,10 +36,10 @@ struct Even {
 
 struct Odd{
 
-	using Type = void(*)(unsigned int step, unsigned int original, unsigned long long int val);
+	using Type = void(*)(unsigned long long int val, unsigned int step, unsigned int original);
 
 	template<typename PROGRAM>
-	__device__ static void eval(PROGRAM prog, unsigned int step, unsigned int original, unsigned long long int val) {
+	__device__ static void eval(PROGRAM prog, unsigned long long int val, unsigned int step, unsigned int original) {
 
 		if( val <= 1 ){
 			prog.device.output[original] = step;
@@ -55,9 +51,9 @@ struct Odd{
 		val  += 1;
 
 		if( (val%2) == 0 ){
-			prog.template async<Even>(step,original,val);
+			prog.template async<Even>(val,step,original);
 		} else {
-			prog.template async< Odd>(step,original,val);
+			prog.template async< Odd>(val,step,original);
 		}
 
 	}
@@ -73,12 +69,16 @@ struct MyDeviceState{
 };
 
 
+struct MyGroupState {
+	int step_counter;
+};
+
 
 struct MyProgramSpec {
 
-
 	typedef OpUnion<Even,Odd>       OpSet;
 	typedef     MyDeviceState DeviceState;
+	typedef     MyGroupState   GroupState;
 
 	static const size_t STASH_SIZE =   16;
 	static const size_t FRAME_SIZE = 8191;
@@ -97,9 +97,7 @@ struct MyProgramSpec {
 	// work groups.
 	*/
 	template<typename PROGRAM>
-	__device__ static void initialize(PROGRAM prog){
-
-	}
+	__device__ static void initialize(PROGRAM prog){}
 
 	/*
 	// Defines a function for programs of type 'ProgType' which is called by all threads in all work
@@ -114,10 +112,7 @@ struct MyProgramSpec {
 	// evaluated in the next exec call.
 	*/
 	template<typename PROGRAM>
-	__device__ static void finalize(PROGRAM prog){
-
-
-	}
+	__device__ static void finalize(PROGRAM prog){}
 
 
 
@@ -138,9 +133,9 @@ struct MyProgramSpec {
 		unsigned int index;
 		while(iter.step(index)){
 			if( (index % 2) == 0 ){
-				prog.template async<Even>(0,index,index);
+				prog.template async<Even>(index,0,index);
 			} else {
-				prog.template async< Odd>(0,index,index);
+				prog.template async< Odd>(index,0,index);
 			}
 		}
 
@@ -153,7 +148,7 @@ struct MyProgramSpec {
 };
 
 
-using ProgType = AsyncProgram < MyProgramSpec >;
+using ProgType = EventProgram < MyProgramSpec >;
 
 
 
@@ -175,13 +170,16 @@ unsigned int checker(unsigned long long int val){
 
 
 
-int main(int argc, char* argv[]){
+int main(int argc, char const* argv[]){
 
 	cli::ArgSet args(argc,argv);
 
 
 	unsigned int wg_count    = args["wg_count"];
 	unsigned int cycle_count = args["cycle_count"] | 0x100000u;
+	unsigned int device_id   = args["device_id"] | 0u;
+
+	host::auto_throw(adapt::GPUrtSetDevice(device_id));
 
 	Stopwatch watch;
 
@@ -211,21 +209,20 @@ int main(int argc, char* argv[]){
 	// program determines how much extra space it has to store work if it cannot store
 	// everything inside shared memory. If you are *certain* that no work will spill into
 	// main memory, you may get some performance benefits by seting the arena size to zero.
-	ProgType::Instance instance = ProgType::Instance(0x10000,ds);
-	cudaDeviceSynchronize();
-	host::check_error();
+	ProgType::Instance instance = ProgType::Instance(0x100000,ds);
+	host::auto_throw(adapt::GPUrtDeviceSynchronize());
 
 	// Initialize the instance using 32 work groups
 	init<ProgType>(instance,32);
-	cudaDeviceSynchronize();
-	host::check_error();
+	host::auto_throw(adapt::GPUrtDeviceSynchronize());
 
 	// Execute the instance using 240 work groups, with each work group performing up to
 	// 65536 promise executions per thread before halting. If all promises are exhausted
 	// before this, the program exits early.
-	exec<ProgType>(instance,wg_count,cycle_count);
-	cudaDeviceSynchronize();
-	host::check_error();
+	do {
+		exec<ProgType>(instance,wg_count,2);
+		host::auto_throw(adapt::GPUrtDeviceSynchronize());
+	} while (!instance.complete());
 
 	watch.stop();
 

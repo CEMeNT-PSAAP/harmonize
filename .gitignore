@@ -11,9 +11,14 @@ test_problems/simple_neutron/neut_evt
 *.so
 *.ptx
 *.pyc
+*.core
+*.ll
+*.bc
+*.o
 
 __pycache__/
 __ptxcache__/
+__harmonize_cache__/
 
 build/
 
