@@ -27,7 +27,7 @@ struct Iter
 		, limit(iter.limit)
 	{}
 
-	__host__ __device__ Iter<IndexType> () = default;
+	Iter<IndexType> () = default;
 
 	__device__ void reset(IndexType start_val, IndexType limit_val) {
 		value = start_val;
@@ -76,7 +76,7 @@ struct GroupIter
 		, limit(iter.limit)
 	{}
 
-	__host__ __device__ GroupIter<IndexType> () = default;
+	GroupIter<IndexType> () = default;
 
 	__device__ void reset(IndexType start_val, IndexType limit_val) {
 		__syncthreads();
@@ -145,7 +145,7 @@ struct AtomicIter
 	IndexType limit;
 
 
-	__host__ __device__ AtomicIter<IndexType> () = default;
+	AtomicIter<IndexType> () = default;
 
 	__host__ __device__ AtomicIter<IndexType> ( IndexType start_val, IndexType limit_val )
 		: value(start_val)
@@ -256,7 +256,7 @@ struct ArrayIter {
 		, iter (other_iter)
 	{}
 
-	__host__ __device__ ArrayIter<T,ITER_TYPE,INDEX_TYPE> () = default;
+	ArrayIter<T,ITER_TYPE,INDEX_TYPE> () = default;
 
 
 	__device__ void reset(T* new_array, IterType new_iter) {
