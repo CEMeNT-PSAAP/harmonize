@@ -4,6 +4,9 @@
 #ifndef HARMONIZE_PROGRAM
 #define HARMONIZE_PROGRAM
 
+#include "../rng/mod.h"
+
+
 // The set of available program types
 #include "async.h"
 #include "event.h"

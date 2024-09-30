@@ -78,6 +78,7 @@ class EventProgram
 	// A set of halting condition flags
 	*/
 	static const unsigned int BAD_FUNC_ID_FLAG	= 0x00000001;
+	static const unsigned int OUT_OF_MEM_FLAG	= 0x00000002;
 	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 	static const unsigned int COMPLETION_FLAG	= 0x80000000;
 
@@ -166,7 +167,40 @@ class EventProgram
 
 		}
 
+		__host__ void clear_flags(){
+			unsigned int zero = 0;
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&(((Status*)status)->flags),
+				&zero,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyHostToDevice
+			));
+		}
+
+		__host__ Status load_status(){
+			Status host_status;
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&host_status,
+				status,
+				sizeof(Status),
+				adapt::GPUrtMemcpyDeviceToHost
+			));
+			return host_status;
+		}
+
+		__host__ void throw_on_error_status() {
+			Status host_status = load_status();
+			unsigned int flags = host_status.flags;
+			if (flags & 0x1) {
+				throw std::runtime_error("RUNTIME ERROR: Call made for async function wihtout a valid function ID.");
+			} else if (flags & 0x2) {
+				throw std::runtime_error("RUNTIME ERROR: Resource allocation failure during execution.");
+			}
+		}
+
 		__host__ bool complete(){
+
+			throw_on_error_status();
 
 			bool complete = true;
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
@@ -199,16 +233,6 @@ class EventProgram
 			}
 			return complete;
 
-		}
-
-		__host__ void clear_flags(){
-			unsigned int zero = 0;
-			util::host::auto_throw(adapt::GPUrtMemcpy(
-				status,
-				&zero,
-				sizeof(unsigned int),
-				adapt::GPUrtMemcpyHostToDevice
-			));
 		}
 
 	};
@@ -337,7 +361,8 @@ class EventProgram
 			_dev_ctx.event_io[io_index]->output_pointer()[promise_index].template cast<TYPE>() = param_value;
 			//printf("\n\nDoing an async call!\n\n");
 		} else {
-			printf("\n\nRan out of space!\n\n");
+			//printf("\n\nRan out of space!\n\n");
+			set_flags(OUT_OF_MEM_FLAG);
 		}
 	}
 
