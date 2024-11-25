@@ -65,7 +65,22 @@ __host__ __device__ T exch_system(T* adr,T val) {
         return atomicExch_system(adr,val);
     #else
         T result;
-        __atomic_exchange(adr,val,&result,__ATOMIC_ACQ_REL);
+        __atomic_exchange(adr,&val,&result,__ATOMIC_ACQ_REL);
+        return result;
+    #endif
+}
+
+template<typename T>
+__host__ __device__ T CAS_system(T* adr,T comp,T val) {
+    #ifdef __CUDA_ARCH__
+        return atomicCAS_system(adr,comp,val);
+    #else
+        bool success = false;
+        T expected = comp;
+        while ((!success) && (comp == expected)) {
+            success = __atomic_exchange(adr,&expected,&val,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQ_REL);
+        }
+        return expected;
     #endif
 }
 

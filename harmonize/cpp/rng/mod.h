@@ -26,36 +26,41 @@ struct SimpleRNG {
 };
 
 template <>
-uint32_t SimpleRNG::rng <uint32_t> () {
+__host__ __device__ uint32_t SimpleRNG::rng <uint32_t> () {
     advance_state();
     return state;
 }
 
-template <> uint8_t  SimpleRNG::rng <uint8_t> () { return rng<uint32_t>(); }
-template <> uint16_t SimpleRNG::rng <uint16_t> () { return rng<uint32_t>(); }
-template <> int8_t   SimpleRNG::rng <int8_t> () { return rng<uint32_t>(); }
-template <> int16_t  SimpleRNG::rng <int16_t> () { return rng<uint32_t>(); }
-template <> int32_t  SimpleRNG::rng <int32_t> () { return rng<uint32_t>(); }
+template <> __host__ __device__ uint8_t  SimpleRNG::rng <uint8_t>  () { return rng<uint32_t>(); }
+template <> __host__ __device__ uint16_t SimpleRNG::rng <uint16_t> () { return rng<uint32_t>(); }
+template <> __host__ __device__ int8_t   SimpleRNG::rng <int8_t>   () { return rng<uint32_t>(); }
+template <> __host__ __device__ int16_t  SimpleRNG::rng <int16_t>  () { return rng<uint32_t>(); }
+template <> __host__ __device__ int32_t  SimpleRNG::rng <int32_t>  () { return rng<uint32_t>(); }
 
 
-template <> uint64_t SimpleRNG::rng <uint64_t> ()
+template <>
+__host__ __device__ uint64_t SimpleRNG::rng <uint64_t> ()
 {
     uint64_t result  = rng<uint32_t>();
     result = (result<<32) | rng<uint32_t>();
     return result;
 }
-template <> int64_t SimpleRNG::rng <int64_t> ()
+
+template <>
+__host__ __device__ int64_t SimpleRNG::rng <int64_t> ()
 {
     int64_t result  = rng<int32_t>();
     result = (result<<32) | rng<int32_t>();
     return result;
 }
 
-template <> float    SimpleRNG::rng <float> () {
-    return ((float)rng<uint32_t>()) / 0xFFFFFFFFu;
+template <>
+__host__ __device__ float SimpleRNG::rng <float> () {
+    return ((float)rng<uint32_t>()) / (float)0xFFFFFFFFu;
 }
-template <> double   SimpleRNG::rng <double> () {
-    return ((double)rng<uint32_t>()) / 0xFFFFFFFFu;
+template <>
+__host__ __device__ double SimpleRNG::rng <double> () {
+    return ((double)rng<uint32_t>()) / (double)0xFFFFFFFFu;
 }
 
 

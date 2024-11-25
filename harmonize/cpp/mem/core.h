@@ -3,6 +3,7 @@
 
 #include <limits>
 
+#include "../preamble/mod.h"
 
 // Provides a size_t as a type so that it may be
 // folded into typename... parameter packs
@@ -20,15 +21,15 @@ struct Managed
 	void *operator new(size_t len)
 	{
 		void *ptr;
-		cudaMallocManaged(&ptr, len);
-		cudaDeviceSynchronize();
+		util::host::auto_throw(adapt::GPUrtMallocManaged(&ptr, len));
+		util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 		return ptr;
 	}
 
 	void operator delete(void *ptr)
 	{
-		cudaDeviceSynchronize();
-		cudaFree(ptr);
+		util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
+		util::host::auto_throw(adapt::GPUrtFree(ptr));
 	}
 };
 
@@ -85,6 +86,12 @@ template <typename ADR_TYPE>
 struct AdrInfo
 {
 	static const ADR_TYPE null = std::numeric_limits<ADR_TYPE>::max();
+};
+
+template <typename BASE_TYPE>
+struct AdrInfo<BASE_TYPE*>
+{
+	static const BASE_TYPE *null = nullptr;
 };
 
 

@@ -1,6 +1,3 @@
-
-
-
 #ifndef HARMONIZE_MEM_WORK
 #define HARMONIZE_MEM_WORK
 

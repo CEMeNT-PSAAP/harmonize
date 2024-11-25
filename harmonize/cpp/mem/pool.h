@@ -2,7 +2,7 @@
 #define HARMONIZE_MEM_POOL
 
 #include "node.h"
-
+#include "core.h"
 
 // An array of deques that collectively hold a set of a certain
 // type of node
@@ -25,6 +25,43 @@ struct DequePool : Managed
     __host__ __device__ DequePool<ARENA_TYPE,POOL_SIZE>(ARENA_TYPE& arena)
         : arena(arena)
     {}
+
+
+    __host__ __device__ void reset ()
+    {
+
+        #if __HARMONIZE_DEVICE_COMPILE__
+            size_t arena_size = arena.size();
+            size_t thread_count = gridDim.x * blockDim.x;
+            size_t thread_id    = blockDim.x * blockIdx.x + threadIdx.x;
+            size_t chunk_size   = (arena_size+SIZE-1) / SIZE;
+            for (size_t i=thread_id; i<SIZE; i+=thread_count) {
+                deques[i] = NodeDeque<NodeType>::make_empty();
+                size_t start = std::min(chunk_size*i,    arena_size);
+                size_t end   = std::min(chunk_size*(i+1),arena_size);
+                NodeDequeProxy<ARENA_TYPE> proxy(arena,deques[i]);
+                proxy.take();
+                for (size_t j=start; j<end; j++) {
+                    proxy.push(j);
+                }
+                proxy.give();
+            }
+        #else
+            size_t arena_size = arena.size();
+            size_t chunk_size = (arena_size+SIZE-1) / SIZE;
+            for (size_t i=0; i<SIZE; i++) {
+                deques[i] = NodeDeque<NodeType>::make_empty();
+                size_t start = std::min(chunk_size*i,    arena_size);
+                size_t end   = std::min(chunk_size*(i+1),arena_size);
+                NodeDequeProxy<ARENA_TYPE> proxy(arena,deques[i]);
+                proxy.take();
+                for (size_t j=start; j<end; j++) {
+                    proxy.push(j);
+                }
+                proxy.give();
+            }
+        #endif
+    }
 
     template<typename STATE>
     __host__ __device__ AdrType take_index(STATE &state)
@@ -92,9 +129,9 @@ struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE>
     template<typename STATE>
     __host__ __device__ AdrType take_index(STATE &state)
     {
-       long long int remaining = atomic::add_system(&count,-1ll)-1;
+       long long int remaining = intr::atomic::add_system(&count,-1ll)-1;
        if (remaining < 0) {
-            atomic::add_system(&count,1ll);
+            intr::atomic::add_system(&count,1ll);
             return AdrInfo<AdrType>::null;
        }
        Parent::take_index(state);
@@ -110,7 +147,7 @@ struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE>
     __host__ __device__ void give_index(STATE &state, AdrType adr)
     {
         Parent::give_index(state);
-        atomic::add_system(&count,1ll);
+        intr::atomic::add_system(&count,1ll);
     }
 
     template<typename STATE>

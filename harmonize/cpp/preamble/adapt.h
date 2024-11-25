@@ -14,6 +14,16 @@
 #endif
 
 
+#if __HIP_DEVICE_COMPILE__
+    #define __HARMONIZE_DEVICE_COMPILE__ 1
+#else
+#ifdef __CUDA_ARCH__
+    #define __HARMONIZE_DEVICE_COMPILE__ 1
+#else
+    #define __HARMONIZE_DEVICE_COMPILE__ 0
+#endif
+#endif
+
 #if defined(__NVCC__) || defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC__)
 
     namespace adapt {
@@ -45,6 +55,7 @@
     }
 
         CUDA_FN_ALIAS( Malloc );
+        CUDA_FN_ALIAS( MallocManaged );
         CUDA_FN_ALIAS( DeviceSynchronize );
         CUDA_FN_ALIAS( GetErrorString );
         CUDA_FN_ALIAS( EventCreate );
@@ -116,6 +127,7 @@
     }
 
         HIP_FN_ALIAS( Malloc );
+        HIP_FN_ALIAS( MallocManaged );
         HIP_FN_ALIAS( DeviceSynchronize );
         HIP_FN_ALIAS( GetErrorString );
         HIP_FN_ALIAS( EventCreate );

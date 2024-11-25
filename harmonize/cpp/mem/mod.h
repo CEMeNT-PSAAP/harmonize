@@ -6,7 +6,7 @@
 #include "node.h"
 #include "pool.h"
 #include "work.h"
-
+#include "slab.h"
 
 
 #endif

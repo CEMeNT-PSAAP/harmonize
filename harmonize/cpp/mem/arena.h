@@ -1,5 +1,5 @@
-#ifndef HARMONIZE_MEM
-#define HARMONIZE_MEM
+#ifndef HARMONIZE_MEM_ARENA
+#define HARMONIZE_MEM_ARENA
 
 #include "core.h"
 
@@ -18,7 +18,7 @@ struct DirectArena <ITEM_TYPE, ADR_TYPE, ARENA_SIZE> : Managed
     typedef ARENA_SIZE ArenaSize;
 
     static const size_t SIZE = ArenaSize::VALUE;
-	static const size_t MAX_SIZE = ADR_TYPE::null;
+	static const size_t MAX_SIZE = AdrInfo<ADR_TYPE>::null;
 	ItemType arena[SIZE];
 
     __host__ __device__ AdrType adr_of(ItemType &item)
