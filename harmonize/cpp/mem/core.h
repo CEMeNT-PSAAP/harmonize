@@ -16,7 +16,7 @@ struct Size
 
 // Used as a parent type for types which should be
 // dynamically allocated with managed memory
-struct Managed
+struct ManagedStorage
 {
 	void *operator new(size_t len)
 	{
@@ -30,6 +30,42 @@ struct Managed
 	{
 		util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 		util::host::auto_throw(adapt::GPUrtFree(ptr));
+	}
+};
+
+
+struct DeviceStorage
+{
+	void *operator new(size_t len)
+	{
+		void *ptr;
+		util::host::auto_throw(adapt::GPUrtMalloc(&ptr, len));
+		util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
+		return ptr;
+	}
+
+	void operator delete(void *ptr)
+	{
+		util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
+		util::host::auto_throw(adapt::GPUrtFree(ptr));
+	}
+};
+
+
+struct HostStorage
+{
+	void *operator new(size_t len)
+	{
+		void *ptr = malloc(len);
+		if (ptr == nullptr) {
+			throw std::runtime_error("Failed to allocate storage on host.");
+		}
+		return ptr;
+	}
+
+	void operator delete(void *ptr)
+	{
+		free(ptr);
 	}
 };
 

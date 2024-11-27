@@ -6,8 +6,8 @@
 
 // An array of deques that collectively hold a set of a certain
 // type of node
-template <typename ARENA_TYPE, size_t POOL_SIZE>
-struct DequePool : Managed
+template <typename ARENA_TYPE, size_t POOL_SIZE, typename STORAGE_TYPE>
+struct DequePool : STORAGE_TYPE
 {
 
     typedef ARENA_TYPE                   ArenaType;
@@ -20,14 +20,16 @@ struct DequePool : Managed
     ArenaType &arena;
     NodeDeque<NodeType> deques[SIZE];
 
-    DequePool<ARENA_TYPE,POOL_SIZE>() = default;
+    DequePool<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE>() = default;
 
-    __host__ __device__ DequePool<ARENA_TYPE,POOL_SIZE>(ARENA_TYPE& arena)
+    __host__ __device__
+    DequePool<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE>(ARENA_TYPE& arena)
         : arena(arena)
     {}
 
 
-    __host__ __device__ void reset ()
+    __host__ __device__
+    void reset ()
     {
 
         #if __HARMONIZE_DEVICE_COMPILE__
@@ -64,7 +66,8 @@ struct DequePool : Managed
     }
 
     template<typename STATE>
-    __host__ __device__ AdrType take_index(STATE &state)
+    __host__ __device__
+    AdrType take_index(STATE &state)
     {
         size_t start = state.template rng<size_t>() % SIZE;
         size_t index = start;
@@ -81,13 +84,15 @@ struct DequePool : Managed
     }
 
     template<typename STATE>
-    __host__ __device__ NodeType *take(STATE &state)
+    __host__ __device__
+    NodeType *take(STATE &state)
     {
         return arena + take_index<STATE>(state);
     }
 
     template<typename STATE>
-    __host__ __device__ void give_index(STATE &state, AdrType adr)
+    __host__ __device__
+    void give_index(STATE &state, AdrType adr)
     {
         size_t index = state.template rng<size_t>() % SIZE;
         NodeDequeProxy<ArenaType> deque_proxy(arena,deques[index]);
@@ -97,7 +102,8 @@ struct DequePool : Managed
     }
 
     template<typename STATE>
-    __host__ __device__ void give(STATE &state, NodeType *ptr)
+    __host__ __device__
+    void give(STATE &state, NodeType *ptr)
     {
         give_index(state,arena.offset_of(*ptr));
     }
@@ -109,11 +115,11 @@ struct DequePool : Managed
 // A DequePool that tracks the number of elements it contains. This container
 // is less performant when there are many concurrent operations, since
 // transactions are bottlenecked on checking the counter.
-template <typename ARENA_TYPE, size_t POOL_SIZE>
-struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE>
+template <typename ARENA_TYPE, size_t POOL_SIZE, typename STORAGE_TYPE>
+struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE, STORAGE_TYPE>
 {
 
-    typedef DequePool<ARENA_TYPE,POOL_SIZE> Parent;
+    typedef DequePool<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE> Parent;
     typedef typename Parent::AdrType        AdrType;
     typedef typename Parent::NodeType       NodeType;
 
@@ -121,13 +127,15 @@ struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE>
 
     CountedDequePool<ARENA_TYPE,POOL_SIZE>() = default;
 
-    __host__ __device__ CountedDequePool<ARENA_TYPE,POOL_SIZE>(ARENA_TYPE& arena)
+    __host__ __device__
+    CountedDequePool<ARENA_TYPE,POOL_SIZE>(ARENA_TYPE& arena)
         : Parent(arena)
         , count(0)
     {}
 
     template<typename STATE>
-    __host__ __device__ AdrType take_index(STATE &state)
+    __host__ __device__
+    AdrType take_index(STATE &state)
     {
        long long int remaining = intr::atomic::add_system(&count,-1ll)-1;
        if (remaining < 0) {
@@ -138,20 +146,23 @@ struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE>
     }
 
     template<typename STATE>
-    __host__ __device__ NodeType *take(STATE &state)
+    __host__ __device__
+    NodeType *take(STATE &state)
     {
         return Parent::arena + take_index<STATE>(state);
     }
 
     template<typename STATE>
-    __host__ __device__ void give_index(STATE &state, AdrType adr)
+    __host__ __device__
+    void give_index(STATE &state, AdrType adr)
     {
         Parent::give_index(state);
         intr::atomic::add_system(&count,1ll);
     }
 
     template<typename STATE>
-    __host__ __device__ void give(STATE &state, NodeType *ptr)
+    __host__ __device__
+    void give(STATE &state, NodeType *ptr)
     {
         give_index(state,Parent::arena.offset_of(*ptr));
     }

@@ -211,7 +211,7 @@ struct DefaultSlabProxy
 
     // Attempts to claim a single object from the provided slab.
     __host__ __device__
-    void *alloc(SLAB_TYPE *slab)
+    void *alloc(SLAB_TYPE *slab, bool &slab_filled)
     {
         // Add one to the allocation count. As long as enough bits of wiggle room
         // exist for the count half of the alloc state, this should be safe.
@@ -228,6 +228,8 @@ struct DefaultSlabProxy
             intr::atomic::add_system(&alloc_state,((AllocState)0)-((AllocState)1));
             return nullptr;
         }
+
+        slab_filled = (prev_count == (max_object_count-1));
 
         // Perform allocation in the proxy if the alloc mask can fit within the
         // provided mask, otherwise sweeping through the in-slab alloc mask
@@ -262,7 +264,7 @@ struct DefaultSlabProxy
     // Attempts to free the object referenced by the provided pointer, returning false
     // upon failure.
     __host__ __device__
-    bool free(SlabType *slab, void *obj_ptr)
+    bool free(SlabType *slab, void *obj_ptr, bool &slab_emptied)
     {
 
         // Find byte offset of object pointer relative to the slab
@@ -280,6 +282,8 @@ struct DefaultSlabProxy
             intr::atomic::add_system(&alloc_state,1llu);
             return false;
         }
+
+        slab_emptied = (prev_count == 1);
 
         size_t object_size = (prev&SIZE_MASK)>>SIZE_OFFSET;
 
@@ -379,6 +383,20 @@ class SlabArena
         return slab_index;
     }
 
+    // Get the slab at the given index
+    __host__ __device__
+    SlabType &slab_at(SlabAdrType slab_index)
+    {
+        return slabs.arena[slab_index];
+    }
+
+    // Get the proxy at the given index
+    __host__ __device__
+    ProxyNodeType &proxy_at(SlabAdrType slab_index)
+    {
+        return proxies[slab_index];
+    }
+
     // Get the slab containing the given pointer
     __host__ __device__
     SlabType &slab_for(void *ptr)
@@ -437,6 +455,12 @@ class SlabArena <
         return slab_index;
     }
 
+    // Get the slab containing the given pointer
+    __host__ __device__
+    SlabType &slab_at(SlabAdrType slab_index)
+    {
+        return slabs.arena[slab_index];
+    }
 
     // Get the slab containing the given pointer
     __host__ __device__
@@ -450,7 +474,7 @@ class SlabArena <
 
 
 // Allocates slabs from a slab arena
-template <typename ARENA_TYPE, size_t POOL_SIZE>
+template <typename ARENA_TYPE, size_t POOL_SIZE, typename STORAGE_TYPE>
 class SlabAllocator {
 
     typedef ARENA_TYPE                           ArenaType;
@@ -459,7 +483,7 @@ class SlabAllocator {
     typedef typename ArenaType::SlabAdrType      SlabAdrType;
     typedef typename ArenaType::SlabType         SlabType;
     typedef typename ArenaType::ProxyNodeType    ProxyNodeType;
-    typedef DequePool<ProxyArenaType,POOL_SIZE>  PoolType;
+    typedef DequePool<ProxyArenaType,POOL_SIZE,STORAGE_TYPE>  PoolType;
 
 
     ArenaType  &arena;
@@ -469,14 +493,17 @@ class SlabAllocator {
 
     public:
 
-    __host__ __device__ SlabAllocator<ARENA_TYPE,POOL_SIZE> (ArenaType& arena)
+    // Constructs a slab allocator deriving storage from the supplied arena
+    __host__ __device__
+    SlabAllocator<ARENA_TYPE,POOL_SIZE> (ArenaType& arena)
         : arena(arena)
         , pool(arena)
         , first_claim_iterator(0)
     {}
 
     // Allocates a slab from the arena
-    __host__ __device__ SlabAdrType alloc() {
+    __host__ __device__
+    SlabAdrType alloc() {
         if (first_claim_iterator < arena.size()) {
             SlabAdrType index = intr::atomic::add_system(&first_claim_iterator,(SlabAdrType)1);
             if (index < arena.size()) {
@@ -486,20 +513,40 @@ class SlabAllocator {
         return pool.take();
     }
 
-
-    __host__ __device__ void free(SlabAdrType slab_adr) {
+    // Frees a slab by its index
+    __host__ __device__
+    void free(SlabAdrType slab_adr) {
         pool.give(slab_adr);
     }
 
-    __host__ __device__ SlabAdrType slab_index_for(void *ptr) {
+    // Gives the index of the slab containing the given address
+    __host__ __device__
+    SlabAdrType slab_index_for(void *ptr) {
         return arena.slab_index_for(ptr);
     }
 
-    __host__ __device__ SlabType slab_for(void *ptr) {
+    // Returns a reference to the slab at the given index
+    __host__ __device__
+    SlabType &slab_at(SlabAdrType slab_index) {
+        return arena.slab_at(slab_index);
+    }
+
+    // Returns a reference to the proxy at the given index
+    __host__ __device__
+    ProxyNodeType &proxy_for(SlabAdrType slab_index) {
+        return arena.proxy_at(slab_index);
+    }
+
+    // Returns a reference to the slab containing the given address
+    __host__ __device__
+    SlabType &slab_for(void *ptr) {
         return arena.slab_for(ptr);
     }
 
-    __host__ __device__ ProxyNodeType &proxy_for(void *ptr) {
+    // Returns a reference to the proxy for the slab containting the
+    // given address
+    __host__ __device__
+    ProxyNodeType &proxy_for(void *ptr) {
         return arena.proxy_for(ptr);
     }
 
@@ -522,7 +569,10 @@ class SizedAllocator {
 
     public:
 
-    __host__ __device__ SizedAllocator<SLAB_ALLOCATOR_TYPE,POOL_SIZE> (
+    // Constructs a sized allocator deriving storage from the supplied
+    // slab allocator
+    __host__ __device__
+    SizedAllocator<SLAB_ALLOCATOR_TYPE,POOL_SIZE> (
         SlabAllocatorType &slab_allocator,
         size_t object_size
     )
@@ -530,30 +580,45 @@ class SizedAllocator {
         , object_size(object_size)
     {}
 
-    __host__ __device__ void *alloc () {
-        void *result = pool.take_index();
-        while (result == nullptr) {
-            SlabAdrType slab_adr = slab_allocator.alloc();
+    // Allocates an object of the allocator's corresponding size
+    __host__ __device__
+    void *alloc () {
+        SlabAdrType slab_adr = pool.take_index();
+        if (slab_adr == AdrInfo<SlabAdrType>::null()) {
+            slab_adr = slab_allocator.alloc();
             if (slab_adr == AdrInfo<SlabAdrType>::null) {
                 return nullptr;
             }
-
-            SlabType      &slab       = slab_allocator.proxy_for(slab_adr);
-            SlabProxyType &slab_proxy = slab_allocator.proxy_for(slab_adr);
-
-            if (!slab_info.bind_color(object_size)) {
+            SlabType      &new_slab       = slab_allocator.slab_at(slab_adr);
+            SlabProxyType &new_slab_proxy = slab_allocator.proxy_at(slab_adr);
+            if (!new_slab_proxy.claim(&new_slab,object_size)) {
                 return nullptr;
             }
-
-            slab_info.swap_head_index(0);
-            link_up_slab(slab);
-            result = cache[size_index].alloc();
+        }
+        SlabType      &slab       = slab_allocator.slab_at(slab_adr);
+        SlabProxyType &slab_proxy = slab_allocator.proxy_at(slab_adr);
+        bool slab_filled = false;
+        void *result = slab_proxy.alloc(&slab,slab_filled);
+        if (!slab_filled) {
+            pool.give_index(slab_adr);
         }
     }
 
-    __host__ __device__ bool free (void *ptr) {
-        pool.give_index(ptr);
-        return false;
+    // Frees an object of a size matching the allocator's size and served by
+    // the backing slab allocator
+    __host__ __device__
+    bool free (void *ptr) {
+        SlabAdrType slab_adr = slab_allocator.slab_index_for(ptr);
+        bool slab_emptied = false;
+        SlabType      &slab       = slab_allocator.slab_at(slab_adr);
+        SlabProxyType &slab_proxy = slab_allocator.proxy_at(slab_adr);
+        if (!slab.free(slab_emptied)) {
+            return false;
+        }
+        if (slab_emptied) {
+            slab_allocator.free(slab_adr);
+        }
+        return true;
     }
 
 
@@ -578,7 +643,8 @@ class GeneralAllocator {
     static const size_t MIN_SIZE = 1;
 
 
-    __host__ __device__ void *alloc (size_t size) {
+    __host__ __device__
+    void *alloc (size_t size) {
         size_t alloc_size = size;
         if (alloc_size > MAX_SIZE) {
             return nullptr;
@@ -593,7 +659,8 @@ class GeneralAllocator {
         return cache[size_index].alloc();
     }
 
-    __host__ __device__ bool free (void *ptr) {
+    __host__ __device__
+    bool free (void *ptr) {
 
         char *byte_ptr = static_cast<char*>(ptr);
         char *base_byte_ptr = static_cast<char*>(static_cast<void*>(slab_allocator.arena.arena));

@@ -1,28 +1,34 @@
-#include "../../../harmonize/cpp/harmonize.h"
+#ifndef HARMONIZE_TEST_MEM_POOL
+#define HARMONIZE_TEST_MEM_POOL
 
 #include <iostream>
+
+namespace pool {
+
 
 const size_t ARENA_SIZE      = 10000000;
 const size_t POOL_SIZE       = 1000;
 const size_t LOCAL_POOL_SIZE = 100;
 const size_t CHECK_COUNT     = 10000;
 
-typedef DirectArena<Node<int,unsigned int,Size<2>>,unsigned int,Size<ARENA_SIZE>> ArenaType;
-typedef DequePool<ArenaType,POOL_SIZE> PoolType;
+typedef mem::DirectArena<
+    mem::Node<int,unsigned int,mem::Size<2>>,
+    unsigned int,
+    mem::Size<ARENA_SIZE>,
+    mem::ManagedStorage
+> ArenaType;
 
-
-template<typename ARENA_TYPE, typename DEQUE_TYPE>
-__host__ __device__ void random_deque(
-    ARENA_TYPE *arena,
-    unsigned int *fail_count
-) {
-    DEQUE_TYPE deque = DEQUE_TYPE::make_empty();
-}
+typedef mem::DequePool<
+    ArenaType,
+    POOL_SIZE,
+    mem::ManagedStorage
+> PoolType;
 
 
 
 template<typename ARENA_TYPE, typename POOL_TYPE>
-__host__ __device__ void coinflip_alloc_test(
+__host__ __device__
+void coinflip_alloc_test(
     ARENA_TYPE *arena,
     POOL_TYPE *free_pool,
     unsigned int *fail_count
@@ -38,7 +44,7 @@ __host__ __device__ void coinflip_alloc_test(
     // Start with an empty pool
     for (size_t i=0; i<LOCAL_POOL_SIZE; i++) {
         memo[i] = -1;
-        local_pool[i] = AdrInfo<unsigned int>::null;
+        local_pool[i] = mem::AdrInfo<unsigned int>::null;
     }
 
     // Perform a series of allocations and deallocations
@@ -48,10 +54,10 @@ __host__ __device__ void coinflip_alloc_test(
         unsigned int index = rng.template rng<unsigned int>() % LOCAL_POOL_SIZE;
         // If the element is a null address, allocate a node and assign its address,
         // otherwise free it.
-        if ( local_pool[index] == AdrInfo<unsigned int>::null ) {
+        if ( local_pool[index] == mem::AdrInfo<unsigned int>::null ) {
             unsigned int adr = free_pool->take_index(rng);
 
-            if (adr == AdrInfo<unsigned int>::null) {
+            if (adr == mem::AdrInfo<unsigned int>::null) {
                 printf("Failed to allocate any index.\n");
                 passed = false;
                 return;
@@ -84,13 +90,13 @@ __host__ __device__ void coinflip_alloc_test(
                 item = -1;
                 memo[index] = -1;
             }
-            local_pool[index] = AdrInfo<unsigned int>::null;
+            local_pool[index] = mem::AdrInfo<unsigned int>::null;
             free_pool->give_index(rng,adr);
         }
     }
 
     for (size_t i=0; i<LOCAL_POOL_SIZE; i++) {
-        if ( local_pool[i] != AdrInfo<unsigned int>::null) {
+        if ( local_pool[i] != mem::AdrInfo<unsigned int>::null) {
             free_pool->give_index(rng,local_pool[i]);
         }
     }
@@ -105,7 +111,8 @@ __host__ __device__ void coinflip_alloc_test(
 
 
 template<typename ARENA_TYPE, typename POOL_TYPE>
-__host__ __device__ void exhaustion_test(
+__host__ __device__
+void exhaustion_test(
     ARENA_TYPE *arena,
     POOL_TYPE *free_pool,
     int *free_count,
@@ -114,7 +121,7 @@ __host__ __device__ void exhaustion_test(
 
     SimpleRNG rng(1234);
     int remaining = intr::atomic::add_system(free_count,-1)-1;
-    unsigned int head = AdrInfo<unsigned int>::null;
+    unsigned int head = mem::AdrInfo<unsigned int>::null;
     if (remaining > 0) {
         unsigned int adr = free_pool->take_index(rng);
     } else {
@@ -126,36 +133,11 @@ __host__ __device__ void exhaustion_test(
 
 
 
-template<typename ARENA_TYPE, typename POOL_TYPE>
-__host__ void cpu_test_deque_pool(
-    ARENA_TYPE *arena,
-    POOL_TYPE *free_pool,
-    int *free_count,
-    unsigned int *fail_count
-) {
-    coinflip_alloc_test(arena,free_pool,fail_count);
-    exhaustion_test(arena,free_pool,free_count,fail_count);
-}
-
-
+DEFINE_LAUNCH_GLUE(coinflip_alloc_test)
+DEFINE_LAUNCH_GLUE(exhaustion_test)
 
 template<typename ARENA_TYPE, typename POOL_TYPE>
-__global__ void gpu_test_deque_pool(
-    ARENA_TYPE *arena,
-    POOL_TYPE *free_pool,
-    int *free_count,
-    unsigned int *fail_count
-) {
-    coinflip_alloc_test(arena,free_pool,fail_count);
-    exhaustion_test(arena,free_pool,free_count,fail_count);
-}
-
-
-
-
-
-template<typename ARENA_TYPE, typename POOL_TYPE>
-bool test_deque_pool(bool on_gpu)
+TestLaunchResult test_deque_pool(TestLaunchConfig config)
 {
 
     unsigned int *fail_count;
@@ -174,26 +156,43 @@ bool test_deque_pool(bool on_gpu)
 
     free_pool->reset();
 
-    if (on_gpu) {
-        gpu_test_deque_pool<<<32,32>>>(arena,free_pool,free_count,fail_count);
-    } else {
-        cpu_test_deque_pool(arena,free_pool,free_count,fail_count);
-    }
+    coinflip_alloc_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch(
+        config,
+        arena,free_pool,fail_count
+    );
+
+    exhaustion_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch(
+        config,
+        arena,free_pool,free_count,fail_count
+    );
 
     delete arena;
     delete free_pool;
 
-    return true;
+    return TestLaunchResult(true);
 }
 
 
 
-int main() {
+TestModule test_module (mem::test_module,"pool");
 
-    std::string dummy;
-    test_deque_pool<ArenaType,PoolType>(false);
-    std::getline(std::cin,dummy);
-    test_deque_pool<ArenaType,PoolType>(true);
-    return 0;
-}
 
+TestLaunchSet deque_pool_test_set (
+    test_module,
+    "deque_pool",
+    {{"default_deque_pool",test_deque_pool<ArenaType,PoolType>}},
+    {
+        {1,0,0},
+        {32,0,0},
+        {0,1,32},
+        {0,32,1},
+        {0,32,32},
+        {32,32,32},
+    }
+);
+
+
+} // namespace pool
+
+
+#endif

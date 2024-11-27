@@ -10,8 +10,8 @@
 template <typename ...>
 struct DirectArena;
 
-template <typename ITEM_TYPE, typename ADR_TYPE, typename ARENA_SIZE>
-struct DirectArena <ITEM_TYPE, ADR_TYPE, ARENA_SIZE> : Managed
+template <typename ITEM_TYPE, typename ADR_TYPE, typename ARENA_SIZE, typename STORAGE_TYPE>
+struct DirectArena <ITEM_TYPE, ADR_TYPE, ARENA_SIZE, STORAGE_TYPE> : STORAGE_TYPE
 {
     typedef ITEM_TYPE  ItemType;
     typedef ADR_TYPE   AdrType;
@@ -43,8 +43,8 @@ struct DirectArena <ITEM_TYPE, ADR_TYPE, ARENA_SIZE> : Managed
 template <typename ...>
 struct IndirectArena;
 
-template <typename ITEM_TYPE, typename ADR_TYPE>
-struct IndirectArena <ITEM_TYPE, ADR_TYPE> : Managed
+template <typename ITEM_TYPE, typename ADR_TYPE, typename STORAGE_TYPE>
+struct IndirectArena <ITEM_TYPE, ADR_TYPE,STORAGE_TYPE> : STORAGE_TYPE
 {
 	typedef ITEM_TYPE ItemType;
 	typedef ADR_TYPE  AdrType;

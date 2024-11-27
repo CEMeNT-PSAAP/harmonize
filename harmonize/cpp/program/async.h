@@ -155,15 +155,15 @@ class AsyncProgram
 	static const unsigned int EARLY_HALT_FLAG	= 0x40000000;
 
 	//! Defining a set of internal short-hand names for the specializaions used by the class
-	typedef util::mem::Adr       <AdrType>             LinkAdrType;
-	typedef util::mem::PoolQueue <LinkAdrType>         QueueType;
-	typedef WorkFrame       <QueueType,FRAME_SIZE>     FrameType;
-	typedef WorkStack       <FrameType,STACK_SIZE>     StackType;
-	typedef WorkPool        <QueueType,POOL_SIZE>      PoolType;
+	typedef util::mem::Adr       <AdrType>               LinkAdrType;
+	typedef util::mem::PoolQueue <LinkAdrType>           QueueType;
+	typedef mem::WorkFrame       <QueueType,FRAME_SIZE>  FrameType;
+	typedef mem::WorkStack       <FrameType,STACK_SIZE>  StackType;
+	typedef mem::WorkPool        <QueueType,POOL_SIZE>   PoolType;
 
-	typedef WorkLink        <OpSet, LinkAdrType, WORK_GROUP_SIZE> LinkType;
+	typedef mem::WorkLink        <OpSet, LinkAdrType, WORK_GROUP_SIZE> LinkType;
 
-	typedef WorkArena       <LinkAdrType,LinkType>     ArenaType;
+	typedef mem::WorkArena       <LinkAdrType,LinkType>     ArenaType;
 
 
 
@@ -1032,8 +1032,8 @@ class AsyncProgram
 
 
 		unsigned int depth_dec = 0;
-		PromiseCountPair delta;
-		PromiseCountPair result;
+		mem::PromiseCountPair delta;
+		mem::PromiseCountPair result;
 
 		FrameType& frame = _dev_ctx.stack->frames[start_level];
 
@@ -1089,13 +1089,13 @@ class AsyncProgram
 			unsigned int old_count;
 			unsigned int new_count;
 			if(promise_delta >= 0) {
-				old_count = atomicAdd(&dest.children_residents.data,(PromiseCountPair) promise_delta);
+				old_count = atomicAdd(&dest.children_residents.data,(mem::PromiseCountPair) promise_delta);
 				new_count = old_count + (unsigned int) promise_delta;
 				if(old_count > new_count){
 					rc_printf("\n\nOVERFLOW\n\n");
 				}
 			} else {
-				PromiseCountPair neg_delta = -((PromiseCountPair) (-promise_delta));
+				mem::PromiseCountPair neg_delta = -((mem::PromiseCountPair) (-promise_delta));
 				old_count = atomicAdd(&dest.children_residents.data,neg_delta);
 				new_count = old_count + neg_delta;
 				if(old_count < new_count){
@@ -2188,7 +2188,7 @@ class AsyncProgram
 		}
 		#endif
 
-		const PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
+		const mem::PromiseCount GLOBAL_WORK_THRESHOLD = STASH_SIZE/2;
 		//if ( ( ((_dev_ctx.stack->frames[0].children_residents) & 0xFFFF ) > (gridDim.x*blockIdx.x*2) ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
 		if ( ( ((_dev_ctx.stack->frames[0].children_residents.get_right()) ) > GLOBAL_WORK_THRESHOLD ) && (_grp_ctx.main_queue.full_head == STASH_SIZE) ) {
 			fill_stash(STASH_HIGH_WATER,false);
@@ -2853,9 +2853,9 @@ class AsyncProgram
 
 			printf("STACK:\t(status_flags: %#010x\tdepth: %d\tlive: %d)\t{\n",status_flags,depth,live);
 			for(int i=0; i < STACK_SIZE; i++){
-				util::mem::PairPack<PromiseCount> child_res = host_stack->frames[i].children_residents.data;
-				PromiseCount children  = child_res.get_left();
-				PromiseCount residents = child_res.get_right();
+				util::mem::PairPack<mem::PromiseCount> child_res = host_stack->frames[i].children_residents.data;
+				mem::PromiseCount children  = child_res.get_left();
+				mem::PromiseCount residents = child_res.get_right();
 				printf("(children: %d\t residents: %d)\t[",children,residents);
 				for(int j=0; j < FRAME_SIZE; j++){
 					unsigned int index = i*FRAME_SIZE + j;

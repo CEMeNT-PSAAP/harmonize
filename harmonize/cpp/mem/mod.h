@@ -2,11 +2,14 @@
 #define HARMONIZE_MEM
 
 
+namespace mem {
+
 #include "arena.h"
 #include "node.h"
 #include "pool.h"
 #include "work.h"
 #include "slab.h"
 
+};
 
 #endif
