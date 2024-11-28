@@ -53,6 +53,8 @@ void gpu_helper (ARGS... args) {                                               \
     func<TYPE_PARAMS...>(args...);                                             \
 }                                                                              \
                                                                                \
+static std::string func_name() { return #func ;}                               \
+                                                                               \
 template <typename... ARGS>                                                    \
 static void launch (                                                           \
     TestLaunchConfig config,                                                   \
@@ -72,6 +74,15 @@ static void launch (                                                           \
     for (std::thread& t: cpu_thread_team) {                                    \
         t.join();                                                              \
     }                                                                          \
+}                                                                              \
+                                                                               \
+template <typename... ARGS>                                                    \
+static void launch_verbose (                                                   \
+    TestLaunchConfig config,                                                   \
+    ARGS... args                                                               \
+) {                                                                            \
+    std::cout << func_name() << std::endl;                                     \
+    launch(config,args...);                                                    \
 }                                                                              \
                                                                                \
 };                                                                             \
@@ -122,7 +133,6 @@ class TestModule {
     std::vector<TestModule*> children;
     std::vector<TestLaunchSet*> test_sets;
 
-    std::string full_path();
 
     public:
 
@@ -133,6 +143,8 @@ class TestModule {
 
     static TestModule& get_root();
     static void run_root();
+
+    std::string full_path();
 
 };
 

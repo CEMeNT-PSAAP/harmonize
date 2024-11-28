@@ -156,12 +156,12 @@ TestLaunchResult test_deque_pool(TestLaunchConfig config)
 
     free_pool->reset();
 
-    coinflip_alloc_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch(
+    coinflip_alloc_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch_verbose(
         config,
         arena,free_pool,fail_count
     );
 
-    exhaustion_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch(
+    exhaustion_test_launch_glue<ARENA_TYPE,POOL_TYPE>::launch_verbose(
         config,
         arena,free_pool,free_count,fail_count
     );
@@ -176,20 +176,22 @@ TestLaunchResult test_deque_pool(TestLaunchConfig config)
 
 TestModule test_module (mem::test_module,"pool");
 
-
-TestLaunchSet deque_pool_test_set (
-    test_module,
-    "deque_pool",
-    {{"default_deque_pool",test_deque_pool<ArenaType,PoolType>}},
-    {
-        {1,0,0},
-        {32,0,0},
-        {0,1,32},
-        {0,32,1},
-        {0,32,32},
-        {32,32,32},
-    }
-);
+template <typename... PARAMS>
+struct RegisterDequePool {
+    TestLaunchSet deque_pool_test_set (
+        test_module,
+        "deque_pool",
+        {{"default",test_deque_pool<PARAMS>}},
+        {
+            {1,0,0},
+            {32,0,0},
+            {0,1,32},
+            {0,32,1},
+            {0,32,32},
+            {32,32,32},
+        }
+    );
+}
 
 
 } // namespace pool

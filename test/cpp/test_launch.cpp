@@ -48,42 +48,6 @@ TestLaunchResult::operator std::string() { return desc; }
 
 
 
-#define DEFINE_LAUNCH_GLUE(func)                                               \
-                                                                               \
-template<typename... TYPE_PARAMS>                                              \
-struct func ## _launch_glue {                                                  \
-                                                                               \
-template <typename... ARGS>                                                    \
-static __global__                                                              \
-void gpu_helper (ARGS... args) {                                               \
-    func<TYPE_PARAMS...>(args...);                                             \
-}                                                                              \
-                                                                               \
-template <typename... ARGS>                                                    \
-static void launch (                                                           \
-    TestLaunchConfig config,                                                   \
-    ARGS... args                                                               \
-) {                                                                            \
-    std::vector<std::thread> cpu_thread_team;                                  \
-    for (size_t i=0; i<config.get_cpu_thread_count(); i++) {                   \
-        cpu_thread_team.emplace_back(func<TYPE_PARAMS...>,args...);            \
-    }                                                                          \
-    if ((config.get_gpu_block_count()>0) && (config.get_gpu_block_size()>0)) { \
-        gpu_helper <<<                                                         \
-            config.get_gpu_block_count(),                                      \
-            config.get_gpu_block_size()                                        \
-        >>>(args...);                                                          \
-        util::host::auto_throw(adapt::GPUrtDeviceSynchronize());               \
-    }                                                                          \
-    for (std::thread& t: cpu_thread_team) {                                    \
-        t.join();                                                              \
-    }                                                                          \
-}                                                                              \
-                                                                               \
-};                                                                             \
-
-
-
 TestFunctionEntry::TestFunctionEntry(
     std::string name,
     TestLaunchResult(*func)(TestLaunchConfig)
@@ -117,20 +81,21 @@ TestLaunchSet::TestLaunchSet (
 }
 
 TestLaunchResult TestLaunchSet::run() {
+    std::string parent_path = parent.full_path();
+    std::string set_path = parent_path + "." + name;
     for (TestFunctionEntry& test : tests) {
+        std::string test_path = set_path + "." + test.get_name();
         for (TestLaunchConfig& config : configs) {
-            std::cout << "[ ] Running '" << name << "' "
+            std::cout << "Running '" << test_path << "' "
                     << "with config {"
                     << "cpu=" << config.get_cpu_thread_count() << ", "
                     << "gpu=(" << config.get_gpu_block_count() << "," << config.get_gpu_block_size() << ")"
-                    << "}";
+                    << "}" << std::endl;
             std::cout.flush();
             TestLaunchResult result = test.run(config);
             if (!result) {
                 std::cout << std::endl << "Launch encountered error: '" << result << "'" << std::endl;
                 return result;
-            } else {
-                std::cout << "\r[X" << std::endl;
             }
         }
     }
