@@ -2,6 +2,7 @@
 #define HARMONIZE_TRACE_LOG
 
 #include "../util/iter.h"
+#include "../place/mod.h"
 
 namespace log
 {
