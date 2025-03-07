@@ -206,7 +206,7 @@ long long int get_wall_clock() {{
     #ifdef HARMONIZE_PLATFORM_CUDA
     long long int result;
     asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(result));
-    return result
+    return result;
     #else
     return wall_clock64();
     #endif
