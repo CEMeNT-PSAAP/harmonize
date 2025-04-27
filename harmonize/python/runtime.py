@@ -20,6 +20,7 @@ from .config    import compilation_gate
 from .atomics   import atomic_op_info
 from .prim      import prim_info
 from .printing  import generate_print_code
+from .timing    import generate_clock_code
 from .logging   import verbose_print, debug_print, progress_print
 from .codegen   import (
     pascal_case,
@@ -1097,6 +1098,7 @@ class RuntimeSpec():
                     op_cpp=f"atomic{op_name.title()}"
                 )
 
+        text += generate_clock_code()
         text += generate_print_code()
 
         file_path = f"{RuntimeSpec.cache_path}builtin"
@@ -1320,12 +1322,12 @@ class RuntimeSpec():
                     alloc_program = ext_fn(f"alloc_program_{suffix}", sig(vp,vp,usize))
                     free_program  = ext_fn(f"free_program_{suffix}",  sig(void,vp))
 
-                alloc_state   = ext_fn(f"alloc_state_{suffix}",   sig(vp))
-                free_state    = ext_fn(f"free_state_{suffix}",    sig(void,vp))
+                alloc_state    = ext_fn(f"alloc_state_{suffix}",   sig(vp))
+                free_state     = ext_fn(f"free_state_{suffix}",    sig(void,vp))
 
-                complete      = ext_fn(f"complete_{suffix}",    sig(i32,vp))
-                clear_flags   = ext_fn(f"clear_flags_{suffix}", sig(void,vp))
-                set_device    = ext_fn(f"set_device_{suffix}", sig(void,i32))
+                complete       = ext_fn(f"complete_{suffix}",    sig(i32,vp))
+                clear_flags    = ext_fn(f"clear_flags_{suffix}", sig(void,vp))
+                set_device     = ext_fn(f"set_device_{suffix}", sig(void,i32))
 
                 # Finally, compile the entry functions, saving it for later use
                 spec.fn[kind]['init_program']  = init_program
@@ -1343,9 +1345,9 @@ class RuntimeSpec():
                     result = complete(instance)
                     return (result != 0)
 
-                spec.fn[kind]['complete']      = complete_wrapper
-                spec.fn[kind]['clear_flags']   = clear_flags
-                spec.fn[kind]['set_device']    = set_device
+                spec.fn[kind]['complete']       = complete_wrapper
+                spec.fn[kind]['clear_flags']    = clear_flags
+                spec.fn[kind]['set_device']     = set_device
 
         debug_print("Bound and loaded")
 

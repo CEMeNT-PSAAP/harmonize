@@ -200,6 +200,37 @@ extern "C" __device__
 """
 
 
+clock_template="""
+extern "C" __device__
+long long int get_wall_clock() {{
+    #ifdef HARMONIZE_PLATFORM_CUDA
+    long long int result;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(result));
+    return result;
+    #else
+    return wall_clock64();
+    #endif
+}}
+
+extern "C"
+long long int wall_clock_rate() {{
+    #ifdef HARMONIZE_PLATFORM_CUDA
+    return 1000000000;
+    #else
+    int device_id;
+    util::host::auto_throw(hipGetDevice(&device_id));
+    int wall_clock_rate = 0; //in kilohertz
+    util::host::auto_throw(hipDeviceGetAttribute(
+        &wall_clock_rate,
+        hipDeviceAttributeWallClockRate,
+        device_id
+    ));
+    return wall_clock_rate * 1000;
+    #endif
+}}
+"""
+
+
 early_halt_template="""
 extern "C" __device__
 int halt_early_{suffix}(void* result, void *prog) {{

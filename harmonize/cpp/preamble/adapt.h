@@ -16,6 +16,8 @@
 
 #if defined(__NVCC__) || defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC__)
 
+    #define HARMONIZE_PLATFORM_CUDA
+
     namespace adapt {
 
     size_t const WARP_SIZE = 32;
@@ -81,6 +83,8 @@
 #elif defined(__HIP_PLATFORM_AMD__)
 
     #include <hip/hip_runtime.h>
+
+    #define HARMONIZE_PLATFORM_ROCM
 
 
     namespace adapt {
