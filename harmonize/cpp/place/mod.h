@@ -14,13 +14,6 @@ namespace place
     BlockIndex  const NULL_BLOCK  = AdrInfo<BlockIndex> ::null;
     ThreadIndex const NULL_THREAD = AdrInfo<ThreadIndex>::null;
 
-    enum DeviceTypeID : unsigned short
-    {
-        NULL = 0;
-        CPU  = 1,
-        GPU  = 2,
-    };
-
 
     template <DeviceTypeID DEVICE_TYPE_ID>
     class DeviceType

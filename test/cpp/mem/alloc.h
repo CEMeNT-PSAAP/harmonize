@@ -27,7 +27,7 @@ DEFINE_LAUNCH_GLUE(linked_list_construction_test)
 template<typename ARENA_TYPE, typename POOL_TYPE>
 TestLaunchResult test_alloc(TestLaunchConfig config)
 {
-
+    return TestLaunchResult(false);
 }
 
 

@@ -78,7 +78,7 @@ __host__ __device__ T CAS_system(T* adr,T comp,T val) {
         bool success = false;
         T expected = comp;
         while ((!success) && (comp == expected)) {
-            success = __atomic_exchange(adr,&expected,&val,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQ_REL);
+            success = __atomic_compare_exchange(adr,&expected,&val,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQ_REL);
         }
         return expected;
     #endif

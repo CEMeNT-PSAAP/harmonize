@@ -80,7 +80,7 @@ struct NodeProxy<Node<DATA_TYPE,void*,LINK_ARRAY_SIZE>*>
 
     NodeType   &node;
 
-    __host__ __device__ NodeProxy<void*> (
+    __host__ __device__ NodeProxy<Node<DATA_TYPE,void*,LINK_ARRAY_SIZE>*> (
         NodeType   &node
     )
         : node(node)

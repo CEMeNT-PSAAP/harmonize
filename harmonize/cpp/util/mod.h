@@ -13,7 +13,9 @@ namespace util {
 // active. This is useful for finding an index for a set of operations performed once by an
 // unpredictable number of threads within a warp.
 */
-static __device__ unsigned int warp_inc_scan(){
+static
+__device__
+unsigned int warp_inc_scan(){
 
 	unsigned int active = __activemask();
 	unsigned int keep = (1 << threadIdx.x) - 1;
@@ -26,7 +28,9 @@ static __device__ unsigned int warp_inc_scan(){
 /*
 // This function returns the number of currently active threads in a warp
 */
-static __device__ unsigned int active_count(){
+static
+__device__
+unsigned int active_count(){
 	return __popc(__activemask());
 }
 
@@ -36,23 +40,33 @@ static __device__ unsigned int active_count(){
 // This is valuable for electing a "leader" to perform single-threaded work for a warp.
 // (__ffs (find first set) indexes bits from one, hence the -1 )
 */
-static __device__ bool current_leader(){
+static
+__device__
+bool current_leader(){
 	return ((__ffs(__activemask())-1) == threadIdx.x);
 }
 
 
-static __device__ unsigned int pop_count(unsigned int value) {
+static
+__device__
+unsigned int pop_count(unsigned int value) {
 	return __popc(value);
 }
-static __device__ unsigned long long int pop_count(unsigned long long int value) {
+static
+__device__
+unsigned long long int pop_count(unsigned long long int value) {
 	return __popcll(value);
 }
 
 
-static __device__ unsigned int leading_zeros(unsigned int value) {
+static
+__device__
+unsigned int leading_zeros(unsigned int value) {
 	return __clz(value);
 }
-static __device__ unsigned long long int leading_zeros(unsigned long long int value) {
+static
+__device__
+unsigned long long int leading_zeros(unsigned long long int value) {
 	return __clzll(value);
 }
 
@@ -63,20 +77,26 @@ static __device__ unsigned long long int leading_zeros(unsigned long long int va
 // instructions performed to manage the runtime state.
 */
 #if 1
-static __host__ __device__ unsigned int random_uint(unsigned int &state){
+static
+__host__ __device__
+unsigned int random_uint(unsigned int &state){
 
 	state = (0x10DCDu * state + 1u);
 	return state;
 
 }
-static __host__ __device__ unsigned long long int random_uint(unsigned long long int &state){
+static
+__host__ __device__
+unsigned long long int random_uint(unsigned long long int &state){
 
 	state = ( 2971215073 * state + 12345u);
 	return state;
 
 }
 #else
-static __device__ unsigned int random_uint(unsigned int& rand_state){
+static
+__device__
+unsigned int random_uint(unsigned int& rand_state){
 
 	rand_state = (1103515245u * rand_state + 12345u);// % 0x80000000;
 	return rand_state;
@@ -132,6 +152,8 @@ struct Stopwatch {
 
 };
 
+
+#include "func.h"
 
 }
 

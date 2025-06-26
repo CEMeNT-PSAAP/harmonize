@@ -39,8 +39,8 @@ struct DequePool : STORAGE_TYPE
             size_t chunk_size   = (arena_size+SIZE-1) / SIZE;
             for (size_t i=thread_id; i<SIZE; i+=thread_count) {
                 deques[i] = NodeDeque<NodeType>::make_empty();
-                size_t start = std::min(chunk_size*i,    arena_size);
-                size_t end   = std::min(chunk_size*(i+1),arena_size);
+                size_t start = util::func::min((size_t)(chunk_size*i),    arena_size);
+                size_t end   = util::func::min((size_t)(chunk_size*(i+1)),arena_size);
                 NodeDequeProxy<ARENA_TYPE> proxy(arena,deques[i]);
                 proxy.take();
                 for (size_t j=start; j<end; j++) {
@@ -53,8 +53,8 @@ struct DequePool : STORAGE_TYPE
             size_t chunk_size = (arena_size+SIZE-1) / SIZE;
             for (size_t i=0; i<SIZE; i++) {
                 deques[i] = NodeDeque<NodeType>::make_empty();
-                size_t start = std::min(chunk_size*i,    arena_size);
-                size_t end   = std::min(chunk_size*(i+1),arena_size);
+                size_t start = util::func::min(chunk_size*i,    arena_size);
+                size_t end   = util::func::min(chunk_size*(i+1),arena_size);
                 NodeDequeProxy<ARENA_TYPE> proxy(arena,deques[i]);
                 proxy.take();
                 for (size_t j=start; j<end; j++) {
@@ -125,10 +125,10 @@ struct CountedDequePool : DequePool<ARENA_TYPE, POOL_SIZE, STORAGE_TYPE>
 
     long long int count;
 
-    CountedDequePool<ARENA_TYPE,POOL_SIZE>() = default;
+    CountedDequePool<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE>() = default;
 
     __host__ __device__
-    CountedDequePool<ARENA_TYPE,POOL_SIZE>(ARENA_TYPE& arena)
+    CountedDequePool<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE>(ARENA_TYPE& arena)
         : Parent(arena)
         , count(0)
     {}

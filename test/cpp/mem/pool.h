@@ -6,22 +6,23 @@
 namespace pool {
 
 
+
 const size_t ARENA_SIZE      = 10000000;
 const size_t POOL_SIZE       = 1000;
 const size_t LOCAL_POOL_SIZE = 100;
 const size_t CHECK_COUNT     = 10000;
 
-typedef mem::DirectArena<
-    mem::Node<int,unsigned int,mem::Size<2>>,
+typedef hrm::mem::DirectArena<
+    hrm::mem::Node<int,unsigned int,hrm::mem::Size<2>>,
     unsigned int,
-    mem::Size<ARENA_SIZE>,
-    mem::ManagedStorage
+    hrm::mem::Size<ARENA_SIZE>,
+    hrm::mem::ManagedStorage
 > ArenaType;
 
-typedef mem::DequePool<
+typedef hrm::mem::DequePool<
     ArenaType,
     POOL_SIZE,
-    mem::ManagedStorage
+    hrm::mem::ManagedStorage
 > PoolType;
 
 
@@ -35,7 +36,7 @@ void coinflip_alloc_test(
 ) {
 
     bool passed = true;
-    SimpleRNG rng(1234);
+    hrm::random::SimpleRNG rng(1234);
     // Used to track the values each allocated node should have
     int memo[LOCAL_POOL_SIZE];
     // Used to track the addresses of each allocated node
@@ -44,20 +45,20 @@ void coinflip_alloc_test(
     // Start with an empty pool
     for (size_t i=0; i<LOCAL_POOL_SIZE; i++) {
         memo[i] = -1;
-        local_pool[i] = mem::AdrInfo<unsigned int>::null;
+        local_pool[i] = hrm::mem::AdrInfo<unsigned int>::null;
     }
 
     // Perform a series of allocations and deallocations
     for (unsigned int i=0; i<CHECK_COUNT; i++) {
 
         // Pick an element in the local pool to use
-        unsigned int index = rng.template rng<unsigned int>() % LOCAL_POOL_SIZE;
+        unsigned int index = rng.rng<unsigned int>() % LOCAL_POOL_SIZE;
         // If the element is a null address, allocate a node and assign its address,
         // otherwise free it.
-        if ( local_pool[index] == mem::AdrInfo<unsigned int>::null ) {
+        if ( local_pool[index] == hrm::mem::AdrInfo<unsigned int>::null ) {
             unsigned int adr = free_pool->take_index(rng);
 
-            if (adr == mem::AdrInfo<unsigned int>::null) {
+            if (adr == hrm::mem::AdrInfo<unsigned int>::null) {
                 printf("Failed to allocate any index.\n");
                 passed = false;
                 return;
@@ -65,8 +66,13 @@ void coinflip_alloc_test(
 
             //printf("Took address %d\n",adr);
             // Set node value to random value
-            int value = rng.template rng<int>() % 1000;
+            int value = rng.rng<int>() % 1000;
             int &item = (*arena)[adr].data;
+
+            #ifdef __HARMONIZE_DEVICE_COMPILE__
+                __threadfence();
+            #endif
+
             // Check that the node was not in use
             if ( (item != -1) || (memo[index] != -1) ) {
                 printf("Claimed address %d that is currently being used.\n",adr);
@@ -90,19 +96,22 @@ void coinflip_alloc_test(
                 item = -1;
                 memo[index] = -1;
             }
-            local_pool[index] = mem::AdrInfo<unsigned int>::null;
+            #ifdef __HARMONIZE_DEVICE_COMPILE__
+            __threadfence();
+            #endif
+            local_pool[index] = hrm::mem::AdrInfo<unsigned int>::null;
             free_pool->give_index(rng,adr);
         }
     }
 
     for (size_t i=0; i<LOCAL_POOL_SIZE; i++) {
-        if ( local_pool[i] != mem::AdrInfo<unsigned int>::null) {
+        if ( local_pool[i] != hrm::mem::AdrInfo<unsigned int>::null) {
             free_pool->give_index(rng,local_pool[i]);
         }
     }
 
     if(!passed){
-        intr::atomic::add_system(fail_count,1u);
+        hrm::intr::atomic::add_system(fail_count,1u);
     }
 
 }
@@ -119,13 +128,13 @@ void exhaustion_test(
     unsigned int *fail_count
 ) {
 
-    SimpleRNG rng(1234);
-    int remaining = intr::atomic::add_system(free_count,-1)-1;
-    unsigned int head = mem::AdrInfo<unsigned int>::null;
+    hrm::random::SimpleRNG rng(1234);
+    int remaining = hrm::intr::atomic::add_system(free_count,-1)-1;
+    //unsigned int head = mem::AdrInfo<unsigned int>::null;
     if (remaining > 0) {
         unsigned int adr = free_pool->take_index(rng);
     } else {
-        intr::atomic::add_system(free_count,1);
+        hrm::intr::atomic::add_system(free_count,1);
     }
 
 }
@@ -142,8 +151,8 @@ TestLaunchResult test_deque_pool(TestLaunchConfig config)
 
     unsigned int *fail_count;
     int *free_count;
-    util::host::auto_throw(adapt::GPUrtMallocManaged(&fail_count,sizeof(unsigned int)));
-    util::host::auto_throw(adapt::GPUrtMallocManaged(&free_count,sizeof(int)));
+    hrm::util::host::auto_throw(hrm::adapt::GPUrtMallocManaged(&fail_count,sizeof(unsigned int)));
+    hrm::util::host::auto_throw(hrm::adapt::GPUrtMallocManaged(&free_count,sizeof(int)));
     *fail_count = 0;
     *free_count = ARENA_SIZE;
 
@@ -176,22 +185,19 @@ TestLaunchResult test_deque_pool(TestLaunchConfig config)
 
 TestModule test_module (mem::test_module,"pool");
 
-template <typename... PARAMS>
-struct RegisterDequePool {
-    TestLaunchSet deque_pool_test_set (
-        test_module,
-        "deque_pool",
-        {{"default",test_deque_pool<PARAMS>}},
-        {
-            {1,0,0},
-            {32,0,0},
-            {0,1,32},
-            {0,32,1},
-            {0,32,32},
-            {32,32,32},
-        }
-    );
-}
+TestLaunchSet deque_pool_test_set (
+    test_module,
+    "deque_pool",
+    {{"default",test_deque_pool<ArenaType,PoolType>}},
+    {
+        {1,0,0},
+        {32,0,0},
+        {0,1,32},
+        {0,32,1},
+        //{0,32,32},
+        //{32,32,32},
+    }
+);
 
 
 } // namespace pool

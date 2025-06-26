@@ -15,17 +15,31 @@
 
 
 #if __HIP_DEVICE_COMPILE__
-    #define __HARMONIZE_DEVICE_COMPILE__ 1
+    #define __HARMONIZE_GPU_COMPILE__ 1
+    #define __HARMONIZE_IN_HIP__      1
 #else
-#ifdef __CUDA_ARCH__
-    #define __HARMONIZE_DEVICE_COMPILE__ 1
-#else
-    #define __HARMONIZE_DEVICE_COMPILE__ 0
-#endif
+    #ifdef __CUDA_ARCH__
+        #define __HARMONIZE_GPU_COMPILE__ 1
+        #define __HARMONIZE_IN_CUDA__     1
+    #else
+        #ifdef __HIP_PLATFORM_AMD__
+            #define __HARMONIZE_CPU_COMPILE__ 1
+            #define __HARMONIZE_IN_HIP__      1
+        #else
+            #ifdef __CUDACC__
+                #define __HARMONIZE_CPU_COMPILE__ 1
+                #define __HARMONIZE_IN_CUDA__     1
+            #else
+                #define __HARMONIZE_CPU_COMPILE__ 1
+                #define __HARMONIZE_IN_CPP__      1
+            #endif
+        #endif
+    #endif
 #endif
 
 #if defined(__NVCC__) || defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC__)
 
+    // Separate namespaces to allow for inclusion of files (e.g. <hip/hip_runtime.h>)
     namespace adapt {
 
     size_t const WARP_SIZE = 32;
@@ -94,6 +108,7 @@
     #include <hip/hip_runtime.h>
 
 
+    // Separate namespaces to allow for inclusion of files (e.g. <hip/hip_runtime.h>)
     namespace adapt {
 
     #define __syncwarp(mask) ;

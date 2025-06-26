@@ -304,7 +304,7 @@ struct DefaultSlabProxy
 
         size_t obj_index = byte_offset / sizeof(AllocMaskElem);
         // If object index not in valid range, fail out
-        if ((obj_index<0) || (obj_index >= max_object_count)) {
+        if (obj_index >= max_object_count) {
             return false;
         }
 
@@ -475,7 +475,8 @@ class SlabArena <
 
 // Allocates slabs from a slab arena
 template <typename ARENA_TYPE, size_t POOL_SIZE, typename STORAGE_TYPE>
-class SlabAllocator {
+class SlabAllocator
+{
 
     typedef ARENA_TYPE                           ArenaType;
     typedef typename ArenaType::BackingArenaType BackingArenaType;
@@ -495,7 +496,7 @@ class SlabAllocator {
 
     // Constructs a slab allocator deriving storage from the supplied arena
     __host__ __device__
-    SlabAllocator<ARENA_TYPE,POOL_SIZE> (ArenaType& arena)
+    SlabAllocator<ARENA_TYPE,POOL_SIZE,STORAGE_TYPE> (ArenaType& arena)
         : arena(arena)
         , pool(arena)
         , first_claim_iterator(0)
@@ -554,7 +555,8 @@ class SlabAllocator {
 
 
 template <typename SLAB_ALLOCATOR_TYPE, size_t POOL_SIZE>
-class SizedAllocator {
+class SizedAllocator
+{
 
     typedef SLAB_ALLOCATOR_TYPE                       SlabAllocatorType;
     typedef typename SlabAllocatorType::SlabType      SlabType;
@@ -626,7 +628,8 @@ class SizedAllocator {
 
 
 template <typename SLAB_ALLOCATOR_TYPE, size_t POOL_SIZE, size_t ALLOC_LIMIT>
-class GeneralAllocator {
+class GeneralAllocator
+{
 
     typedef SLAB_ALLOCATOR_TYPE SlabAllocatorType;
     typedef typename SlabAllocatorType::SlabType SlabType;

@@ -37,6 +37,8 @@ dependencies = [
     "numpy",
     "colorama",
     "black",
+    "sphinx",
+    "breathe",
 ]
 
 [project.urls]

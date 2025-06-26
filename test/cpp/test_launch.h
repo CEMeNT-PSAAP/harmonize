@@ -41,19 +41,24 @@ class TestLaunchResult {
 };
 
 
+template<typename GLUE_TYPE, typename... ARGS>
+__global__
+void launch_glue_gpu_helper(ARGS... args)
+{
+    GLUE_TYPE::passthrough(args...);
+}
+
 
 #define DEFINE_LAUNCH_GLUE(func)                                               \
-                                                                               \
 template<typename... TYPE_PARAMS>                                              \
 struct func ## _launch_glue {                                                  \
                                                                                \
-template <typename... ARGS>                                                    \
-static __global__                                                              \
-void gpu_helper (ARGS... args) {                                               \
-    func<TYPE_PARAMS...>(args...);                                             \
-}                                                                              \
-                                                                               \
 static std::string func_name() { return #func ;}                               \
+                                                                               \
+template <typename... ARGS>                                                    \
+__host__ __device__                                                            \
+static void passthrough (ARGS... args)                                         \
+{ func <TYPE_PARAMS...>(args...); }                                            \
                                                                                \
 template <typename... ARGS>                                                    \
 static void launch (                                                           \
@@ -65,11 +70,13 @@ static void launch (                                                           \
         cpu_thread_team.emplace_back(func<TYPE_PARAMS...>,args...);            \
     }                                                                          \
     if ((config.get_gpu_block_count()>0) && (config.get_gpu_block_size()>0)) { \
-        gpu_helper <<<                                                         \
+        launch_glue_gpu_helper                                                 \
+        < func ## _launch_glue <TYPE_PARAMS...>, ARGS... >                     \
+        <<<                                                                    \
             config.get_gpu_block_count(),                                      \
             config.get_gpu_block_size()                                        \
         >>>(args...);                                                          \
-        util::host::auto_throw(adapt::GPUrtDeviceSynchronize());               \
+        hrm::util::host::auto_throw(hrm::adapt::GPUrtDeviceSynchronize());     \
     }                                                                          \
     for (std::thread& t: cpu_thread_team) {                                    \
         t.join();                                                              \

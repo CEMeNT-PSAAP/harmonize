@@ -4,7 +4,7 @@
 #ifndef HARMONIZE_PROGRAM
 #define HARMONIZE_PROGRAM
 
-#include "../rng/mod.h"
+#include "../random/mod.h"
 
 
 // The set of available program types
