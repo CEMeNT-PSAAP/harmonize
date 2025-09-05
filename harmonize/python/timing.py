@@ -1,5 +1,5 @@
 import numba
-from .templates import clock_template
+from harmonize.python.templates import clock_template
 
 def generate_clock_code():
     return clock_template

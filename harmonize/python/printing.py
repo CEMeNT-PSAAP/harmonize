@@ -3,8 +3,8 @@ import llvmlite
 
 import harmonize.python.config as config
 
-from .templates import print_template
-from .prim import *
+from harmonize.python.templates import print_template
+from harmonize.python.prim import *
 
 
 print_specialization_registry = {}

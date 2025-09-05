@@ -15,14 +15,14 @@ from numba      import njit
 from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
-from .templates import *
-from .config    import compilation_gate
-from .atomics   import atomic_op_info
-from .prim      import prim_info
-from .printing  import generate_print_code
-from .timing    import generate_clock_code
-from .logging   import verbose_print, debug_print, progress_print
-from .codegen   import (
+from harmonize.python.templates import *
+from harmonize.python.config    import compilation_gate
+from harmonize.python.atomics   import atomic_op_info
+from harmonize.python.prim      import prim_info
+from harmonize.python.printing  import generate_print_code
+from harmonize.python.timing    import generate_clock_code
+from harmonize.python.logging   import verbose_print, debug_print, progress_print
+from harmonize.python.codegen   import (
     pascal_case,
     size_of,
     alignment,
