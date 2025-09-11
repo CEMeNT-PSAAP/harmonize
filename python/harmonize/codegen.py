@@ -4,8 +4,8 @@ import numpy as np
 import struct
 
 
-from harmonize.python import config, errors
-from harmonize.python.logging import verbose_print, debug_print, progress_print
+from harmonize import config, errors
+from harmonize.logging import verbose_print, debug_print, progress_print
 
 
 def declare_device(name,sig):

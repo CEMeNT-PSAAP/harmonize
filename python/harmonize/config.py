@@ -5,7 +5,7 @@ import subprocess
 from os         import path
 from enum       import Enum
 from os.path    import dirname, abspath
-from harmonize.python import errors, logging
+from harmonize import errors, logging
 
 class ShouldCompile(Enum):
     ALWAYS = 1
