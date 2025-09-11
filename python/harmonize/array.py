@@ -1,7 +1,7 @@
 import numba as nb
 import numpy as np
 
-from harmonize.python import config
+from harmonize import config
 
 
 def local_array(shape,dtype):

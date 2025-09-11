@@ -1,6 +1,6 @@
 import llvmlite
 from numba.extending import intrinsic
-from harmonize.python.types import *
+from harmonize.types import *
 
 # =============================================================================
 # Atomics

@@ -1,10 +1,10 @@
 import numba
 import llvmlite
 
-import harmonize.python.config as config
+import harmonize.config as config
 
-from harmonize.python.templates import print_template
-from harmonize.python.prim import *
+from harmonize.templates import print_template
+from harmonize.prim import *
 
 
 print_specialization_registry = {}

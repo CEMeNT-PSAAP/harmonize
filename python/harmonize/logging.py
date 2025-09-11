@@ -1,5 +1,5 @@
 
-from harmonize.python import config
+from harmonize import config
 
 PINK = '\033[95m'
 BLUE = '\033[94m'

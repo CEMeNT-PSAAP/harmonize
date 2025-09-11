@@ -7,7 +7,7 @@ import subprocess
 import numpy as np
 
 
-import harmonize.python.config as config
+import harmonize.config as config
 
 from os         import makedirs, getcwd, path
 from time       import sleep
@@ -15,14 +15,14 @@ from numba      import njit
 from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
-from harmonize.python.templates import *
-from harmonize.python.config    import compilation_gate
-from harmonize.python.atomics   import atomic_op_info
-from harmonize.python.prim      import prim_info
-from harmonize.python.printing  import generate_print_code
-from harmonize.python.timing    import generate_clock_code
-from harmonize.python.logging   import verbose_print, debug_print, progress_print
-from harmonize.python.codegen   import (
+from harmonize.templates import *
+from harmonize.config    import compilation_gate
+from harmonize.atomics   import atomic_op_info
+from harmonize.prim      import prim_info
+from harmonize.printing  import generate_print_code
+from harmonize.timing    import generate_clock_code
+from harmonize.logging   import verbose_print, debug_print, progress_print
+from harmonize.codegen   import (
     pascal_case,
     size_of,
     alignment,

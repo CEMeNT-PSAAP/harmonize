@@ -42,3 +42,6 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/CEMeNT-PSAAP/harmonize"
 Issues = "https://github.com/CEMeNT-PSAAP/harmonize/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/harmonize]

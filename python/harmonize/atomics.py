@@ -1,10 +1,10 @@
 import numba
 import llvmlite
 
-from harmonize.python import errors, config
+from harmonize import errors, config
 
 
-from harmonize.python.prim import *
+from harmonize.prim import *
 
 
 
