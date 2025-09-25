@@ -7,7 +7,7 @@ void init_program_{suffix}(
     size_t  grid_size
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    //printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
+    printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
     init<{short_name}>(*instance,grid_size);
     util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
@@ -73,8 +73,9 @@ void *alloc_state_{suffix}() {{
 load_state_template = """
 extern "C"
 void load_state_{label}_{suffix}(void *host_ptr, void *dev_ptr) {{
-    //printf("cpu_state:%p\\n",host_ptr);
-    //printf("gpu_state:%p\\n", dev_ptr);
+    printf("LOAD {label} {suffix}\\n");
+    printf("cpu_state:%p\\n",host_ptr);
+    printf("gpu_state:%p\\n", dev_ptr);
     void *offset_dev_ptr = (void*)(((char*)dev_ptr)+{offset});
     util::host::auto_throw(adapt::GPUrtMemcpy(
         host_ptr,
@@ -93,8 +94,9 @@ void load_state_{label}_{suffix}(void *host_ptr, void *dev_ptr) {{
 store_state_template = """
 extern "C"
 void store_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
-    //printf("cpu_state:%p\\n",host_ptr);
-    //printf("gpu_state:%p\\n", dev_ptr);
+    printf("STORE {label} {suffix}\\n");
+    printf("cpu_state:%p\\n",host_ptr);
+    printf("gpu_state:%p\\n", dev_ptr);
     void *offset_dev_ptr = (void*)(((char*)dev_ptr)+{offset});
     //size_t *data = (size_t*) host_ptr;
     //for(int i=0; i<10; i++) {{
@@ -130,6 +132,7 @@ clear_flags_template = """
 extern "C"
 void clear_flags_{suffix}(void *instance_ptr) {{
 	auto instance  = (typename {short_name}::Instance*) instance_ptr;
+    printf("instance is:%p\\n",instance_ptr);
 	instance->clear_flags();
 }}
 """
@@ -244,6 +247,40 @@ extern "C" __device__
 int harmonize_print_{type_sig}(void* result, {args}) {{
     printf("( {format_str} )\\n",{arg_vals});
     return 0;
+}}
+"""
+
+alloc_device_bytes_template="""
+extern "C"
+void *harmonize_alloc_device_bytes(size_t size) {{
+    void *result_ptr = nullptr;
+    printf("Allocating %zu device bytes\\n",size);
+    util::host::auto_throw(adapt::GPUrtMalloc(
+        &result_ptr,
+        size
+    ));
+    return result_ptr;
+}}
+"""
+
+alloc_managed_bytes_template="""
+extern "C"
+void *harmonize_alloc_managed_bytes(size_t size) {{
+    void *result_ptr = nullptr;
+    printf("Allocating %zu managed bytes\\n",size);
+    util::host::auto_throw(adapt::GPUrtMallocManaged(
+        &result_ptr,
+        size
+    ));
+    return result_ptr;
+}}
+"""
+
+free_device_bytes_template="""
+extern "C"
+void harmonize_free_device_bytes(void* ptr) {{
+    printf("Freeing bytes\\n");
+    util::host::auto_throw(adapt::GPUrtFree(ptr));
 }}
 """
 
