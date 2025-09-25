@@ -5,7 +5,8 @@ import inspect
 import subprocess
 
 import numpy as np
-
+import cffi
+ffi = cffi.FFI()
 
 import harmonize.python.config as config
 
@@ -15,7 +16,9 @@ from numba      import njit
 from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
+from .pointer   import *
 from .templates import *
+from .array     import generate_alloc_code
 from .config    import compilation_gate
 from .atomics   import atomic_op_info
 from .prim      import prim_info
@@ -37,10 +40,8 @@ from .codegen   import (
     find_bundle_triples,
     extern_device_ir,
     declare_device,
+    generate_uuid,
 )
-
-
-
 
 
 # A base class representing all possible runtime types
@@ -165,9 +166,19 @@ class ProgramField:
         self.path       = path
         self.offset     = offset
         self.kind       = kind
+        self.ext_kind   = kind
         self.size       = size_of(kind)
         self.is_pointer = is_pointer
+        self.is_array   = False
         debug_print(f"\n\nSize of '{label}' ---> {self.size}\n\n")
+
+
+        if (isinstance(kind,numba.core.types.npytypes.Array)) :
+            self.ext_kind = numba.types.voidptr
+            self.kind     = numba.types.voidptr
+            self.is_array = True
+            print(f"FOUND ARRAY: {self.label} = {self.kind}")
+
 
     def prefix(self):
         if self.is_pointer:
@@ -409,7 +420,7 @@ class RuntimeSpec():
             ('frames',      self.meta['FRAME_ARR_TYPE'])
         ])
 
-        # The device context type, tracking the arena, how much of the arena has
+        # The device context type, tracking the arena, how much of the arena dddddhas
         # been claimed the 'easy' way, the pool for allocating/deallocating work links
         # in the arena, and the stack for tracking work links that contain outstanding
         # promises waiting for processing
@@ -546,14 +557,23 @@ class RuntimeSpec():
 
     def enumerate_program_fields(self,base_label,path,kind,offset=0,is_pointer=True):
 
-
         if isinstance(kind,numba.types.Record):
+            print("\n\n\n\nRECORD", path)
             self.program_fields[base_label] = ProgramField(
                 base_label,
                 path,
                 offset,
                 kind,
                 is_pointer
+            )
+        elif isinstance(kind,numba.types.Array):
+            print("\n\n\n\nARRAY", path)
+            self.program_fields[base_label] = ProgramField(
+                base_label,
+                path,
+                offset,
+                numba.types.voidptr,
+                False
             )
         elif isinstance(kind,dict):
             result = []
@@ -960,13 +980,16 @@ class RuntimeSpec():
             if isinstance(kind,numba.types.Record):
                 sig = kind(numba.uintp)
                 result[name] = (declare_device(f"access_{path}",sig))
+            elif isinstance(kind,numba.types.Array):
+                sig = numba.types.voidptr(numba.uintp)
+                result[name] = (declare_device(f"access_{path}",sig))
             elif isinstance(kind,dict):
                 result[name] = RuntimeSpec.declare_program_accessors(kind,path)
             else:
                 raise numba.errors.TypingError( ""
                     + "Invalid field specification. "
-                    + "Fields may either be a numba Record or a "
-                    + "dictionary of fields."
+                    + "Fields may either be a numba Record, a numba Array,"
+                    + " or a dictionary of fields."
                 )
 
         return result
@@ -1097,6 +1120,7 @@ class RuntimeSpec():
 
         text += generate_clock_code()
         text += generate_print_code()
+        text += generate_alloc_code()
 
         file_path = f"{RuntimeSpec.cache_path}builtin"
         source = f"{file_path}.cpp"
@@ -1226,24 +1250,13 @@ class RuntimeSpec():
                 RuntimeSpec.generate_hipdevicelib()
 
                 so_path    = f"{RuntimeSpec.cache_path}harmonize.so"
-                link_list = " ".join([ obj for obj in RuntimeSpec.obj_set ])
-                gpu_bc_list = " ".join( [bc for bc in RuntimeSpec.gpu_bc_set] )
-                device_linked_bc = f"{RuntimeSpec.cache_path}device_linked.bc"
-                device_bundle_bc = f"{RuntimeSpec.cache_path}device_bundle.bc"
 
-                if RuntimeSpec.gpu_bc_set:
-                    gpu_bc_sorted = sorted(RuntimeSpec.gpu_bc_set)
-                    if len(gpu_bc_sorted) == 1:
-                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {gpu_bc_sorted[0]} -o {device_linked_bc}"
-                    else:
-                        base = gpu_bc_sorted[0]
-                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])  # TODO: this is a workaround for multiply-defined symbols during llvm-link
-                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {base} {overrides} -o {device_linked_bc}"
-                    comp_cmd = [
-                        llvm_link_cmd,
-                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={device_linked_bc} --output={device_bundle_bc} --targets={RuntimeSpec.gpu_triple}",
-                        f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} {device_bundle_bc} -o {so_path} -g"
-                    ]
+                comp_cmd = [
+                    f"{config.hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
+                    f"{config.hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
+	                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
+	                f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} {RuntimeSpec.debug_flag}"
+                ]
 
                     comp_desc = [
                         "Linking device code",
@@ -1290,12 +1303,26 @@ class RuntimeSpec():
                 exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
 
                 for label, field in spec.program_fields.items():
-                    store_name    = f"store_state_{label}"
-                    load_name     = f"load_state_{label}"
-                    store_state   = ext_fn(f"{store_name}_{suffix}", sig(void, vp, field.kind))
-                    load_state    = ext_fn(f"{load_name}_{suffix}",  sig(void, field.kind, vp))
+                    store_name = f"store_state_{label}"
+                    load_name  = f"load_state_{label}"
+                    print(f"STORE NAME: {store_name}")
+                    print(f"\n\n\n\n\n{field.kind}")
+                    print(f"{field.ext_kind}")
+                    print(f"{type(field.ext_kind)}\n\n\n\n\n")
+                    store_state   = ext_fn(f"{store_name}_{suffix}", sig(void, vp, field.ext_kind))
+                    load_state    = ext_fn(f"{load_name}_{suffix}",  sig(void, field.ext_kind, vp))
+                    if field.is_array :
+                        print(locals())
+                        id = generate_uuid()
+                        print(f"ADAPTING ACCESSOR {store_name} with id {id}")
+                        exec(f"def store_wrapper_{id}(vp,field):\n    print(\"First is\")\n    print(vp)\n    print(\"Field is\")\n    print(field)\n    ptr = (ffi.from_buffer(field))\n    vptr = any_to_voidptr(ptr)\n    print(\"Pointer was\")\n    print(ptr)\n    print(\"Void pointer was\")\n    print(vptr)\n    print(\"Uint was\")\n    print(voidptr_to_uintp(vptr))\n    store_state(vp,vptr)",globals()|locals(),locals())
+                        exec(f"def load_wrapper_{id} (field,vp):\n    load_state(field.ctypes.data,vp)",globals()|locals(),locals())
+                        store_state = eval(f"numba.njit()(store_wrapper_{id})")
+                        load_state  = eval(f"numba.njit()(load_wrapper_{id})")
+
                     spec.fn[kind][store_name]   = store_state
                     spec.fn[kind][load_name]    = load_state
+                #exit()
 
                 if kind == "Event":
                     # IO_SIZE, LOAD_MARGIN

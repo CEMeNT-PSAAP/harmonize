@@ -8,6 +8,15 @@ from harmonize.python import config, errors
 from harmonize.python.logging import verbose_print, debug_print, progress_print
 
 
+uuid_iterator = 0
+
+def generate_uuid():
+    global uuid_iterator
+    result = uuid_iterator
+    uuid_iterator += 1
+    return result
+
+
 def declare_device(name,sig):
     if   config.CUDA_AVAILABLE:
         return config.cuda.declare_device(name, sig)
@@ -169,6 +178,8 @@ def size_of(kind):
         return result
     elif isinstance(kind,numba.types.Record):
         return kind.size
+    elif isinstance(kind,numba.types.Array):
+        return size_of(numba.types.uintp)
     elif isinstance(kind,numba.types.Type):
         return kind.bitwidth // 8
     else:
@@ -232,6 +243,12 @@ def map_type_name(type_map,kind,rec_mode=""):
             result = "void*"
         return result
     elif isinstance(kind,numba.types.npytypes.NestedArray):
+        return "void*"
+    elif isinstance(kind,numba.types.npytypes.Array):
+        return "void*"
+    elif isinstance(kind,numba.types.Array):
+        return "void*"
+    elif isinstance(kind,numba.types.misc.RawPointer):
         return "void*"
     else:
         raise RuntimeError("Unrecognized type '"+str(kind)+"' with type '"+str(type(kind))+"'")

@@ -47,6 +47,7 @@
     }
 
         CUDA_FN_ALIAS( Malloc );
+        CUDA_FN_ALIAS( MallocManaged );
         CUDA_FN_ALIAS( DeviceSynchronize );
         CUDA_FN_ALIAS( GetErrorString );
         CUDA_FN_ALIAS( EventCreate );
@@ -120,6 +121,7 @@
     }
 
         HIP_FN_ALIAS( Malloc );
+        HIP_FN_ALIAS( MallocManaged );
         HIP_FN_ALIAS( DeviceSynchronize );
         HIP_FN_ALIAS( GetErrorString );
         HIP_FN_ALIAS( EventCreate );

@@ -174,6 +174,7 @@ class EventProgram
 				check_error();
 				size_t item_count = event_io[i].host_copy().input_iter.limit;
 				if( item_count != 0 ){
+					//printf("Item count of %zu at %d\n",item_count,i);
 					complete = false;
 				}
 
@@ -202,13 +203,29 @@ class EventProgram
 		}
 
 		__host__ void clear_flags(){
+			unsigned int value = 0;
 			unsigned int zero = 0;
+			printf("Status is at %p\n",(Status*) status);
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&value,
+				status,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyDeviceToHost
+			));
+			printf("Status was %d\n",value);
 			util::host::auto_throw(adapt::GPUrtMemcpy(
 				status,
 				&zero,
 				sizeof(unsigned int),
 				adapt::GPUrtMemcpyHostToDevice
 			));
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&value,
+				status,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyDeviceToHost
+			));
+			printf("Status is now %d\n",value);
 		}
 
 	};
@@ -468,15 +485,17 @@ class EventProgram
 
 		if( threadIdx.x == 0 ){
 			__threadfence();
-			unsigned int checkout_index = atomicAdd(&_dev_ctx.status->checkout,1);
+			unsigned int checkout_index = atomicAdd_system(&_dev_ctx.status->checkout,1);
+			printf("(%d)",checkout_index);
 			if( checkout_index == (gridDim.x - 1) ){
-				__threadfence();
-				atomicExch(&_dev_ctx.status->checkout,0);
-				__threadfence();
+				printf("FLIPPED at %d!\n",checkout_index+1);
+				__threadfence_system();
+				atomicExch_system(&_dev_ctx.status->checkout,0u);
+				__threadfence_system();
 				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					_dev_ctx.event_io[i]->flip();
 				}
-				atomicAdd(&_dev_ctx.status->flip_count,1u);
+				atomicAdd_system(&_dev_ctx.status->flip_count,1u);
 			}
 		}
 
