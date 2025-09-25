@@ -69,7 +69,7 @@ class GPUPlatform(Enum):
 CUDA_PATH  = None
 ROCM_PATH  = None
 
-HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/.."
+HARMONIZE_ROOT_DIR    =  dirname(abspath(__file__))+"/../.."
 HARMONIZE_ROOT_HEADER = HARMONIZE_ROOT_DIR+"/cpp/harmonize.h"
 
 

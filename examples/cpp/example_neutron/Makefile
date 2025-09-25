@@ -2,7 +2,7 @@
 # CC_PATH	= /usr/tce/packages/cuda/cuda-11.5.0/bin/nvcc
 
 TARGET          = CUDA
-HARMONIZE_PATH  = ../../../harmonize/cpp/harmonize.h
+HARMONIZE_PATH  = ../../../cpp/harmonize.h
 
 ifeq ($(TARGET), CUDA)
 CC_PATH ?= nvcc
