@@ -336,7 +336,8 @@ def harm_template_func(func,template_name,function_map,type_map,inline,suffix,ba
     if inline:
         code += inlined_device_ir(func,function_map,type_map)
     else:
-        code += f"\t\t_{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
+        code += f"\t\tint return_status = _{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
+        code += f"\t\tif (return_status!=0) printf(\"Warning: Async function returned a non-zero exit code: %d\\n\",return_status);"
         pass
 
     if return_type != "void":

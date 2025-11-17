@@ -281,7 +281,6 @@ def type_array_from_ptr(context):
 @nb.extending.lower_builtin(array_from_ptr, numba_dev_ptr, nb.types.IntegerLiteral, nb.types.Any)
 def def_array_from_ptr(context, builder, sig, args):
 
-    print("\n\n\nBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n\n\n")
     if isinstance(context,nb.core.cpu.CPUContext):
         raw_ptr_type = sig.args[0]
         raw_ptr      = args[0]
@@ -314,7 +313,6 @@ def def_array_from_ptr(context, builder, sig, args):
         )
 
         kshape = [context.get_constant(types.intp, s) for s in shape]
-        print(kshape)
         context.populate_array(
             ary,
             data=builder.bitcast(dataptr, ary.data.type),
@@ -357,7 +355,6 @@ def def_array_from_ptr(context, builder, sig, args):
         )
 
         kshape = [context.get_constant(types.intp, s) for s in shape]
-        print(kshape)
         context.populate_array(
             ary,
             data=builder.bitcast(dataptr, ary.data.type),
@@ -370,8 +367,7 @@ def def_array_from_ptr(context, builder, sig, args):
     elif isinstance(context, nb.hip.target.HIPTargetContext):
         raw_ptr_type = sig.args[0]
         raw_ptr      = args[0]
-        for arg in args:
-            print(arg)
+
 
         if isinstance(sig.args[1],nb.types.IntegerLiteral):
             shape = [sig.args[1].literal_value]
@@ -379,16 +375,13 @@ def def_array_from_ptr(context, builder, sig, args):
             shape = [s.literal_value for s in sig.args[1]]
 
         dtype = parse_dtype(sig.args[2])
-        print(dtype)
 
         elemcount = reduce(operator.mul, shape, 1)
-        print(elemcount)
         lmod = builder.module
 
         targetdata = ll.create_target_data(
             nb.hip.amdgcn.DATA_LAYOUT
         )
-        print(targetdata)
         lldtype = context.get_data_type(dtype)
         itemsize = lldtype.get_abi_size(targetdata)
 
@@ -403,12 +396,15 @@ def def_array_from_ptr(context, builder, sig, args):
         ndim = len(shape)
         aryty = types.Array(dtype=dtype, ndim=ndim, layout="C")
         ary = context.make_array(aryty)(context, builder)
+        
 
         dataptr = builder.addrspacecast(
             raw_ptr, ir.PointerType(ir.IntType(8)), "generic"
         )
 
         kshape = [context.get_constant(types.intp, s) for s in shape]
+
+
         context.populate_array(
             ary,
             data=builder.bitcast(dataptr, ary.data.type),

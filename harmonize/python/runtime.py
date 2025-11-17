@@ -177,7 +177,7 @@ class ProgramField:
             self.ext_kind = numba.types.voidptr
             self.kind     = numba.types.voidptr
             self.is_array = True
-            print(f"FOUND ARRAY: {self.label} = {self.kind}")
+            #print(f"FOUND ARRAY: {self.label} = {self.kind}")
 
 
     def prefix(self):
@@ -558,7 +558,7 @@ class RuntimeSpec():
     def enumerate_program_fields(self,base_label,path,kind,offset=0,is_pointer=True):
 
         if isinstance(kind,numba.types.Record):
-            print("\n\n\n\nRECORD", path)
+            #print("\n\n\n\nRECORD", path)
             self.program_fields[base_label] = ProgramField(
                 base_label,
                 path,
@@ -567,7 +567,7 @@ class RuntimeSpec():
                 is_pointer
             )
         elif isinstance(kind,numba.types.Array):
-            print("\n\n\n\nARRAY", path)
+            #print("\n\n\n\nARRAY", path)
             self.program_fields[base_label] = ProgramField(
                 base_label,
                 path,
@@ -625,7 +625,7 @@ class RuntimeSpec():
 
         dispatch_defs += free_prog_template  .format(short_name=short_name,suffix=suffix)
         dispatch_defs += alloc_state_template.format(state_struct=state_struct,suffix=suffix)
-        dispatch_defs += free_state_template .format(suffix=suffix)
+        dispatch_defs += free_state_template .format(suffix=suffix,state_struct=state_struct)
         dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
         dispatch_defs += clear_flags_template.format(short_name=short_name,suffix=suffix)
         dispatch_defs += set_device_template.format(suffix=suffix)
@@ -644,6 +644,16 @@ class RuntimeSpec():
                 size=field.size,
                 offset=field.offset,
                 suffix=suffix
+            )
+            is_array_str = "false"
+            if field.is_array:
+                is_array_str = "true"
+            dispatch_defs += store_state_indirect_template.format(
+                label=label,
+                size=field.size,
+                offset=field.offset,
+                suffix=suffix,
+                is_array=is_array_str
             )
 
 
@@ -668,13 +678,18 @@ class RuntimeSpec():
 
         # Creates a field accessing function for each field
         for label, field in self.program_fields.items():
+            if field.is_array:
+                deref = "*(void**)"
+            else:
+                deref = ""
             accessor_defs += accessor_template.format(
                 short_name=short_name,
                 label=field.label,
                 field=field.path,
                 prefix=field.prefix(),
                 suffix=suffix,
-                offset=field.offset
+                offset=field.offset,
+                deref=deref
             )
 
         # Query definitions currently disabled
@@ -1271,6 +1286,7 @@ class RuntimeSpec():
                     verbose_print(cmd)
                     progress_print(comp_desc[idx])
                     subprocess.run(cmd.split(),shell=False,check=True)
+                    print("done")
 
 
 
@@ -1303,24 +1319,23 @@ class RuntimeSpec():
                 exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
 
                 for label, field in spec.program_fields.items():
-                    store_name = f"store_state_{label}"
-                    load_name  = f"load_state_{label}"
-                    print(f"STORE NAME: {store_name}")
-                    print(f"\n\n\n\n\n{field.kind}")
-                    print(f"{field.ext_kind}")
-                    print(f"{type(field.ext_kind)}\n\n\n\n\n")
-                    store_state   = ext_fn(f"{store_name}_{suffix}", sig(void, vp, field.ext_kind))
-                    load_state    = ext_fn(f"{load_name}_{suffix}",  sig(void, field.ext_kind, vp))
+                    store_name   = f"store_state_{label}"
+                    store_name_i = f"store_state_indirect_{label}"
+                    load_name    = f"load_state_{label}"
+                    store_state   = ext_fn(f"{store_name}_{suffix}",   sig(void, vp, field.ext_kind))
+                    store_state_i = ext_fn(f"{store_name_i}_{suffix}", sig(void, vp, field.ext_kind))
+                    load_state    = ext_fn(f"{load_name}_{suffix}",    sig(void, field.ext_kind, vp))
                     if field.is_array :
-                        print(locals())
                         id = generate_uuid()
-                        print(f"ADAPTING ACCESSOR {store_name} with id {id}")
-                        exec(f"def store_wrapper_{id}(vp,field):\n    print(\"First is\")\n    print(vp)\n    print(\"Field is\")\n    print(field)\n    ptr = (ffi.from_buffer(field))\n    vptr = any_to_voidptr(ptr)\n    print(\"Pointer was\")\n    print(ptr)\n    print(\"Void pointer was\")\n    print(vptr)\n    print(\"Uint was\")\n    print(voidptr_to_uintp(vptr))\n    store_state(vp,vptr)",globals()|locals(),locals())
+                        exec(f"def store_wrapper_{id}(vp,field):\n    ptr = (ffi.from_buffer(field))\n    vptr = any_to_voidptr(ptr)\n    store_state(vp,vptr)",globals()|locals(),locals())
+                        exec(f"def store_wrapper_indirect_{id}(vp,field):\n    ptr = (ffi.from_buffer(field))\n    vptr = any_to_voidptr(ptr)\n    store_state_i(vp,vptr)",globals()|locals(),locals())
                         exec(f"def load_wrapper_{id} (field,vp):\n    load_state(field.ctypes.data,vp)",globals()|locals(),locals())
                         store_state = eval(f"numba.njit()(store_wrapper_{id})")
+                        store_state_i = eval(f"numba.njit()(store_wrapper_indirect_{id})")
                         load_state  = eval(f"numba.njit()(load_wrapper_{id})")
 
                     spec.fn[kind][store_name]   = store_state
+                    spec.fn[kind][store_name_i] = store_state_i
                     spec.fn[kind][load_name]    = load_state
                 #exit()
 

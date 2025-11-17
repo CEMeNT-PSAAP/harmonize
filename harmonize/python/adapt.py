@@ -27,7 +27,6 @@ def build_rmw_atomic_intrinsic(operation):
 
         # Atomic operations must be performed upon something in
         # memory (pointed by the first argument)
-        print("\n\n\n",type(target),"\n\n\n")
 
         if not isinstance(target, numba.types.Array):
             raise Exception("First argument is not an array type.")
@@ -57,7 +56,6 @@ def build_rmw_atomic_intrinsic(operation):
             [target,index,value] = args
             zero = llvmlite.ir.Constant(llvmlite.ir.IntType(usize.bitwidth),0)
             four = llvmlite.ir.Constant(llvmlite.ir.IntType(usize.bitwidth),5)
-            print("\n\n\n",target,"\n\n\n")
             ptr = builder.gep(target, [four,four,zero], inbounds=False)
             return  builder.atomic_rmw(operation, ptr, value, 'seq_cst')
 

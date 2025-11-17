@@ -165,16 +165,16 @@ struct AtomicIter
 	}
 
 	__device__ void reset(IndexType start_val, IndexType limit_val) {
-		__threadfence();
+		__threadfence_system();
 		IndexType old_limit = atomicAdd(&limit,0);
 		if( old_limit > limit_val ){
-			atomicExch(&limit,limit_val);
+			IndexType old_old_limit = atomicExch(&limit,limit_val);
 		} else if ( old_limit < limit_val ) {
-			atomicExch(&value,limit_val);
-			atomicExch(&limit,limit_val);
+			IndexType old_old_value = atomicExch(&value,limit_val);
+			IndexType old_old_limit = atomicExch(&limit,limit_val);
 		}
-		atomicExch(&value,start_val);
-		__threadfence();
+		IndexType old_old_start = atomicExch(&value,start_val);
+		__threadfence_system();
 	}
 
 
@@ -184,9 +184,7 @@ struct AtomicIter
 		IndexType limit_val = 0;
 
 		if( value < limit ){
-			__threadfence();
 			start_val = atomicAdd(&value,leap_size);
-			__threadfence();
 			limit_val = start_val + leap_size;
 			start_val = (start_val < limit) ? start_val : limit;
 			limit_val = (limit_val < limit) ? limit_val : limit;
@@ -202,9 +200,9 @@ struct AtomicIter
 			return false;
 		}
 
-		__threadfence();
+		__threadfence_system();
 		IndexType try_val = atomicAdd(&value,1);
-		__threadfence();
+		__threadfence_system();
 
 		if( try_val >= limit ){
 			return false;
@@ -364,10 +362,16 @@ struct IOBuffer
 	{
 		data_a = host::hardMalloc<T>( capacity );
 		data_b = host::hardMalloc<T>( capacity );
+		#ifdef HARMONIZE_ALLOC_DEBUG
+		printf("{{Allocated IO buffers at %p and %p, both with size %zu}}\n",data_a,data_b,capacity*sizeof(T));
+		#endif
 	}
 
 	__host__ void host_free()
 	{
+		#ifndef HARMONIZE_ALLOC_DEBUG
+		printf("{{Freeing IO buffers at %p and %p, both with size %zu}}\n",data_a,data_b,capacity*sizeof(T));
+		#endif
 		if ( data_a != NULL ) {
 			host::auto_throw( adapt::GPUrtFree( data_a ) );
 		}
@@ -399,6 +403,7 @@ struct IOBuffer
 	}
 
 	__device__ bool pull(T& value){
+		__threadfence_system();
 		IndexType index;
 		if( ! input_iter.step(index) ){
 			return false;
@@ -408,10 +413,12 @@ struct IOBuffer
 	}
 
 	__device__ bool pull_index(IndexType& index){
+		__threadfence_system();
 		return input_iter.step(index);
 	}
 
 	__device__ bool push(T value){
+		__threadfence_system();
 		IndexType index;
 		if( ! input_iter.step(index) ){
 			return false;
@@ -423,16 +430,18 @@ struct IOBuffer
 
 
 	__device__ bool push_index(IndexType& index){
+		__threadfence_system();
 		return output_iter.step(index);
 	}
 
 	__device__ void flip()
 	{
-		toggle = !toggle;
 		IndexType in_count = output_iter.value >= capacity ? capacity : output_iter.value;
-		//printf("{Flipped with output at %d.}",in_count);
-		input_iter  = AtomicIter<IndexType>(0,in_count);
-		output_iter = AtomicIter<IndexType>(0,capacity);
+		input_iter.reset(0,0);
+		toggle = !toggle;
+		__threadfence_system();
+		input_iter.reset(0,in_count);
+		output_iter.reset(0,capacity);
 	}
 
 	__device__ bool input_empty()
