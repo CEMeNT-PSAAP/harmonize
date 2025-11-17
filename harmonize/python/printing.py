@@ -65,7 +65,7 @@ def gpu_print_formatted_overload(value):
         ext_fn  = numba.types.ExternalFunction
 
         signature = sig(void,kind)
-        print(signature)
+        #print(signature)
         py_name   = prim_info[kind]["py_name"]
         if config.CUDA_AVAILABLE:
             implementation = numba.cuda.declare_device(f"harmonize_print_{py_name}",  signature)
