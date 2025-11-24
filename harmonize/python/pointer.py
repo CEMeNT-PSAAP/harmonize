@@ -1,7 +1,11 @@
 from numba import njit, jit, objmode, literal_unroll, types
 from numba.extending import intrinsic
-import numba
+import numba as nb
 
+import cffi
+ffi = cffi.FFI()
+
+from .codegen import generate_uuid
 
 # =============================================================================
 # uintp/voidptr casters
@@ -64,14 +68,41 @@ def cast_voidptr_to_uintp(typingctx, src):
 
 @njit()
 def uintp_to_voidptr(value):
-    val = numba.uintp(value)
+    val = nb.uintp(value)
     return cast_uintp_to_voidptr(val)
 
 @njit()
 def voidptr_to_uintp(value):
     return cast_voidptr_to_uintp(value)
 
+
 @njit()
-def any_to_voidptr(value):
-    return cast_any_to_voidptr(value)
+def into_voidptr(value):
+    return into_voidptr_python(value)
+
+def into_voidptr_python(value):
+    raise RuntimeError("`into_voidptr` is only supported in nopython mode.")
+
+@nb.extending.overload(into_voidptr_python)
+def into_voidptr_overload(value):
+
+    if isinstance(value,nb.types.Array) :
+        def impl(value):
+            ptr = (ffi.from_buffer(value))
+            vptr = cast_any_to_voidptr(ptr)
+            return vptr
+        return impl
+    elif isinstance(value,nb.types.CPointer) :
+        def impl(value):
+            return cast_any_to_voidptr(value)
+        return impl
+    elif isinstance(value,nb.types.Integer) :
+        def impl(value):
+            return cast_uintp_to_voidptr(value)
+        return impl
+    else :
+        raise RuntimeError(f"`into_voidptr` is not supported for type '{value}'")
+
+
+
 

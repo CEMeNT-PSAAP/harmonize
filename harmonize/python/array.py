@@ -1,14 +1,19 @@
 import numba as nb
 import numpy as np
 
-
 from numba import types
 
 from harmonize.python import config
 from functools import reduce
 import operator
 
+import cffi
+ffi = cffi.FFI()
+
+from .pointer import *
 from .templates import *
+from .codegen import generate_uuid
+
 
 def local_array(shape,dtype):
     return np.empty(shape,dtype=dtype)
@@ -427,21 +432,17 @@ def python_array_from_ptr(ptr):
     return array_from_ptr(ptr)
 
 
-def generate_alloc_code():
-    text = ""
-    text += alloc_device_bytes_template
-    text += alloc_managed_bytes_template
-    text += free_device_bytes_template
-    return text
 
 
 sig     = nb.core.typing.signature
 ext_fn  = nb.types.ExternalFunction
 
 
-ext_alloc_device_bytes  = ext_fn("harmonize_alloc_device_bytes",  sig(nb.types.voidptr,nb.types.intp))
-ext_alloc_managed_bytes = ext_fn("harmonize_alloc_managed_bytes", sig(nb.types.voidptr,nb.types.intp))
-ext_free_device_bytes   = ext_fn("harmonize_free_device_bytes",   sig(nb.types.void,nb.types.voidptr))
+ext_alloc_device_bytes    = ext_fn("harmonize_alloc_device_bytes",    sig(nb.types.voidptr,nb.types.intp))
+ext_alloc_managed_bytes   = ext_fn("harmonize_alloc_managed_bytes",   sig(nb.types.voidptr,nb.types.intp))
+ext_free_device_bytes     = ext_fn("harmonize_free_device_bytes",     sig(nb.types.void,nb.types.voidptr))
+ext_memcpy_host_to_device = ext_fn("harmonize_memcpy_host_to_device", sig(nb.types.void,nb.types.voidptr))
+ext_memcpy_device_to_host = ext_fn("harmonize_memcpy_device_to_host", sig(nb.types.void,nb.types.voidptr))
 
 @nb.jit()
 def alloc_device_bytes(size):
@@ -458,4 +459,127 @@ def free_device_bytes(size):
 @nb.jit()
 def ptr_from_array(array):
     return nb.carray(array)
+
+
+
+
+
+host_to_device_array_template = """
+def {name}(dev_ptr,host_obj):
+    ptr = (ffi.from_buffer(host_obj))
+    vptr = into_voidptr(ptr)
+    host_to_device(dev_ptr,vptr,size*len(host_obj))
+"""
+
+host_to_device_object_template = """
+def {name}(dev_ptr,host_obj):
+    host_to_device(dev_ptr,host_obj,size)
+"""
+
+@nb.njit()
+def memcpy_host_to_device(dev_ptr,host_obj):
+    memcpy_host_to_device_python(dev_ptr,host_obj)
+
+def memcpy_host_to_device_python(dev_ptr,host_obj):
+    raise RuntimeError("Host/device memory copies are only supported in nopython mode, and only on CPU.")
+
+@nb.extending.overload(memcpy_host_to_device_python,target='cpu')
+def cpu_memcpy_host_to_device_overload(dev_ptr,host_obj):
+
+    void    = nb.types.void
+    vp      = nb.types.voidptr
+    uintp   = nb.types.uintp
+    sig     = nb.core.typing.signature
+
+    if isinstance(host_obj,nb.types.Array) :
+        id = generate_uuid()
+        name = f"memcpy_host_to_device_{id}"
+        if isinstance(host_obj.dtype,nb.types.Record):
+            size = host_obj.dtype.size
+        else :
+            size = host_obj.dtype.bitwidth / 8
+        host_to_device   = ext_fn(f"harmonize_memcpy_host_to_device",   sig(void, vp, vp, uintp))
+        exec(host_to_device_array_template.format(name=name),globals()|locals(),locals())
+        impl = eval(name)
+    else :
+        id = generate_uuid()
+        name = f"memcpy_host_to_device_{id}"
+        size = host_obj.size
+        host_to_device   = ext_fn(f"harmonize_memcpy_host_to_device",   sig(void, vp, host_obj, uintp))
+        exec(host_to_device_object_template.format(name=name),globals()|locals(),locals())
+        impl = eval(name)
+    return impl
+
+@nb.extending.overload(memcpy_host_to_device_python,target='gpu')
+def gpu_memcpy_host_to_device_overload(dev_ptr,host_obj):
+    raise RuntimeError("Host/device memory copies are only supported in nopython mode, and only on CPU.")
+
+
+
+
+
+
+
+device_to_host_array_template = """
+def {name}(host_obj,dev_ptr):
+    ptr = (ffi.from_buffer(host_obj))
+    vptr = into_voidptr(ptr)
+    device_to_host(vptr,dev_ptr,size*len(host_obj))
+"""
+
+device_to_host_object_template = """
+def {name}(host_obj,dev_ptr):
+    device_to_host(host_obj,dev_ptr,size)
+"""
+
+
+
+@nb.njit()
+def memcpy_device_to_host(host_obj,dev_ptr):
+    memcpy_device_to_host_python(host_obj,dev_ptr)
+
+def memcpy_device_to_host_python(host_obj,dev_ptr):
+    raise RuntimeError("Host/device memory copies are only supported in nopython mode, and only on CPU.")
+
+@nb.extending.overload(memcpy_device_to_host_python,target='cpu')
+def cpu_memcpy_device_to_host_overload(host_obj,dev_ptr):
+
+    void    = nb.types.void
+    vp      = nb.types.voidptr
+    uintp   = nb.types.uintp
+    sig     = nb.core.typing.signature
+
+    if isinstance(host_obj,nb.types.Array) :
+        id = generate_uuid()
+        name = f"memcpy_device_to_host_{id}"
+        if isinstance(host_obj.dtype,nb.types.Record):
+            size = host_obj.dtype.size
+        else :
+            size = host_obj.dtype.bitwidth / 8
+        device_to_host   = ext_fn(f"harmonize_memcpy_device_to_host",   sig(void, vp, vp, uintp))
+        exec(device_to_host_array_template.format(name=name),globals()|locals(),locals())
+        impl = eval(name)
+    else :
+        id = generate_uuid()
+        name = f"memcpy_device_to_host_{id}"
+        device_to_host   = ext_fn(f"harmonize_memcpy_device_to_host",   sig(void, host_obj, vp, uintp))
+        size = host_obj.size
+        exec(device_to_host_object_template.format(name=name),globals()|locals(),locals())
+        impl = eval(name)
+    return impl
+
+@nb.extending.overload(memcpy_device_to_host_python,target='gpu')
+def gpu_memcpy_device_to_host_overload(host_obj,dev_ptr):
+    raise RuntimeError("Host/device memory copies are only supported in nopython mode, and only on CPU.")
+
+
+
+def generate_array_code():
+    text = ""
+    text += alloc_device_bytes_template
+    text += alloc_managed_bytes_template
+    text += free_device_bytes_template
+    text += memcpy_host_to_device_template
+    text += memcpy_device_to_host_template
+    return text
 

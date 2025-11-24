@@ -369,7 +369,7 @@ struct IOBuffer
 
 	__host__ void host_free()
 	{
-		#ifndef HARMONIZE_ALLOC_DEBUG
+		#ifdef HARMONIZE_ALLOC_DEBUG
 		printf("{{Freeing IO buffers at %p and %p, both with size %zu}}\n",data_a,data_b,capacity*sizeof(T));
 		#endif
 		if ( data_a != NULL ) {
