@@ -7,7 +7,7 @@ void init_program_{suffix}(
     size_t  grid_size
 ) {{
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
+    //printf("\\n\\nINIT (instance: %p)\\n\\n",instance_ptr);
     init<{short_name}>(*instance,grid_size);
     util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
 }}
@@ -29,13 +29,13 @@ void exec_program_{suffix}(
     static int total;
     auto before = std::chrono::steady_clock::now();
     auto instance = (typename {short_name}::Instance*) instance_ptr;
-    printf("\\n\\nEXEC (instance: %p)\\n\\n",instance_ptr);
+    //printf("\\n\\nEXEC (instance: %p)\\n\\n",instance_ptr);
     exec<{short_name}>(*instance,grid_size,cycle_count);
     util::host::auto_throw(adapt::GPUrtDeviceSynchronize());
     auto after = std::chrono::steady_clock::now();
     int delta = std::chrono::duration_cast<std::chrono::milliseconds>(after-before).count();
     total += delta;
-    printf("Run was %d ms. Total time is %d ms",delta, total);
+    //printf("Run was %d ms. Total time is %d ms",delta, total);
 }}
 """
 
@@ -43,10 +43,10 @@ void exec_program_{suffix}(
 alloc_event_prog_template = """
 extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
-    printf("allocating event program instance\\n");
+    //printf("allocating event program instance\\n");
     auto  state  = (typename {short_name}::DeviceState) device_arg;
     void *result = new {short_name}::Instance(io_size,state);
-    printf("allocated event program instance:%p\\n",result);
+    //printf("allocated event program instance:%p\\n",result);
     return result;
 }}
 """
@@ -75,9 +75,9 @@ extern "C"
 void *alloc_state_{suffix}() {{
 	void *result = nullptr;
     size_t size= sizeof({state_struct});
-	printf("\\n\\n[[allocting async program instance with size:%ld]]\\n",size);
+	//printf("\\n\\n[[allocting async program instance with size:%ld]]\\n",size);
 	util::host::auto_throw(adapt::GPUrtMalloc(&result,size));
-	printf("allocated gpu_state:%p\\n",result);
+	//printf("allocated gpu_state:%p\\n",result);
 	return result;
 }}
 """
@@ -125,9 +125,9 @@ void store_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
 """
 
 
-store_state_indirect_template = """
+store_pointer_state_template = """
 extern "C"
-void store_state_indirect_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
+void store_pointer_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
     //printf("STORE {label} {suffix}\\n");
     //printf("cpu_state:%p\\n",host_ptr);
     //printf("gpu_state:%p\\n", dev_ptr);
@@ -138,7 +138,7 @@ void store_state_indirect_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
     //}}
     //printf("\\n");
     if ({is_array}) {{
-        printf("Would store %zu bytes from %p to %p\\n",sizeof(host_ptr),&host_ptr,offset_dev_ptr);
+        //printf("Would store %zu bytes from %p to %p\\n",sizeof(host_ptr),&host_ptr,offset_dev_ptr);
         util::host::auto_throw(adapt::GPUrtMemcpy(
             offset_dev_ptr,
             &host_ptr,
@@ -171,7 +171,7 @@ clear_flags_template = """
 extern "C"
 void clear_flags_{suffix}(void *instance_ptr) {{
 	auto instance  = (typename {short_name}::Instance*) instance_ptr;
-    printf("instance is:%p\\n",instance_ptr);
+    //printf("instance is:%p\\n",instance_ptr);
 	instance->clear_flags();
 }}
 """
@@ -215,6 +215,21 @@ int query_{field}_{suffix}(void *result, void *prog){{
 accessor_template = """
 extern "C" __device__
 int access_{label}_{suffix}(void* result, void* prog){{
+    void*& adr = *(void**)result;
+	adr = {prefix}(({short_name}*)prog)->{field};
+    adr = {deref}(void*)(((char*)adr)+{offset});
+    if(threadIdx.x == 0) {{
+        //printf("{{ {label} accessor - offset %d - address %p - would be %p}}",{offset},adr,*(void**)adr);
+        //printf("{{prog %p}}",prog);
+        //printf("{{field%p}}",adr);
+    }}
+	return 0;
+}}
+"""
+
+indirect_accessor_template = """
+extern "C" __device__
+int access_indirect_{label}_{suffix}(void* result, void* prog){{
     void*& adr = *(void**)result;
 	adr = {prefix}(({short_name}*)prog)->{field};
     adr = {deref}(void*)(((char*)adr)+{offset});
@@ -320,6 +335,31 @@ extern "C"
 void harmonize_free_device_bytes(void* ptr) {{
     //printf("Freeing bytes\\n");
     util::host::auto_throw(adapt::GPUrtFree(ptr));
+}}
+"""
+
+memcpy_host_to_device_template="""
+extern "C"
+void harmonize_memcpy_host_to_device(void *dev_ptr, void *host_ptr, size_t byte_count) {{
+util::host::auto_throw(adapt::GPUrtMemcpy(
+    dev_ptr,
+    host_ptr,
+    byte_count,
+    adapt::GPUrtMemcpyHostToDevice
+));
+}}
+"""
+
+
+memcpy_device_to_host_template="""
+extern "C"
+void harmonize_memcpy_device_to_host(void *dev_ptr, void *host_ptr, size_t byte_count) {{
+util::host::auto_throw(adapt::GPUrtMemcpy(
+    host_ptr,
+    dev_ptr,
+    byte_count,
+    adapt::GPUrtMemcpyHostToDevice
+));
 }}
 """
 

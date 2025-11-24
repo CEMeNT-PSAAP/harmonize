@@ -62,7 +62,7 @@ class DevBuf {
 
 		~Inner() {
 			if ( adr != NULL) {
-				#ifndef HARMONIZE_ALLOC_DEBUG
+				#ifdef HARMONIZE_ALLOC_DEBUG
 				printf("Freed array of type '%s' at %p, with size %zu\n",typeid(*adr).name(),adr,size);
 				#endif
 				auto _ = adapt::GPUrtFree(adr);
@@ -89,13 +89,13 @@ class DevBuf {
 		) );
 		if( inner->adr != NULL ) {
 			auto_throw( adapt::GPUrtFree(inner->adr) );
-			#ifndef HARMONIZE_ALLOC_DEBUG
+			#ifdef HARMONIZE_ALLOC_DEBUG
 			printf("Freed (for resize) array of type '%s' at %p, with size %zu\n",typeid(*(inner->adr)).name(),inner->adr,inner->size);
 			#endif
 		}
 		inner->size = s;
 		inner->adr = new_adr;
-		#ifndef HARMONIZE_ALLOC_DEBUG
+		#ifdef HARMONIZE_ALLOC_DEBUG
 		printf("Allocated (for resize) array of type '%s' at %p, with size %zu\n",typeid(*(inner->adr)).name(),inner->adr,inner->size);
 		#endif
 	}
@@ -234,14 +234,14 @@ class DevObj {
 		{
 			host_copy.host_init();
 			push_data();
-			#ifndef HARMONIZE_ALLOC_DEBUG
+			#ifdef HARMONIZE_ALLOC_DEBUG
 			printf("Allocated object of type '%s' at %p\n",typeid(*adr).name(),adr);
 			#endif
 		}
 
 		~Inner() {
 			if ( adr != NULL) {
-				#ifndef HARMONIZE_ALLOC_DEBUG
+				#ifdef HARMONIZE_ALLOC_DEBUG
 				printf("Freed object of type '%s' at %p\n",typeid(*adr).name(),adr);
 				#endif
 				pull_data();

@@ -76,7 +76,7 @@ def assert_fn_res_ano( func, res_type ):
             + cmp_str + "'\nMake sure the definition of the function '"    \
             + func.__name__ + "' results in a return type  matching its "  \
             + "annotation when supplied arguments matching its annotation."
-            raise(TypingError(err_str))
+            raise(TypeError(err_str))
 
 
 # Returns the ptx of the input function, as a global CUDA function. If the return type deduced
