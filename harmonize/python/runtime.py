@@ -1231,8 +1231,15 @@ class RuntimeSpec():
                 device_bundle_bc = f"{RuntimeSpec.cache_path}device_bundle.bc"
 
                 if RuntimeSpec.gpu_bc_set:
+                    gpu_bc_sorted = sorted(RuntimeSpec.gpu_bc_set)
+                    if len(gpu_bc_sorted) == 1:
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {gpu_bc_sorted[0]} -o {device_linked_bc}"
+                    else:
+                        base = gpu_bc_sorted[0]
+                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {base} {overrides} -o {device_linked_bc}"
                     comp_cmd = [
-                        f"{config.hipcc_llvm_link_path()} {gpu_bc_list} -o {device_linked_bc}",
+                        llvm_link_cmd,
                         f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={device_linked_bc} --output={device_bundle_bc} --targets={RuntimeSpec.gpu_triple}",
                         f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} {device_bundle_bc} -o {so_path} -g"
                     ]
