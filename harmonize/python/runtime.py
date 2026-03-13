@@ -868,6 +868,7 @@ class RuntimeSpec():
 
                     # Compile IR if not exists or stale
                     if not path.isfile(ir) or getmtime(source) > getmtime(ir):
+                        # This compilation is done solely to extract target triples
                         dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
                         verbose_print(dev_comp_cmd)
@@ -1236,7 +1237,7 @@ class RuntimeSpec():
                         llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {gpu_bc_sorted[0]} -o {device_linked_bc}"
                     else:
                         base = gpu_bc_sorted[0]
-                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])
+                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])  # TODO: this is a workaround for multiply-defined symbols during llvm-link
                         llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {base} {overrides} -o {device_linked_bc}"
                     comp_cmd = [
                         llvm_link_cmd,
