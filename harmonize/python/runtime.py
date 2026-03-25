@@ -184,10 +184,8 @@ class RuntimeSpec():
     gpu_platforms  = set()
     obj_set     = set()
     gpu_bc_set  = set()
-    cpu_bc_set  = set()
 
     gpu_triple  = None
-    cpu_triple  = None
 
     registry = {}
 
@@ -856,42 +854,41 @@ class RuntimeSpec():
 
             if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
                 source = f"{spec_filename}.cpp"
-                ir     = f"{spec_filename}.bc"
-                cpu_ir = f"{spec_filename}_cpu.bc"
-                gpu_ir = f"{spec_filename}_gpu.bc"
+                obj = f"{spec_filename}.o"
                 touched = False
-                if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
+                if not path.isfile(obj):
                     touched = True
-                elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
+                elif getmtime(source) > getmtime(obj):
                     touched = True
 
+ 
+                # Get target triples for later
+                if RuntimeSpec.gpu_triple == None:
+                    ir = f"{spec_filename}.bc"
+
+                    # Compile IR if not exists or stale
+                    if not path.isfile(ir) or getmtime(source) > getmtime(ir):
+                        # This compilation is done solely to extract target triples
+                        dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+
+                        verbose_print(dev_comp_cmd)
+                        progress_print(f"Compiling '{ir}' (need target triples)")
+                        subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+
+                    gpu_triple, _ = find_bundle_triples(ir)
+
+                    RuntimeSpec.gpu_triple = gpu_triple
+
+                # Compile object files
                 if compilation_gate(touched):
                     RuntimeSpec.dirty = True
-                    dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+                    comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -o {obj} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
-                    verbose_print(dev_comp_cmd)
-                    progress_print(f"Compiling '{ir}'")
-                    subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                    verbose_print(comp_cmd)
+                    progress_print(f"Compiling '{obj}'")
+                    subprocess.run(comp_cmd.split(),shell=False,check=True)
 
-                gpu_triple, cpu_triple = find_bundle_triples(ir)
-
-                RuntimeSpec.gpu_triple = gpu_triple
-                RuntimeSpec.cpu_triple = cpu_triple
-
-
-                if compilation_gate(touched):
-                    dev_comp_cmd = [
-                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={cpu_triple}",
-                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={gpu_triple}"
-                    ]
-                    progress_print(f"Unbundling '{ir}'")
-
-                    for cmd in dev_comp_cmd:
-                        verbose_print(cmd)
-                        subprocess.run(cmd.split(),shell=False,check=True)
-
-                RuntimeSpec.gpu_bc_set.add(gpu_ir)
-                RuntimeSpec.cpu_bc_set.add(cpu_ir)
+                RuntimeSpec.obj_set.add(obj)
 
 
             if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
@@ -1136,21 +1133,16 @@ class RuntimeSpec():
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
             RuntimeSpec.obj_set.add(obj)
 
-
-
-
-
         if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            if RuntimeSpec.gpu_triple == None:
+                raise RuntimeError("Attempted to build builtin code with no target triples defined.")
 
-            ir     = f"{file_path}.bc"
-            cpu_ir = f"{file_path}_cpu.bc"
-            gpu_ir = f"{file_path}_gpu.bc"
+            obj = f"{file_path}.o"
             touched = False
-            if not (path.isfile(cpu_ir) and path.isfile(gpu_ir)):
+            if not path.isfile(obj):
                 touched = True
-            elif (getmtime(source) > getmtime(cpu_ir)) or (getmtime(source) > getmtime(gpu_ir)):
+            elif getmtime(source) > getmtime(obj):
                 touched = True
-
 
             if compilation_gate(touched):
 
@@ -1170,28 +1162,13 @@ class RuntimeSpec():
                 source_file.close()
 
                 RuntimeSpec.dirty = True
-                dev_comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -emit-llvm -o {ir} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
+                comp_cmd = f"{config.hipcc_path()} -fPIC -c -fgpu-rdc -o {obj} -x hip {source} -include {config.HARMONIZE_ROOT_HEADER} {RuntimeSpec.debug_flag}"
 
-                verbose_print(dev_comp_cmd)
-                progress_print(f"Compiling '{ir}'")
-                subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
+                verbose_print(comp_cmd)
+                progress_print(f"Compiling '{obj}'")
+                subprocess.run(comp_cmd.split(),shell=False,check=True)
 
-            if (RuntimeSpec.gpu_triple == None) or (RuntimeSpec.cpu_triple == None):
-                raise RuntimeError("Attempted to build builtin code with no target triples defined.")
-
-            if compilation_gate(touched):
-                dev_comp_cmd = [
-                    f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={cpu_ir} --targets={RuntimeSpec.cpu_triple}",
-                    f"{config.hipcc_clang_offload_bundler_path()} --type=bc --unbundle --input={ir} --output={gpu_ir} --targets={RuntimeSpec.gpu_triple}"
-                ]
-
-                progress_print(f"Unbundling '{ir}'")
-                for cmd in dev_comp_cmd:
-                    verbose_print(cmd)
-                    subprocess.run(cmd.split(),shell=False,check=True)
-
-            RuntimeSpec.gpu_bc_set.add(gpu_ir)
-            RuntimeSpec.cpu_bc_set.add(cpu_ir)
+            RuntimeSpec.obj_set.add(obj)
 
 
 
@@ -1248,27 +1225,34 @@ class RuntimeSpec():
 
                 RuntimeSpec.generate_hipdevicelib()
 
-                gpu_bc_list = " ".join([ bc for bc in RuntimeSpec.gpu_bc_set ])
-                cpu_bc_list = " ".join([ bc for bc in RuntimeSpec.cpu_bc_set ])
-
-                gpu_linked = f"{RuntimeSpec.cache_path}gpu_linked.bc"
-                cpu_linked = f"{RuntimeSpec.cache_path}cpu_linked.bc"
-                final_bc   = f"{RuntimeSpec.cache_path}harmonize.bc"
                 so_path    = f"{RuntimeSpec.cache_path}harmonize.so"
+                link_list = " ".join([ obj for obj in RuntimeSpec.obj_set ])
+                gpu_bc_list = " ".join( [bc for bc in RuntimeSpec.gpu_bc_set] )
+                device_linked_bc = f"{RuntimeSpec.cache_path}device_linked.bc"
+                device_bundle_bc = f"{RuntimeSpec.cache_path}device_bundle.bc"
 
-                comp_cmd = [
-                    f"{config.hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
-                    f"{config.hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
-	                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
-	                f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} -g"
-                ]
+                if RuntimeSpec.gpu_bc_set:
+                    gpu_bc_sorted = sorted(RuntimeSpec.gpu_bc_set)
+                    if len(gpu_bc_sorted) == 1:
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {gpu_bc_sorted[0]} -o {device_linked_bc}"
+                    else:
+                        base = gpu_bc_sorted[0]
+                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])  # TODO: this is a workaround for multiply-defined symbols during llvm-link
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {base} {overrides} -o {device_linked_bc}"
+                    comp_cmd = [
+                        llvm_link_cmd,
+                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={device_linked_bc} --output={device_bundle_bc} --targets={RuntimeSpec.gpu_triple}",
+                        f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} {device_bundle_bc} -o {so_path} -g"
+                    ]
 
-                comp_desc = [
-                    "Linking device code",
-                    "Linking host code",
-                    "Bundling linked code",
-                    "Creating shared object file",
-                ]
+                    comp_desc = [
+                        "Linking device code",
+                        "Bundling linked code",
+                        "Creating shared object file",
+                    ]
+                else:
+                    comp_cmd = [f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} -o {so_path} -g"]
+                    comp_desc = ["Creating shared object file"]
 
                 for idx, cmd in enumerate(comp_cmd):
                     verbose_print(cmd)
