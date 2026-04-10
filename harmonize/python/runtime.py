@@ -1281,27 +1281,38 @@ class RuntimeSpec():
                 RuntimeSpec.generate_hipdevicelib()
 
                 so_path    = f"{RuntimeSpec.cache_path}harmonize.so"
+                link_list = " ".join([ obj for obj in RuntimeSpec.obj_set ])
+                gpu_bc_list = " ".join( [bc for bc in RuntimeSpec.gpu_bc_set] )
+                device_linked_bc = f"{RuntimeSpec.cache_path}device_linked.bc"
+                device_bundle_bc = f"{RuntimeSpec.cache_path}device_bundle.bc"
 
-                comp_cmd = [
-                    f"{config.hipcc_llvm_link_path()} {gpu_bc_list} -o {gpu_linked}",
-                    f"{config.hipcc_llvm_link_path()} {cpu_bc_list} -o {cpu_linked}",
-	                f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={gpu_linked} --input={cpu_linked} --output={final_bc} --targets={RuntimeSpec.gpu_triple},{RuntimeSpec.cpu_triple}",
-	                f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {final_bc} -o {so_path} {RuntimeSpec.debug_flag}"
-                ]
+                if RuntimeSpec.gpu_bc_set:
+                    gpu_bc_sorted = sorted(RuntimeSpec.gpu_bc_set)
+                    if len(gpu_bc_sorted) == 1:
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {gpu_bc_sorted[0]} -o {device_linked_bc}"
+                    else:
+                        base = gpu_bc_sorted[0]
+                        overrides = " ".join(f"--override={bc}" for bc in gpu_bc_sorted[1:])  # TODO: this is a workaround for multiply-defined symbols during llvm-link
+                        llvm_link_cmd = f"{config.hipcc_llvm_link_path()} {base} {overrides} -o {device_linked_bc}"
+                    comp_cmd = [
+                        llvm_link_cmd,
+                        f"{config.hipcc_clang_offload_bundler_path()} --type=bc --input={device_linked_bc} --output={device_bundle_bc} --targets={RuntimeSpec.gpu_triple}",
+                        f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} {device_bundle_bc} -o {so_path} -g"
+                    ]
 
                     comp_desc = [
                         "Linking device code",
                         "Bundling linked code",
                         "Creating shared object file",
                     ]
-                else:
-                    comp_cmd = [f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} -o {so_path} -g"]
-                    comp_desc = ["Creating shared object file"]
+            else:
+                comp_cmd = [f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} -o {so_path} -g"]
+                comp_desc = ["Creating shared object file"]
 
-                for idx, cmd in enumerate(comp_cmd):
-                    verbose_print(cmd)
-                    progress_print(comp_desc[idx])
-                    subprocess.run(cmd.split(),shell=False,check=True)
+            for idx, cmd in enumerate(comp_cmd):
+                verbose_print(cmd)
+                progress_print(comp_desc[idx])
+                subprocess.run(cmd.split(),shell=False,check=True)
 
 
 
