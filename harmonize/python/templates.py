@@ -54,10 +54,10 @@ void *alloc_program_{suffix}(void* device_arg, size_t io_size) {{
 alloc_harm_prog_template = """
 extern "C"
 void *alloc_program_{suffix}(void* device_arg, size_t arena_size) {{
-	printf("allocting async program instance\\n");
+	//printf("allocting async program instance\\n");
 	auto  state  = (typename {short_name}::DeviceState) device_arg;
 	void *result = new {short_name}::Instance(arena_size,state);
-	printf("allocted async program instance:%p\\n",result);
+	//printf("allocted async program instance:%p\\n",result);
 	return result;
 }}
 """
@@ -128,7 +128,7 @@ void store_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
 store_pointer_state_template = """
 extern "C"
 void store_pointer_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
-    //printf("STORE {label} {suffix}\\n");
+    //printf("STORE POINTER {label} {suffix}\\n");
     //printf("cpu_state:%p\\n",host_ptr);
     //printf("gpu_state:%p\\n", dev_ptr);
     void *offset_dev_ptr = (void*)(((char*)dev_ptr)+{offset});
@@ -138,7 +138,7 @@ void store_pointer_state_{label}_{suffix}(void *dev_ptr, void *host_ptr) {{
     //}}
     //printf("\\n");
     if ({is_array}) {{
-        //printf("Would store %zu bytes from %p to %p\\n",sizeof(host_ptr),&host_ptr,offset_dev_ptr);
+        //printf("Would store %zu bytes (pointer %p) from %p to %p\\n",sizeof(host_ptr),host_ptr,&host_ptr,offset_dev_ptr);
         util::host::auto_throw(adapt::GPUrtMemcpy(
             offset_dev_ptr,
             &host_ptr,
@@ -353,7 +353,7 @@ util::host::auto_throw(adapt::GPUrtMemcpy(
 
 memcpy_device_to_host_template="""
 extern "C"
-void harmonize_memcpy_device_to_host(void *dev_ptr, void *host_ptr, size_t byte_count) {{
+void harmonize_memcpy_device_to_host(void *host_ptr, void *dev_ptr, size_t byte_count) {{
 util::host::auto_throw(adapt::GPUrtMemcpy(
     host_ptr,
     dev_ptr,

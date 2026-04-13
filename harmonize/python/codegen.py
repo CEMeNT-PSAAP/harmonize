@@ -325,6 +325,7 @@ def harm_template_func(func,template_name,function_map,type_map,inline,suffix,ba
     code = "\ttemplate<typename PROGRAM>\n"   \
 	     + "\t__device__ static "  \
          + return_type+" "+template_name+"(PROGRAM prog" + param_text + ") {\n"
+    #     + "printf(\""+template_name+"\");\n"
 
     if return_type != "void":
         code += "\t\t"+return_type+"  result;\n"

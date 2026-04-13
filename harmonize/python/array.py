@@ -441,8 +441,8 @@ ext_fn  = nb.types.ExternalFunction
 ext_alloc_device_bytes    = ext_fn("harmonize_alloc_device_bytes",    sig(nb.types.voidptr,nb.types.intp))
 ext_alloc_managed_bytes   = ext_fn("harmonize_alloc_managed_bytes",   sig(nb.types.voidptr,nb.types.intp))
 ext_free_device_bytes     = ext_fn("harmonize_free_device_bytes",     sig(nb.types.void,nb.types.voidptr))
-ext_memcpy_host_to_device = ext_fn("harmonize_memcpy_host_to_device", sig(nb.types.void,nb.types.voidptr))
-ext_memcpy_device_to_host = ext_fn("harmonize_memcpy_device_to_host", sig(nb.types.void,nb.types.voidptr))
+#ext_memcpy_host_to_device = ext_fn("harmonize_memcpy_host_to_device", sig(nb.types.void,nb.types.voidptr,nb.types.void_ptr))
+#ext_memcpy_device_to_host = ext_fn("harmonize_memcpy_device_to_host", sig(nb.types.void,nb.types.voidptr,nb.types.void_ptr))
 
 @nb.jit()
 def alloc_device_bytes(size):

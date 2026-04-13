@@ -965,7 +965,7 @@ struct MemChunk {
 };
 
 
-
+/*
 template<typename T, typename INDEX, typename MASK, INDEX SIZE_VAL>
 struct MemPoolBank {
 
@@ -1038,7 +1038,7 @@ struct MemPoolBank {
 	}
 
 };
-
+*/
 
 }
 

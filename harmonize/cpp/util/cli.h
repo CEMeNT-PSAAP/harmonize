@@ -2,7 +2,7 @@
 #ifndef HARMONIZE_UTIL_CLI
 #define HARMONIZE_UTIL_CLI
 
-
+#include <cstring>
 
 namespace util {
 
@@ -159,7 +159,7 @@ static void cli_graph(float* data, int size, GraphShape shape, GraphStyle style)
 
 	int   rule_size = 8*shape.width/2;
 	char* rule_vals = new char[rule_size];
-	memset(rule_vals,'\0',rule_size);
+	std::memset(rule_vals,'\0',rule_size);
 
 	printf("        ");
 	for(int j=1; j<lead_span; j++){
