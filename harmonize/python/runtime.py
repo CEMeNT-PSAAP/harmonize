@@ -5,7 +5,8 @@ import inspect
 import subprocess
 
 import numpy as np
-
+import cffi
+ffi = cffi.FFI()
 
 import harmonize.python.config as config
 
@@ -15,7 +16,9 @@ from numba      import njit
 from os.path    import getmtime, exists, dirname, abspath
 from llvmlite   import binding
 
+from .pointer   import *
 from .templates import *
+from .array     import generate_array_code
 from .config    import compilation_gate
 from .atomics   import atomic_op_info
 from .prim      import prim_info
@@ -37,10 +40,8 @@ from .codegen   import (
     find_bundle_triples,
     extern_device_ir,
     declare_device,
+    generate_uuid,
 )
-
-
-
 
 
 # A base class representing all possible runtime types
@@ -165,9 +166,19 @@ class ProgramField:
         self.path       = path
         self.offset     = offset
         self.kind       = kind
+        self.ext_kind   = kind
         self.size       = size_of(kind)
         self.is_pointer = is_pointer
+        self.is_array   = False
         debug_print(f"\n\nSize of '{label}' ---> {self.size}\n\n")
+
+
+        if (isinstance(kind,numba.core.types.npytypes.Array)) :
+            self.ext_kind = numba.types.voidptr
+            self.kind     = numba.types.voidptr
+            self.is_array = True
+            #print(f"FOUND ARRAY: {self.label} = {self.kind}")
+
 
     def prefix(self):
         if self.is_pointer:
@@ -220,10 +231,14 @@ class RuntimeSpec():
         #super(RuntimeSpec,self).__init__(name='Runtime')
 
         if gpu_platform == None:
+            platform_name = None
             if   config.CUDA_AVAILABLE:
                 gpu_platform = config.GPUPlatform.CUDA
+                platform_name = "CUDA"
             elif config.ROCM_AVAILABLE:
                 gpu_platform = config.GPUPlatform.ROCM
+                platform_name = "ROCM"
+            debug_print(f"Runtime GPU platform set as {platform_name}")
 
 
         if not(isinstance(gpu_platform, config.GPUPlatform) or gpu_platform in [v.value for v in config.GPUPlatform.__members__.values()]):
@@ -409,7 +424,7 @@ class RuntimeSpec():
             ('frames',      self.meta['FRAME_ARR_TYPE'])
         ])
 
-        # The device context type, tracking the arena, how much of the arena has
+        # The device context type, tracking the arena, how much of the arena dddddhas
         # been claimed the 'easy' way, the pool for allocating/deallocating work links
         # in the arena, and the stack for tracking work links that contain outstanding
         # promises waiting for processing
@@ -546,14 +561,23 @@ class RuntimeSpec():
 
     def enumerate_program_fields(self,base_label,path,kind,offset=0,is_pointer=True):
 
-
         if isinstance(kind,numba.types.Record):
+            #print("\n\n\n\nRECORD", path)
             self.program_fields[base_label] = ProgramField(
                 base_label,
                 path,
                 offset,
                 kind,
                 is_pointer
+            )
+        elif isinstance(kind,numba.types.Array):
+            #print("\n\n\n\nARRAY", path)
+            self.program_fields[base_label] = ProgramField(
+                base_label,
+                path,
+                offset,
+                numba.types.voidptr,
+                False
             )
         elif isinstance(kind,dict):
             result = []
@@ -605,7 +629,7 @@ class RuntimeSpec():
 
         dispatch_defs += free_prog_template  .format(short_name=short_name,suffix=suffix)
         dispatch_defs += alloc_state_template.format(state_struct=state_struct,suffix=suffix)
-        dispatch_defs += free_state_template .format(suffix=suffix)
+        dispatch_defs += free_state_template .format(suffix=suffix,state_struct=state_struct)
         dispatch_defs += complete_template   .format(short_name=short_name,suffix=suffix)
         dispatch_defs += clear_flags_template.format(short_name=short_name,suffix=suffix)
         dispatch_defs += set_device_template.format(suffix=suffix)
@@ -624,6 +648,16 @@ class RuntimeSpec():
                 size=field.size,
                 offset=field.offset,
                 suffix=suffix
+            )
+            is_array_str = "false"
+            if field.is_array:
+                is_array_str = "true"
+            dispatch_defs += store_pointer_state_template.format(
+                label=label,
+                size=field.size,
+                offset=field.offset,
+                suffix=suffix,
+                is_array=is_array_str
             )
 
 
@@ -648,14 +682,30 @@ class RuntimeSpec():
 
         # Creates a field accessing function for each field
         for label, field in self.program_fields.items():
+            if field.is_array:
+                deref = "*(void**)"
+            else:
+                deref = ""
             accessor_defs += accessor_template.format(
                 short_name=short_name,
                 label=field.label,
                 field=field.path,
                 prefix=field.prefix(),
                 suffix=suffix,
-                offset=field.offset
+                offset=field.offset,
+                deref=deref
             )
+
+            if field.is_array:
+                accessor_defs += indirect_accessor_template.format(
+                    short_name=short_name,
+                    label=field.label,
+                    field=field.path,
+                    prefix=field.prefix(),
+                    suffix=suffix,
+                    offset=field.offset,
+                    deref=deref
+                )
 
         # Query definitions currently disabled
         fn_query_defs = ""
@@ -717,6 +767,7 @@ class RuntimeSpec():
         rep_list += [ f"dispatch_{fn.__name__}_async" for fn in comp_list ]
         rep_list += [ f"dispatch_{fn.__name__}_sync" for fn in comp_list ]
         rep_list += [ f"access_{label}" for label in self.program_fields ]
+        rep_list += [ f"access_indirect_{label}" for label in self.program_fields ]
         rep_list += [ "halt_early" ]
 
         debug_print(f"REP LIST: {rep_list}")
@@ -780,7 +831,7 @@ class RuntimeSpec():
                             subprocess.run(cmd.split(),shell=False,check=True)
 
                     if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
-                        dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
+                        dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
                         for cmd in dev_comp_cmd:
                             verbose_print(cmd)
                             progress_print(f"Compiling '{obj_path}'")
@@ -905,7 +956,7 @@ class RuntimeSpec():
                     if compilation_gate(touched):
                         RuntimeSpec.dirty = True
                         progress_print(f"Compiling '{obj}'")
-                        dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                        dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                         verbose_print(dev_comp_cmd)
                         subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                     RuntimeSpec.obj_set.add(obj)
@@ -930,21 +981,21 @@ class RuntimeSpec():
     # function also gives no indication to linters that the corresponding fields
     # will be injected, leading to linters incorrectly (though understandably)
     # marking the fields as undefined
-    def inject_fns(state_spec,async_fns):
+    #def inject_fns(state_spec,async_fns):
 
-        dev_state, grp_state, thd_state = state_spec
+    #    dev_state, grp_state, thd_state = state_spec
 
-        for func in async_fns:
-            sig = fn_sig(func)
-            name = func.__name__
-            for kind in ["async","sync"]:
-                dispatch_fn = declare_device(f"dispatch_{name}_{kind}", sig)
-                inject_global(kind+"_"+name,dispatch_fn,1)
+    #    for func in async_fns:
+    #        sig = fn_sig(func)
+    #        name = func.__name__
+    #        for kind in ["async","sync"]:
+    #            dispatch_fn = declare_device(f"dispatch_{name}_{kind}", sig)
+    #            inject_global(kind+"_"+name,dispatch_fn,1)
 
-        for name, kind in field_list:
-            sig = kind(numba.uintp)
-            access_fn = declare_device(f"access_{name}_{kind}",sig)
-            inject_global(name,access_fn,1)
+    #    for name, kind in field_list:
+    #        sig = kind(numba.uintp)
+    #        access_fn = declare_device(f"access_{name}_{kind}",sig)
+    #        inject_global(name,access_fn,1)
 
     @staticmethod
     def declare_program_accessors(field_set,base_path=""):
@@ -960,13 +1011,20 @@ class RuntimeSpec():
             if isinstance(kind,numba.types.Record):
                 sig = kind(numba.uintp)
                 result[name] = (declare_device(f"access_{path}",sig))
+            elif isinstance(kind,numba.types.Array):
+                result[name] = {}
+                sig = numba.types.voidptr(numba.uintp)
+                result[name]["direct"] = (declare_device(f"access_{path}",sig))
+                itemkind = kind.dtype
+                sig = itemkind(numba.uintp)
+                result[name]["indirect"] = (declare_device(f"access_indirect_{path}",sig))
             elif isinstance(kind,dict):
                 result[name] = RuntimeSpec.declare_program_accessors(kind,path)
             else:
                 raise numba.errors.TypingError( ""
                     + "Invalid field specification. "
-                    + "Fields may either be a numba Record or a "
-                    + "dictionary of fields."
+                    + "Fields may either be a numba Record, a numba Array,"
+                    + " or a dictionary of fields."
                 )
 
         return result
@@ -1097,6 +1155,7 @@ class RuntimeSpec():
 
         text += generate_clock_code()
         text += generate_print_code()
+        text += generate_array_code()
 
         file_path = f"{RuntimeSpec.cache_path}builtin"
         source = f"{file_path}.cpp"
@@ -1127,7 +1186,7 @@ class RuntimeSpec():
                 source_file.close()
 
                 RuntimeSpec.dirty = True
-                dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                 verbose_print(dev_comp_cmd)
                 progress_print(f"Compiling '{obj}'")
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
@@ -1201,25 +1260,25 @@ class RuntimeSpec():
 
 
             if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+                
+                verbose_print("Building for CUDA")
 
                 RuntimeSpec.generate_builtin_code(config.GPUPlatform.CUDA)
 
                 link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-                dev_link_cmd = f"{config.nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
-                comp_cmd = f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                comp_cmd = [
+                    f"{config.nvcc_path()} -dlink {' '.join(link_list)} -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}",
+                    f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                ]
+                comp_desc = [
+                    f"Linking device code",
+                    f"Creating shared object file"
+                ]
 
-                verbose_print(dev_link_cmd)
-                progress_print(f"Linking device code")
-                subprocess.run(dev_link_cmd.split(),shell=False,check=True)
-
-                verbose_print(comp_cmd)
-                progress_print(f"Creating shared object file")
-                subprocess.run(comp_cmd.split(),shell=False,check=True)
-                progress_print(f"")
-
-
-            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            elif config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                
+                verbose_print("Building for ROCM")
 
                 RuntimeSpec.generate_builtin_code(config.GPUPlatform.ROCM)
 
@@ -1250,14 +1309,14 @@ class RuntimeSpec():
                         "Bundling linked code",
                         "Creating shared object file",
                     ]
-                else:
-                    comp_cmd = [f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} -o {so_path} -g"]
-                    comp_desc = ["Creating shared object file"]
+            else:
+                comp_cmd = [f"{config.hipcc_path()} -fPIC -shared -fgpu-rdc --hip-link {link_list} -o {so_path} -g"]
+                comp_desc = ["Creating shared object file"]
 
-                for idx, cmd in enumerate(comp_cmd):
-                    verbose_print(cmd)
-                    progress_print(comp_desc[idx])
-                    subprocess.run(cmd.split(),shell=False,check=True)
+            for idx, cmd in enumerate(comp_cmd):
+                verbose_print(cmd)
+                progress_print(comp_desc[idx])
+                subprocess.run(cmd.split(),shell=False,check=True)
 
 
 
@@ -1290,12 +1349,25 @@ class RuntimeSpec():
                 exec_program  = ext_fn(f"exec_program_{suffix}",  sig(void, vp, usize, usize))
 
                 for label, field in spec.program_fields.items():
-                    store_name    = f"store_state_{label}"
-                    load_name     = f"load_state_{label}"
-                    store_state   = ext_fn(f"{store_name}_{suffix}", sig(void, vp, field.kind))
-                    load_state    = ext_fn(f"{load_name}_{suffix}",  sig(void, field.kind, vp))
+                    store_name   = f"store_state_{label}"
+                    store_p_name = f"store_pointer_state_{label}"
+                    load_name    = f"load_state_{label}"
+                    store_state   = ext_fn(f"{store_name}_{suffix}",   sig(void, vp, field.ext_kind))
+                    store_p_state = ext_fn(f"{store_p_name}_{suffix}", sig(void, vp, field.ext_kind))
+                    load_state    = ext_fn(f"{load_name}_{suffix}",    sig(void, field.ext_kind, vp))
+                    if field.is_array :
+                        id = generate_uuid()
+                        exec(f"def store_wrapper_{id}(vp,field):\n    vptr = into_voidptr(field)\n    store_state(vp,vptr)",globals()|locals(),locals())
+                        exec(f"def store_pointer_wrapper_{id}(vp,field):\n    vptr = into_voidptr(field)\n    store_p_state(vp,vptr)",globals()|locals(),locals())
+                        exec(f"def load_wrapper_{id} (field,vp):\n    load_state(field.ctypes.data,vp)",globals()|locals(),locals())
+                        store_state = eval(f"numba.njit()(store_wrapper_{id})")
+                        store_p_state = eval(f"numba.njit()(store_pointer_wrapper_{id})")
+                        load_state  = eval(f"numba.njit()(load_wrapper_{id})")
+
                     spec.fn[kind][store_name]   = store_state
+                    spec.fn[kind][store_p_name] = store_p_state
                     spec.fn[kind][load_name]    = load_state
+                #exit()
 
                 if kind == "Event":
                     # IO_SIZE, LOAD_MARGIN

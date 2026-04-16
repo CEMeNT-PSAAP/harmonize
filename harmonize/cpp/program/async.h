@@ -2308,7 +2308,7 @@ class AsyncProgram
 				//db_printf("Executing...\n");
 				PromiseUnionType& promise = _grp_ctx.stash[_grp_ctx.exec_head].promises[threadIdx.x];
 				//do_async(func_id,promise);
-				promise.template loose_eval(*this,func_id);
+				promise.template loose_eval<ProgramType>(*this,func_id);
 			}
 		}
 

@@ -68,7 +68,6 @@ __global__ void _dev_exec(typename ProgType::DeviceContext _dev_ctx, typename Pr
 }
 
 
-
 //! These functions unwrap an instance into its device context and passes it to the responsible
 //! kernel.
 template<typename ProgType>

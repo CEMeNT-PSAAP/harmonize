@@ -131,7 +131,6 @@ class EventProgram
 		util::iter::IOBuffer<PromiseUnionType,AdrType> *event_io[PromiseUnionType::Info::COUNT];
 	};
 
-
 	/*
 	// Instances wrap around their program scope's DeviceContext. These differ from a program's
 	// DeviceContext object in that they perform automatic deallocation as soon as they drop
@@ -147,10 +146,13 @@ class EventProgram
 		__host__ Instance (size_t io_size, DeviceState gs)
 			: device_state(gs)
 		{
+
 			for( unsigned int i=0; i<PromiseUnionType::Info::COUNT; i++){
 				event_io[i] = util::host::DevObj<util::iter::IOBuffer<PromiseUnionType>>(io_size);
 			}
-			status << Status{0u,0u,0u};
+
+			Status host_status{0u,0u,0u};
+			status << host_status;
 		}
 
 		__host__ DeviceContext to_context(){
@@ -174,6 +176,7 @@ class EventProgram
 				check_error();
 				size_t item_count = event_io[i].host_copy().input_iter.limit;
 				if( item_count != 0 ){
+					//printf("Item count of %zu at %d\n",item_count,i);
 					complete = false;
 				}
 
@@ -202,12 +205,25 @@ class EventProgram
 		}
 
 		__host__ void clear_flags(){
+			unsigned int value = 0;
 			unsigned int zero = 0;
 			util::host::auto_throw(adapt::GPUrtMemcpy(
-				status,
+				&value,
+				&((Status*)status)->flags,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyDeviceToHost
+			));
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&((Status*)status)->flags,
 				&zero,
 				sizeof(unsigned int),
 				adapt::GPUrtMemcpyHostToDevice
+			));
+			util::host::auto_throw(adapt::GPUrtMemcpy(
+				&value,
+				&((Status*)status)->flags,
+				sizeof(unsigned int),
+				adapt::GPUrtMemcpyDeviceToHost
 			));
 		}
 
@@ -372,6 +388,19 @@ class EventProgram
 		/* Initialize per-thread resources */
 		init_thread();
 
+
+		if (threadIdx.x==0) {
+			for (unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++) {
+				if ( !_dev_ctx.event_io[i]->input_empty() ) {
+					int in_v  = _dev_ctx.event_io[i]->input_iter.value;
+					int in_l  = _dev_ctx.event_io[i]->input_iter.limit;
+					int out_v = _dev_ctx.event_io[i]->output_iter.value;
+					int out_l = _dev_ctx.event_io[i]->output_iter.limit;
+					//printf("IO_BUFFER[%d] : (%d,%d) -> (%d,%d)\n",i,in_v,in_l,out_v,out_l);
+				}
+			}
+		}
+
 		PROGRAM_SPEC::initialize(*this);
 
 		__shared__ util::iter::ArrayIter<PromiseUnionType,util::iter::AtomicIter,unsigned int> group_work;
@@ -396,6 +425,7 @@ class EventProgram
 
 				if( any_flags_set() ){
 					early_halt = true;
+					printf("(Need to stop. Flags are %d)\n",_dev_ctx.status->flags);
 				} else {
 					for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 						if( !_dev_ctx.event_io[i]->input_empty() ){
@@ -435,7 +465,7 @@ class EventProgram
 						}
 						should_make_work = PROGRAM_SPEC::make_work(*this);
 						if( (threadIdx.x == 0) && !should_make_work) {
-							rc_printf("(No more work!)\n");
+							rc_printf("(No more work. Halting...)\n");
 						}
 					}
 				}
@@ -451,6 +481,7 @@ class EventProgram
 				if(loop_count < loop_lim){
 					loop_count++;
 				} else {
+					rc_printf("(Loop count %d exceeds loop limit %d. Halting...)\n",loop_count, loop_lim);
 					break;
 				}
 			}
@@ -468,15 +499,18 @@ class EventProgram
 
 		if( threadIdx.x == 0 ){
 			__threadfence();
-			unsigned int checkout_index = atomicAdd(&_dev_ctx.status->checkout,1);
+			unsigned int checkout_index = atomicAdd_system(&_dev_ctx.status->checkout,1);
+			__threadfence_system();
 			if( checkout_index == (gridDim.x - 1) ){
-				__threadfence();
-				atomicExch(&_dev_ctx.status->checkout,0);
-				__threadfence();
+				__threadfence_system();
+				atomicExch_system(&_dev_ctx.status->checkout,0);
+				__threadfence_system();
 				for(unsigned int i=0; i < PromiseUnionType::Info::COUNT; i++){
 					_dev_ctx.event_io[i]->flip();
+					__threadfence_system();
 				}
-				atomicAdd(&_dev_ctx.status->flip_count,1u);
+				atomicAdd_system(&_dev_ctx.status->flip_count,1u);
+				__threadfence_system();
 			}
 		}
 

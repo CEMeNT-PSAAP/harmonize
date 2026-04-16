@@ -54,10 +54,17 @@ class DevBuf {
 		Inner(T *adr_val, size_t size_val)
 		: adr (adr_val )
 		, size(size_val)
-		{}
+		{
+			#ifdef HARMONIZE_ALLOC_DEBUG
+				printf("Allocated array of type '%s' at %p, with size %zu\n",typeid(*adr).name(),adr,size);
+			#endif
+		}
 
 		~Inner() {
 			if ( adr != NULL) {
+				#ifdef HARMONIZE_ALLOC_DEBUG
+				printf("Freed array of type '%s' at %p, with size %zu\n",typeid(*adr).name(),adr,size);
+				#endif
 				auto _ = adapt::GPUrtFree(adr);
 			}
 		}
@@ -82,9 +89,15 @@ class DevBuf {
 		) );
 		if( inner->adr != NULL ) {
 			auto_throw( adapt::GPUrtFree(inner->adr) );
+			#ifdef HARMONIZE_ALLOC_DEBUG
+			printf("Freed (for resize) array of type '%s' at %p, with size %zu\n",typeid(*(inner->adr)).name(),inner->adr,inner->size);
+			#endif
 		}
 		inner->size = s;
 		inner->adr = new_adr;
+		#ifdef HARMONIZE_ALLOC_DEBUG
+		printf("Allocated (for resize) array of type '%s' at %p, with size %zu\n",typeid(*(inner->adr)).name(),inner->adr,inner->size);
+		#endif
 	}
 
 	__host__ void operator<<(std::vector<T> &other) {
@@ -197,7 +210,6 @@ class DevObj {
 
 
 		void push_data(){
-			//printf("Pushing data into %p\n",adr);
 			auto_throw( adapt::GPUrtMemcpy(
 				adr,
 				&host_copy,
@@ -207,7 +219,6 @@ class DevObj {
 		}
 
 		void pull_data(){
-			//printf("Pulling data from %p\n",adr);
 			auto_throw( adapt::GPUrtMemcpy(
 				&host_copy,
 				adr,
@@ -223,11 +234,16 @@ class DevObj {
 		{
 			host_copy.host_init();
 			push_data();
+			#ifdef HARMONIZE_ALLOC_DEBUG
+			printf("Allocated object of type '%s' at %p\n",typeid(*adr).name(),adr);
+			#endif
 		}
 
 		~Inner() {
 			if ( adr != NULL) {
-				//printf("Doing a free\n");
+				#ifdef HARMONIZE_ALLOC_DEBUG
+				printf("Freed object of type '%s' at %p\n",typeid(*adr).name(),adr);
+				#endif
 				pull_data();
 				host_copy.host_free();
 				util::host::auto_throw(adapt::GPUrtFree(adr));

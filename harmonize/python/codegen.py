@@ -8,6 +8,15 @@ from harmonize.python import config, errors
 from harmonize.python.logging import verbose_print, debug_print, progress_print
 
 
+uuid_iterator = 0
+
+def generate_uuid():
+    global uuid_iterator
+    result = uuid_iterator
+    uuid_iterator += 1
+    return result
+
+
 def declare_device(name,sig):
     if   config.CUDA_AVAILABLE:
         return config.cuda.declare_device(name, sig)
@@ -67,7 +76,7 @@ def assert_fn_res_ano( func, res_type ):
             + cmp_str + "'\nMake sure the definition of the function '"    \
             + func.__name__ + "' results in a return type  matching its "  \
             + "annotation when supplied arguments matching its annotation."
-            raise(TypingError(err_str))
+            raise(TypeError(err_str))
 
 
 # Returns the ptx of the input function, as a global CUDA function. If the return type deduced
@@ -169,6 +178,8 @@ def size_of(kind):
         return result
     elif isinstance(kind,numba.types.Record):
         return kind.size
+    elif isinstance(kind,numba.types.Array):
+        return size_of(numba.types.uintp)
     elif isinstance(kind,numba.types.Type):
         return kind.bitwidth // 8
     else:
@@ -232,6 +243,12 @@ def map_type_name(type_map,kind,rec_mode=""):
             result = "void*"
         return result
     elif isinstance(kind,numba.types.npytypes.NestedArray):
+        return "void*"
+    elif isinstance(kind,numba.types.npytypes.Array):
+        return "void*"
+    elif isinstance(kind,numba.types.Array):
+        return "void*"
+    elif isinstance(kind,numba.types.misc.RawPointer):
         return "void*"
     else:
         raise RuntimeError("Unrecognized type '"+str(kind)+"' with type '"+str(type(kind))+"'")
@@ -308,6 +325,7 @@ def harm_template_func(func,template_name,function_map,type_map,inline,suffix,ba
     code = "\ttemplate<typename PROGRAM>\n"   \
 	     + "\t__device__ static "  \
          + return_type+" "+template_name+"(PROGRAM prog" + param_text + ") {\n"
+    #     + "printf(\""+template_name+"\");\n"
 
     if return_type != "void":
         code += "\t\t"+return_type+"  result;\n"
@@ -319,7 +337,8 @@ def harm_template_func(func,template_name,function_map,type_map,inline,suffix,ba
     if inline:
         code += inlined_device_ir(func,function_map,type_map)
     else:
-        code += f"\t\t_{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
+        code += f"\t\tint return_status = _{func.__name__}_{suffix}(fn_param_0, &prog"+arg_text+");\n"
+        code += f"\t\tif (return_status!=0) printf(\"Warning: Async function returned a non-zero exit code: %d\\n\",return_status);"
         pass
 
     if return_type != "void":
