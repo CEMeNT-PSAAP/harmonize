@@ -13,8 +13,8 @@ class ShouldCompile(Enum):
 
 
 DEBUG   = False
-VERBOSE = True
-INTERNAL_DEBUG = True
+VERBOSE = False
+INTERNAL_DEBUG = False
 ERROR_PRINT = True
 COLOR_LOG = True
 

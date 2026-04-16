@@ -308,12 +308,12 @@ alloc_device_bytes_template="""
 extern "C"
 void *harmonize_alloc_device_bytes(size_t size) {{
     void *result_ptr = nullptr;
-    printf("Allocating %zu device bytes\\n",size);
+    //printf("Allocating %zu device bytes\\n",size);
     util::host::auto_throw(adapt::GPUrtMalloc(
         &result_ptr,
         size
     ));
-    printf("Allocated %zu device bytes at %p\\n",size,result_ptr);
+    //printf("Allocated %zu device bytes at %p\\n",size,result_ptr);
     return result_ptr;
 }}
 """
@@ -322,12 +322,12 @@ alloc_managed_bytes_template="""
 extern "C"
 void *harmonize_alloc_managed_bytes(size_t size) {{
     void *result_ptr = nullptr;
-    printf("Allocating %zu managed bytes\\n",size);
+    //printf("Allocating %zu managed bytes\\n",size);
     util::host::auto_throw(adapt::GPUrtMallocManaged(
         &result_ptr,
         size
     ));
-    printf("Allocated %zu device bytes at %p\\n",size,result_ptr);
+    //printf("Allocated %zu device bytes at %p\\n",size,result_ptr);
     return result_ptr;
 }}
 """
