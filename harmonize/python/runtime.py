@@ -231,10 +231,14 @@ class RuntimeSpec():
         #super(RuntimeSpec,self).__init__(name='Runtime')
 
         if gpu_platform == None:
+            platform_name = None
             if   config.CUDA_AVAILABLE:
                 gpu_platform = config.GPUPlatform.CUDA
+                platform_name = "CUDA"
             elif config.ROCM_AVAILABLE:
                 gpu_platform = config.GPUPlatform.ROCM
+                platform_name = ROCM
+            debug_print(f"Runtime GPU platform set as {platform_name}")
 
 
         if not(isinstance(gpu_platform, config.GPUPlatform) or gpu_platform in [v.value for v in config.GPUPlatform.__members__.values()]):
@@ -827,7 +831,7 @@ class RuntimeSpec():
                             subprocess.run(cmd.split(),shell=False,check=True)
 
                     if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
-                        dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
+                        dev_comp_cmd = [f"{config.nvcc_path()} -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {ir_path} -o {obj_path} {RuntimeSpec.debug_flag}"]
                         for cmd in dev_comp_cmd:
                             verbose_print(cmd)
                             progress_print(f"Compiling '{obj_path}'")
@@ -952,7 +956,7 @@ class RuntimeSpec():
                     if compilation_gate(touched):
                         RuntimeSpec.dirty = True
                         progress_print(f"Compiling '{obj}'")
-                        dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                        dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                         verbose_print(dev_comp_cmd)
                         subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
                     RuntimeSpec.obj_set.add(obj)
@@ -1182,7 +1186,7 @@ class RuntimeSpec():
                 source_file.close()
 
                 RuntimeSpec.dirty = True
-                dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
+                dev_comp_cmd = f"{config.nvcc_path()} -x cu -rdc=true -dc -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared --compiler-options -fPIC {source} -include {config.HARMONIZE_ROOT_HEADER} -o {obj} {RuntimeSpec.debug_flag}"
                 verbose_print(dev_comp_cmd)
                 progress_print(f"Compiling '{obj}'")
                 subprocess.run(dev_comp_cmd.split(),shell=False,check=True)
@@ -1256,25 +1260,25 @@ class RuntimeSpec():
 
 
             if config.GPUPlatform.CUDA in RuntimeSpec.gpu_platforms:
+                
+                verbose_print("Building for CUDA")
 
                 RuntimeSpec.generate_builtin_code(config.GPUPlatform.CUDA)
 
                 link_list = [ obj for obj in  RuntimeSpec.obj_set ]
 
-                dev_link_cmd = f"{config.nvcc_path()} -dlink {' '.join(link_list)} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}"
-                comp_cmd = f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=compute_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                comp_cmd = [
+                    f"{config.nvcc_path()} -dlink {' '.join(link_list)} -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared -o {dev_path} --compiler-options -fPIC {RuntimeSpec.debug_flag}",
+                    f"{config.nvcc_path()} -shared {' '.join(link_list)} {dev_path} -arch=sm_{RuntimeSpec.gpu_arch} --cudart shared -o {so_path} {RuntimeSpec.debug_flag}"
+                ]
+                comp_desc = [
+                    f"Linking device code",
+                    f"Creating shared object file"
+                ]
 
-                verbose_print(dev_link_cmd)
-                progress_print(f"Linking device code")
-                subprocess.run(dev_link_cmd.split(),shell=False,check=True)
-
-                verbose_print(comp_cmd)
-                progress_print(f"Creating shared object file")
-                subprocess.run(comp_cmd.split(),shell=False,check=True)
-                progress_print(f"")
-
-
-            if config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+            elif config.GPUPlatform.ROCM in RuntimeSpec.gpu_platforms:
+                
+                verbose_print("Building for ROCM")
 
                 RuntimeSpec.generate_builtin_code(config.GPUPlatform.ROCM)
 

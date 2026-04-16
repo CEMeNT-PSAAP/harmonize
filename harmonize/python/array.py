@@ -26,7 +26,7 @@ def type_local_array(context):
 
     if isinstance(context,nb.core.typing.context.Context):
 
-        # Function repurposed from nb's ol_np_empty.
+        # Function repurposed from numba's ol_np_empty.
         def typer(shape, dtype):
             nb.np.arrayobj._check_const_str_dtype("empty", dtype)
 
@@ -60,7 +60,7 @@ def type_local_array(context):
 
     elif config.CUDA_AVAILABLE and isinstance(context,nb.cuda.target.CUDATypingContext):
 
-        # Function repurposed from nb's Cuda_array_decl.
+        # Function repurposed from numba's Cuda_array_decl.
         def typer(shape, dtype):
 
             # Only integer literals and tuples of integer literals are valid
@@ -184,22 +184,22 @@ def type_array_from_ptr(context):
     if isinstance(context, nb.core.typing.context.Context):
         # Function repurposed from Numba's ol_np_empty.
         def typer(ptr,shape, dtype):
-            numba.np.arrayobj._check_const_str_dtype("empty", dtype)
+            nb.np.arrayobj._check_const_str_dtype("empty", dtype)
 
             # Only integer literals and tuples of integer literals are valid
             # shapes
             if isinstance(shape, types.Integer):
                 if not isinstance(shape, types.IntegerLiteral):
-                    raise numba.core.errors.UnsupportedError(
+                    raise nb.core.errors.UnsupportedError(
                         f"Integer shape type {shape} is not literal."
                     )
             elif isinstance(shape, (types.Tuple, types.UniTuple)):
                 if any([not isinstance(s, types.IntegerLiteral) for s in shape]):
-                    raise numba.core.errors.UnsupportedError(
+                    raise nb.core.errors.UnsupportedError(
                         f"At least one element of shape tuple type{shape} is not an integer literal."
                     )
             else:
-                raise numba.core.errors.UnsupportedError(
+                raise nb.core.errors.UnsupportedError(
                     f"Shape is of unsupported type {shape}."
                 )
 
@@ -227,16 +227,19 @@ def type_array_from_ptr(context):
             # shapes
             if isinstance(shape, nb.types.Integer):
                 if not isinstance(shape, types.IntegerLiteral):
-                    return None
+                    msg = "At least one dimension in the input shape is non-literal"
+                    raise nb.errors.TypingError(msg)
             elif isinstance(shape, (nb.types.Tuple, nb.types.UniTuple)):
                 if any([not isinstance(s, nb.types.IntegerLiteral) for s in shape]):
-                    return None
+                    msg = "At least one dimension in the input shape is non-literal"
+                    raise nb.errors.TypingError(msg)
             else:
-                return None
+                msg = "Unexpected shape type. Shapes must be literal integers or tuples of literal integers."
+                raise nb.errors.TypingError(msg)
 
             if not isinstance(ptr,nb.types.RawPointer):
                 msg = f"Expected raw pointer as third argument, recieved {ptr}"
-                raise numba.errors.TypingError(msg)
+                raise nb.errors.TypingError(msg)
 
             ndim = parse_shape(shape)
             nb_dtype = parse_dtype(dtype)
@@ -274,7 +277,7 @@ def type_array_from_ptr(context):
         return typer
 
     else:
-        raise numba.core.errors.UnsupportedError(
+        raise nb.core.errors.UnsupportedError(
             f"Unsupported target context {context}."
         )
 
@@ -339,7 +342,7 @@ def def_array_from_ptr(context, builder, sig, args):
         elemcount = reduce(operator.mul, shape, 1)
         lmod = builder.module
 
-        targetdata = ll.create_target_data(numba.cuda.cudadrv.nvvm.NVVM().data_layout)
+        targetdata = ll.create_target_data(nb.cuda.cudadrv.nvvm.NVVM().data_layout)
         lldtype = context.get_data_type(dtype)
         itemsize = lldtype.get_abi_size(targetdata)
 
