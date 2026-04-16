@@ -237,7 +237,7 @@ class RuntimeSpec():
                 platform_name = "CUDA"
             elif config.ROCM_AVAILABLE:
                 gpu_platform = config.GPUPlatform.ROCM
-                platform_name = ROCM
+                platform_name = "ROCM"
             debug_print(f"Runtime GPU platform set as {platform_name}")
 
 
