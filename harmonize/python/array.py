@@ -471,7 +471,7 @@ host_to_device_array_template = """
 def {name}(dev_ptr,host_obj):
     ptr = (ffi.from_buffer(host_obj))
     vptr = into_voidptr(ptr)
-    host_to_device(dev_ptr,vptr,size*len(host_obj))
+    host_to_device(dev_ptr,vptr,size*host_obj.size)
 """
 
 host_to_device_object_template = """
@@ -527,7 +527,7 @@ device_to_host_array_template = """
 def {name}(host_obj,dev_ptr):
     ptr = (ffi.from_buffer(host_obj))
     vptr = into_voidptr(ptr)
-    device_to_host(vptr,dev_ptr,size*len(host_obj))
+    device_to_host(vptr,dev_ptr,size*host_obj.size)
 """
 
 device_to_host_object_template = """
