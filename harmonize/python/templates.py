@@ -343,6 +343,7 @@ void harmonize_free_device_bytes(void* ptr) {{
 memcpy_host_to_device_template="""
 extern "C"
 void harmonize_memcpy_host_to_device(void *dev_ptr, void *host_ptr, size_t byte_count) {{
+//printf("Copying %zu bytes from %p (host) to %p (device).\\n",byte_count,host_ptr,dev_ptr);
 util::host::auto_throw(adapt::GPUrtMemcpy(
     dev_ptr,
     host_ptr,
@@ -356,6 +357,7 @@ util::host::auto_throw(adapt::GPUrtMemcpy(
 memcpy_device_to_host_template="""
 extern "C"
 void harmonize_memcpy_device_to_host(void *host_ptr, void *dev_ptr, size_t byte_count) {{
+//printf("Copying %zu bytes from %p (device) to %p (host).\\n",byte_count,dev_ptr,host_ptr);
 util::host::auto_throw(adapt::GPUrtMemcpy(
     host_ptr,
     dev_ptr,
